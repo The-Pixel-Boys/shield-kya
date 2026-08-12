@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install
+      - run: pnpm test
+      - run: pnpm build
+      - name: Offline DENY then REQUIRE_APPROVE
+        run: |
+          node dist/cli.js eval-tool --offline --tool-id org.sample.never.event --irreversible | tee /tmp/deny.txt
+          grep -q DENY /tmp/deny.txt
+          node dist/cli.js eval-tool --offline --tool-id org.sample.data.write --irreversible | tee /tmp/ra.txt
+          grep -q REQUIRE_APPROVE /tmp/ra.txt
+      - name: MCP artifacts present
+        run: |
+          test -f server.json
+          node -e "const p=require('./package.json'); if(!p.mcpName) process.exit(1)"

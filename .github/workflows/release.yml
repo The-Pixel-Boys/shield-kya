@@ -1,0 +1,51 @@
+name: release-npm
+
+# Dual publish:
+# 1) npm @shield-agent/kya (this workflow)
+# 2) MCP Registry submit using server.json + package.json mcpName after npm is live
+# Requires repo secret NPM_TOKEN with publish access to @shield-agent scope.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Test + pack only (no npm publish)'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+      - run: pnpm install
+      - run: pnpm test
+      - run: pnpm build
+      - name: Smoke help + offline
+        run: |
+          node dist/cli.js --help
+          node dist/cli.js eval-tool --offline --tool-id org.sample.never.event --irreversible
+          node dist/cli.js eval-tool --offline --tool-id org.sample.data.write --irreversible
+      - run: pnpm pack --pack-destination /tmp
+      - name: Publish to npm
+        if: ${{ github.event_name == 'push' || inputs.dry_run == 'false' }}
+        run: pnpm publish --no-git-checks --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
