@@ -1,0 +1,66 @@
+{
+  "name": "@shield-agent/kya",
+  "version": "0.1.0",
+  "description": "Know Your Agent light CLI + local MCP gate (provider-agnostic, zero vertical packs required).",
+  "license": "MIT",
+  "type": "module",
+  "mcpName": "io.github.the-pixel-boys/shield-kya",
+  "bin": {
+    "kya": "./dist/cli.js",
+    "shield-kya": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "server.json",
+    "LICENSE"
+  ],
+  "homepage": "https://shield-agent.com/install",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/The-Pixel-Boys/shield-agent.git",
+    "directory": "sdks/kya"
+  },
+  "bugs": {
+    "url": "https://github.com/The-Pixel-Boys/shield-agent/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist coverage",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "pack:check": "pnpm run build && pnpm pack --pack-destination /tmp && node dist/cli.js --help",
+    "prepublishOnly": "pnpm run build && pnpm test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@vitest/coverage-v8": "^2.1.8",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "kya",
+    "know-your-agent",
+    "mcp",
+    "policy",
+    "shield-agent",
+    "cli",
+    "mcp-server"
+  ]
+}

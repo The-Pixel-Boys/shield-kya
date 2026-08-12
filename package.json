@@ -1,0 +1,11 @@
+{
+  "name": "shield-kya",
+  "private": true,
+  "description": "Know Your Agent — public baseline (npx @shield-agent/kya)",
+  "license": "MIT",
+  "homepage": "https://shield-agent.com/install",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/The-Pixel-Boys/shield-kya.git"
+  }
+}
