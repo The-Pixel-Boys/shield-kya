@@ -27,11 +27,11 @@
   "homepage": "https://shield-agent.com/install",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/The-Pixel-Boys/shield-agent.git",
-    "directory": "sdks/kya"
+    "url": "git+https://github.com/The-Pixel-Boys/shield-kya.git",
+    "directory": "packages/kya"
   },
   "bugs": {
-    "url": "https://github.com/The-Pixel-Boys/shield-agent/issues"
+    "url": "https://github.com/The-Pixel-Boys/shield-kya/issues"
   },
   "engines": {
     "node": ">=20"
