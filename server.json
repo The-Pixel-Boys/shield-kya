@@ -4,7 +4,7 @@
   "description": "Know Your Agent (KYA) local MCP gate: policy evaluate, session ingest, approval request. Provider-agnostic; sole PEP is Shield.",
   "status": "active",
   "repository": {
-    "url": "https://github.com/The-Pixel-Boys/shield-agent",
+    "url": "https://github.com/The-Pixel-Boys/shield-kya",
     "source": "github"
   },
   "version": "0.1.0",
