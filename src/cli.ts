@@ -6,6 +6,8 @@
  * Offline sample: eval-tool --offline (demo only; not production PEP).
  */
 
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { resolveConfig } from "./config.js";
 import { KyaError } from "./errors.js";
 import { parseArgs } from "./parse-args.js";
@@ -229,14 +231,25 @@ export async function runCli(
   }
 }
 
-// Only auto-run when executed as CLI entry (not when imported by tests)
-const isMain =
-  typeof process.argv[1] === "string" &&
-  (process.argv[1].endsWith("/cli.js") ||
-    process.argv[1].endsWith("/cli.ts") ||
-    process.argv[1].includes("@shield-agent/kya"));
+// Only auto-run when executed as CLI entry (not when imported by tests).
+// Bin links resolve as ".../bin/kya" not ".../cli.js" — compare realpaths.
+function isCliEntry(): boolean {
+  if (typeof process.argv[1] !== "string") return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    const a = process.argv[1];
+    return (
+      a.endsWith("/cli.js") ||
+      a.endsWith("/cli.ts") ||
+      a.endsWith("/kya") ||
+      a.endsWith("/shield-kya") ||
+      a.includes("@shield-agent/kya")
+    );
+  }
+}
 
-if (isMain) {
+if (isCliEntry()) {
   void runCli(process.argv.slice(2)).then((code) => {
     if (code !== 0) process.exit(code);
   });
