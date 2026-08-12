@@ -1,7 +1,4 @@
-# Single-package workspace so `pnpm install` works in CI (working-directory: sdks/kya).
 packages:
   - "."
-
-# Allow esbuild native binary install (vitest/vite dependency).
 allowBuilds:
   esbuild: true

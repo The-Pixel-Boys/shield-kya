@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+*.tgz
+.DS_Store
+.env
+.kya/
+*.log
+package-lock.json

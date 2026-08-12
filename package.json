@@ -44,7 +44,7 @@
     "test:coverage": "vitest run --coverage",
     "pack:check": "pnpm run build && pnpm pack --pack-destination /tmp && node dist/cli.js --help",
     "prepublishOnly": "pnpm run build && pnpm test",
-    "prepare": "pnpm run build"
+    "prepare": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
