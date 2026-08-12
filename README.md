@@ -5,11 +5,10 @@
 > **One command**
 
 ```bash
-# Works now (public GitHub baseline)
-npx --yes github:The-Pixel-Boys/shield-kya --help
-# After npm: npx @shield-agent/kya@latest --help
+npx @shield-agent/kya@latest --help
 ```
 
+[![npm](https://img.shields.io/npm/v/@shield-agent/kya.svg)](https://www.npmjs.com/package/@shield-agent/kya)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Install](https://img.shields.io/badge/install-shield--agent.com%2Finstall-0A0A0A)](https://shield-agent.com/install)
 [![GitHub](https://img.shields.io/badge/github-The--Pixel--Boys%2Fshield--kya-181717)](https://github.com/The-Pixel-Boys/shield-kya)
@@ -17,9 +16,9 @@ npx --yes github:The-Pixel-Boys/shield-kya --help
 **Free try (offline, no account):**
 
 ```bash
-npx --yes github:The-Pixel-Boys/shield-kya eval-tool --offline --tool-id org.sample.never.event --irreversible
+npx @shield-agent/kya@latest eval-tool --offline --tool-id org.sample.never.event --irreversible
 # → DENY
-npx --yes github:The-Pixel-Boys/shield-kya eval-tool --offline --tool-id org.sample.data.write --irreversible
+npx @shield-agent/kya@latest eval-tool --offline --tool-id org.sample.data.write --irreversible
 # → REQUIRE_APPROVE
 ```
 

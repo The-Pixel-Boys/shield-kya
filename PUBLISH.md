@@ -1,20 +1,21 @@
 # Publish `@shield-agent/kya`
 
-## Works now (no npm)
+## Live (npm)
 
 ```bash
-npx --yes github:The-Pixel-Boys/shield-kya --help
-npx --yes -p github:The-Pixel-Boys/shield-kya kya eval-tool --offline --tool-id org.sample.never.event --irreversible
+npx @shield-agent/kya@latest --help
+npx @shield-agent/kya@latest eval-tool --offline --tool-id org.sample.never.event --irreversible
 ```
 
-## npm (requires secret)
+Package: https://www.npmjs.com/package/@shield-agent/kya  
+Install hub: https://shield-agent.com/install
 
-1. Create npm Automation token with publish rights to `@shield-agent`.
-2. `gh secret set NPM_TOKEN --repo The-Pixel-Boys/shield-kya`
-   (also set on monorepo `The-Pixel-Boys/shield-agent` if using monorepo release workflow)
-3. Tag: `git tag v0.1.0 && git push origin v0.1.0`
-   or Actions → **release-npm** → dry_run=`false`
-4. Verify: `npx @shield-agent/kya@latest --help`
-5. Submit MCP Registry with `server.json` + `mcpName` (`io.github.the-pixel-boys/shield-kya`)
+## Re-publish
 
-Package is MIT. Sole PEP remains Shield KYA; offline evaluate is sample only.
+1. Bump `version` in `package.json` (+ `server.json` version fields).
+2. Ensure `NPM_TOKEN` secret on this repo or monorepo.
+3. Tag `vX.Y.Z` (this repo) or `kya-vX.Y.Z` (monorepo `sdks/kya` workflow).
+4. Verify `npx @shield-agent/kya@latest --help`.
+5. MCP Registry: submit `server.json` + package `mcpName`.
+
+Offline evaluate is sample only. Sole PEP remains Shield KYA.
