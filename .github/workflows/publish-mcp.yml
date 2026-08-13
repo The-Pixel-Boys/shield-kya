@@ -1,0 +1,36 @@
+name: Publish MCP Registry
+
+# Dual publish (P1): npm is published from the monorepo tag kya-v* or this
+# repo's v* release-npm workflow. This job submits server.json + mcpName to
+# the official MCP Registry via GitHub OIDC (io.github.the-pixel-boys/*).
+# Do not republish npm here — 0.1.2+ is already on the registry.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher --help
+
+      - name: Authenticate (GitHub OIDC)
+        run: ./mcp-publisher login github-oidc
+
+      - name: Validate server.json
+        run: ./mcp-publisher validate
+
+      - name: Publish to MCP Registry
+        run: ./mcp-publisher publish
