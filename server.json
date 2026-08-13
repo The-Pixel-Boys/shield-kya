@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
-  "name": "io.github.the-pixel-boys/shield-kya",
+  "name": "io.github.The-Pixel-Boys/shield-kya",
   "description": "KYA MCP gate: evaluate, ingest, request approval. Sole PEP is Shield.",
   "status": "active",
   "repository": {
     "url": "https://github.com/The-Pixel-Boys/shield-kya",
     "source": "github"
   },
-  "version": "0.1.2",
+  "version": "0.1.3",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@shield-agent/kya",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "transport": {
         "type": "stdio"
       },
