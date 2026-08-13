@@ -5,6 +5,7 @@
 ```bash
 npx @shield-agent/kya@latest --help
 npx @shield-agent/kya@latest eval-tool --offline --tool-id org.sample.never.event --irreversible
+npx @shield-agent/kya@latest dash --once --offline
 ```
 
 Package: https://www.npmjs.com/package/@shield-agent/kya  

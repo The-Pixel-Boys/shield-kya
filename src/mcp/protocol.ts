@@ -9,10 +9,11 @@ import type { KyaHttpClient } from "../client.js";
 import type { Host } from "../config.js";
 import { computeArgsHash } from "../hash.js";
 import { findSampleTool } from "../sample-tools.js";
+import { CLI_VERSION } from "../version.js";
 
 export const MCP_SERVER_INFO = {
   name: "shield-kya",
-  version: "0.1.0",
+  version: CLI_VERSION,
   title: "Shield Agent AI (KYA)",
   description:
     "Know Your Agent control plane: policy evaluate, session observe, and high-stakes gates. Standard MCP tools; no proprietary client protocol.",

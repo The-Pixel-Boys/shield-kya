@@ -32,6 +32,7 @@ describe("runCli", () => {
     expect(code).toBe(0);
     expect(logs.join("\n")).toContain("init");
     expect(logs.join("\n")).toContain("serve-mcp");
+    expect(logs.join("\n")).toContain("dash");
   });
 
   it("init succeeds without API key", async () => {

@@ -20,11 +20,14 @@ npx @shield-agent/kya@latest eval-tool --offline --tool-id org.sample.never.even
 # → DENY
 npx @shield-agent/kya@latest eval-tool --offline --tool-id org.sample.data.write --irreversible
 # → REQUIRE_APPROVE
+
+npx @shield-agent/kya@latest dash --once --offline
+# → free terminal dashboard (sample policy pane; not production PEP)
 ```
 
 Public GitHub: https://github.com/The-Pixel-Boys/shield-kya
 
-This repository is the **thin public surface** (MIT) for PLG: sample custom tools only, honest LIMITATIONS, dual-plane diagram, comparison table. The monorepo may stay private; publish this tree (or the npm package) for stars/downloads.
+This directory is the **thin public surface** (MIT) for PLG: sample custom tools only, honest LIMITATIONS, dual-plane diagram, comparison table. The monorepo may stay private; publish this tree (or the npm package) for stars/downloads.
 
 ---
 
@@ -76,9 +79,10 @@ Custom tools are first-class via stable `toolId` + metadata. Register your own; 
 | `register-agent` | Register principal on a control plane |
 | `eval-tool` | Policy evaluate (`--offline` for local sample) |
 | `serve-mcp` | Local MCP gate (HTTP or `--stdio`) |
+| `dash --once --offline` | Free terminal dashboard (sample panes; enterprise panes licensed) |
 | `orr run --path` | Read-only ORR report (evidence only — **not** a second PEP) |
 
-Package name: `@shield-agent/kya` (npm when published) · MCP: `server.json` + `mcpName` · source: this repo.
+Package: [`@shield-agent/kya`](https://www.npmjs.com/package/@shield-agent/kya) · MCP: `server.json` / `mcpName` in package.
 
 ---
 
@@ -101,13 +105,13 @@ Package name: `@shield-agent/kya` (npm when published) · MCP: `server.json` + `
 
 ## LIMITATIONS
 
-- Offline `--offline` evaluate is a **sample fixture** for demos and tests — **not** the production PEP.
+- Offline `--offline` evaluate / `dash` is a **sample fixture** for demos and tests — **not** the production PEP.
 - Production enforcement requires a control plane (local free console or hosted). Empty API key against an auth plane fails closed.
 - This baseline ships **sample custom tools only** — no disputes pack, no vendor marketplace adapter as a core dependency.
 - ORR / scanners produce **evidence**; they never ALLOW irreversible side effects (no dual PEP).
 - Enterprise pin/private registry, multi-tenant density, ORR board ops, and support are a **separate tier** — they must not block day-1 solo PLG.
 - Growth unit economics for KYA = **observe metrics** (principals, evaluates, approvals, orphans) — not quality/speed OKRs.
-- Monorepo internals may remain private; this public repo + npm package (when published) are the public surface.
+- Monorepo internals may remain private; npm package + this baseline are the public surface.
 
 ---
 
