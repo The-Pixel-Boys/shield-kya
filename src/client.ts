@@ -2,6 +2,7 @@ import { AuthRequiredError, HttpError, KyaError } from "./errors.js";
 import type { Host } from "./config.js";
 import { computeArgsHash } from "./hash.js";
 import { findSampleTool } from "./sample-tools.js";
+import { CLI_VERSION } from "./version.js";
 
 export type FetchLike = typeof fetch;
 
@@ -179,13 +180,14 @@ export class KyaHttpClient {
       method?: "GET" | "POST" | "PUT" | "DELETE";
       body?: unknown;
       headers?: Record<string, string>;
+      signal?: AbortSignal;
     } = {},
   ): Promise<T> {
     const method = options.method ?? "GET";
     const url = `${this.baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
     const headers: Record<string, string> = {
       Accept: "application/json",
-      "User-Agent": "shield-agent-kya-cli/0.1.0",
+      "User-Agent": `shield-agent-kya-cli/${CLI_VERSION}`,
       ...(options.headers ?? {}),
     };
     if (this.apiKey) {
@@ -197,7 +199,12 @@ export class KyaHttpClient {
       body = JSON.stringify(options.body);
     }
 
-    const response = await this.fetchImpl(url, { method, headers, body });
+    const response = await this.fetchImpl(url, {
+      method,
+      headers,
+      body,
+      signal: options.signal,
+    });
     const text = await response.text();
     const parsed = parseJsonSafe(text);
 

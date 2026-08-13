@@ -11,15 +11,21 @@ npx @shield-agent/kya@latest --help
 [![npm](https://img.shields.io/npm/v/@shield-agent/kya.svg)](https://www.npmjs.com/package/@shield-agent/kya)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Install](https://img.shields.io/badge/install-shield--agent.com%2Finstall-0A0A0A)](https://shield-agent.com/install)
+[![GitHub](https://img.shields.io/badge/github-The--Pixel--Boys%2Fshield--kya-181717)](https://github.com/The-Pixel-Boys/shield-kya)
 
 **Free try (offline, no account):**
 
 ```bash
-npx @shield-agent/kya eval-tool --offline --tool-id org.sample.never.event --irreversible
+npx @shield-agent/kya@latest eval-tool --offline --tool-id org.sample.never.event --irreversible
 # → DENY
-npx @shield-agent/kya eval-tool --offline --tool-id org.sample.data.write --irreversible
+npx @shield-agent/kya@latest eval-tool --offline --tool-id org.sample.data.write --irreversible
 # → REQUIRE_APPROVE
+
+npx @shield-agent/kya@latest dash --once --offline
+# → free terminal dashboard (sample policy pane; not production PEP)
 ```
+
+Public GitHub: https://github.com/The-Pixel-Boys/shield-kya
 
 This directory is the **thin public surface** (MIT) for PLG: sample custom tools only, honest LIMITATIONS, dual-plane diagram, comparison table. The monorepo may stay private; publish this tree (or the npm package) for stars/downloads.
 
@@ -73,6 +79,7 @@ Custom tools are first-class via stable `toolId` + metadata. Register your own; 
 | `register-agent` | Register principal on a control plane |
 | `eval-tool` | Policy evaluate (`--offline` for local sample) |
 | `serve-mcp` | Local MCP gate (HTTP or `--stdio`) |
+| `dash --once --offline` | Free terminal dashboard (sample panes; enterprise panes licensed) |
 | `orr run --path` | Read-only ORR report (evidence only — **not** a second PEP) |
 
 Package: [`@shield-agent/kya`](https://www.npmjs.com/package/@shield-agent/kya) · MCP: `server.json` / `mcpName` in package.
@@ -98,7 +105,7 @@ Package: [`@shield-agent/kya`](https://www.npmjs.com/package/@shield-agent/kya) 
 
 ## LIMITATIONS
 
-- Offline `--offline` evaluate is a **sample fixture** for demos and tests — **not** the production PEP.
+- Offline `--offline` evaluate / `dash` is a **sample fixture** for demos and tests — **not** the production PEP.
 - Production enforcement requires a control plane (local free console or hosted). Empty API key against an auth plane fails closed.
 - This baseline ships **sample custom tools only** — no disputes pack, no vendor marketplace adapter as a core dependency.
 - ORR / scanners produce **evidence**; they never ALLOW irreversible side effects (no dual PEP).

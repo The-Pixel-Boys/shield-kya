@@ -13,6 +13,14 @@ describe("MCP registry artifacts", () => {
     expect(pkg.version).toBe(server.version);
     expect(server.packages[0].identifier).toBe("@shield-agent/kya");
     expect(server.packages[0].version).toBe(pkg.version);
+    expect(pkg.files).toContain("LIMITATIONS.md");
+    expect(pkg.files).toContain("server.json");
+  });
+
+  it("CLI_VERSION matches package.json", async () => {
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    const { CLI_VERSION } = await import("../src/version.js");
+    expect(CLI_VERSION).toBe(pkg.version);
   });
 
   it("server.json repository points at public shield-kya (not private monorepo)", () => {

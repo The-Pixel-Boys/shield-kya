@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @shield-agent/kya — light install CLI
- * Commands: init | register-agent | eval-tool | serve-mcp | orr run
+ * Commands: init | register-agent | eval-tool | serve-mcp | orr run | dash
  * Fail-closed: empty KYA_API_KEY against auth plane → non-zero exit.
  * Offline sample: eval-tool --offline (demo only; not production PEP).
  */
@@ -29,6 +29,7 @@ import {
   orrRunOptionsFromArgs,
   runOrr,
 } from "./commands/orr.js";
+import { runDash } from "./commands/dash.js";
 
 const HELP = `Shield KYA light CLI — Know Your Agent (provider-agnostic)
 
@@ -41,12 +42,15 @@ Commands:
   eval-tool         Policy evaluate (HTTP plane or --offline sample)
   serve-mcp         Local MCP gate (HTTP default; --stdio for hosts)
   orr run           Read-only ORR board (reporting only — not a second PEP)
+  dash              Terminal dashboard (free individual panes; enterprise if licensed)
 
 Options (shared):
   --base-url <url>  Control plane origin (or KYA_BASE_URL)
   --api-key <key>   API key (or KYA_API_KEY) — required for network commands
   --host <ide|runtime>  Dual-plane host (or KYA_HOST, default ide)
-  --offline         Sample evaluate without network (eval-tool only)
+  --offline         Sample evaluate / dash without network
+  --once            dash: print one frame and exit (CI / pipes)
+  --pane <name>     dash pane (home|policy|agents|approvals|sessions|orr|mcp|dashboard|…)
   --json            Machine-readable output
   --help, -h        Show help
 
@@ -57,6 +61,8 @@ Examples:
   npx @shield-agent/kya register-agent --name solo-builder --version-hash dev-local
   npx @shield-agent/kya serve-mcp --stdio
   npx @shield-agent/kya orr run --path . --out ./orr-report --skip-optional-producers
+  npx @shield-agent/kya dash --once --offline
+  npx @shield-agent/kya dash --once --pane policy
 
 Docs: https://shield-agent.com/install · docs/guides/kya-light-install.md
 Doctrine: sole PEP is Shield; DENY is hard; missing APPROVED ⇒ no irreversible side effect.
@@ -213,6 +219,18 @@ export async function runCli(
           );
         }
         return result.exitCode;
+      }
+
+      case "dash": {
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          requireApiKey: false,
+          allowMissingApiKey: true,
+          offline: parsed.flags["offline"] === true || parsed.flags["offline"] === "true",
+        });
+        return await runDash(config, parsed, io, env);
       }
 
       default:

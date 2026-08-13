@@ -30,6 +30,10 @@ jobs:
           grep -q DENY /tmp/deny.txt
           node dist/cli.js eval-tool --offline --tool-id org.sample.data.write --irreversible | tee /tmp/ra.txt
           grep -q REQUIRE_APPROVE /tmp/ra.txt
+          node dist/cli.js --help | tee /tmp/kya-help.txt
+          grep -q dash /tmp/kya-help.txt
+          node dist/cli.js dash --once --offline | tee /tmp/kya-dash.txt
+          grep -q FREE /tmp/kya-dash.txt
       - name: MCP artifacts present
         run: |
           test -f server.json
