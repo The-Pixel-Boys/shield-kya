@@ -23,6 +23,12 @@ describe("MCP registry artifacts", () => {
     expect(CLI_VERSION).toBe(pkg.version);
   });
 
+
+  it("server.json description fits MCP Registry 100-char limit", () => {
+    const server = JSON.parse(readFileSync(join(root, "server.json"), "utf8"));
+    expect(server.description.length).toBeLessThanOrEqual(100);
+  });
+
   it("server.json repository points at public shield-kya (not private monorepo)", () => {
     const server = JSON.parse(readFileSync(join(root, "server.json"), "utf8"));
     expect(server.repository.url).toBe(
