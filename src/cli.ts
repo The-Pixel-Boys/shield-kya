@@ -38,7 +38,7 @@ Usage:
 
 Commands:
   init              Scaffold .kya/ config + sample tools + .env.example
-  register-agent    POST /api/v1/kya/agents (stores agentId in .kya/config.json)
+  register-agent    POST /api/v1/kya/agents (human mint; server applies allow/break-glass/approve)
   eval-tool         Policy evaluate (HTTP plane or --offline sample)
   serve-mcp         Local MCP gate (HTTP default; --stdio for hosts)
   orr run           Read-only ORR board (reporting only — not a second PEP)
@@ -59,6 +59,8 @@ Examples:
   npx @shield-agent/kya eval-tool --offline --tool-id org.sample.never.event --irreversible
   npx @shield-agent/kya eval-tool --offline --tool-id org.sample.data.write --irreversible
   npx @shield-agent/kya register-agent --name solo-builder --version-hash dev-local
+  npx @shield-agent/kya register-agent --name ops --version-hash dev --break-glass-reason "prod hotfix"
+  npx @shield-agent/kya eval-tool --offline --tool-id kya.agent.register --irreversible
   npx @shield-agent/kya serve-mcp --stdio
   npx @shield-agent/kya orr run --path . --out ./orr-report --skip-optional-producers
   npx @shield-agent/kya dash --once --offline
