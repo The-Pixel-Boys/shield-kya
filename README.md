@@ -102,7 +102,7 @@ Package: [`@shield-agent/kya`](https://www.npmjs.com/package/@shield-agent/kya).
 | General-purpose policy language | No (product plane) | Limited | **OPA** | Large catalogs | Checklists | Guardrails config |
 | ORR / readiness board | Observe + ORR report | — | — | Strong | **Strong** | — |
 
-Shield owns protocol-first dual-plane identity, approval, and trail. It does not try to replace AGT on multi-lang runtime governance, OPA as general policy infra, or dialog rails.
+Shield is protocol-first dual-plane identity, approval, and trail. AGT covers multi-lang runtime governance. OPA is general policy infra. Dialog rails stay in a guardrails product.
 
 ---
 
@@ -110,7 +110,7 @@ Shield owns protocol-first dual-plane identity, approval, and trail. It does not
 
 - Offline `--offline` evaluate / `dash` is a sample fixture for demos and tests. It is not the production PEP.
 - Production enforcement needs a control plane (local free console or hosted). An empty API key against an auth plane fails closed.
-- This baseline ships sample custom tools only. No disputes pack. No vendor marketplace adapter as a core dependency.
+- This baseline ships sample custom tools only. No vendor marketplace adapter as a core dependency.
 - Unsigned v1 passport JSON is observational. Signed v2 claims need the hosted control-plane key.
 - Spawn without a control plane cannot be gated. Hosts that skip wrap still walk around session shrink.
 - ORR / scanners produce evidence. They never ALLOW irreversible side effects.
