@@ -20,15 +20,15 @@ Risk scores may only **raise** severity. They never auto-ALLOW.
 
 ## Dual plane
 
-- `host=ide` — authoring / dry-run
-- `host=runtime` — production work
+- `host=ide`: authoring / dry-run
+- `host=runtime`: production work
 
 Same agent id, policy, approval, and trail on both. Label the host. Do not invent a second enforcement path in the editor.
 
 ## How to wrap
 
-1. Register the agent principal (`register-agent` or console). Creating an agent is itself a tool (`kya.agent.register`) — it is not a free write.
-2. Give the tool a stable `toolId` (custom tools are first-class; no marketplace adapter required).
+1. Register the agent principal (`register-agent` or console). Creating an agent is itself a tool (`kya.agent.register`). It is not a free write.
+2. Give the tool a stable `toolId`. No marketplace adapter required.
 3. Call evaluate (MCP `evaluate` / `eval-tool`) **before** the side effect.
 4. If `REQUIRE_APPROVE`, request approval and wait. Do not execute on a pending ticket.
 5. Offline `--offline` is a **sample fixture**. Do not treat it as production PEP.
