@@ -1,0 +1,10 @@
+---
+description: Shield KYA is the sole PEP. Dual-plane host labels. Offline eval is a sample fixture.
+alwaysApply: false
+---
+
+- Before irreversible tool side effects, evaluate through Shield KYA (`ALLOW` | `DENY` | `REQUIRE_APPROVE`).
+- Missing `APPROVED` means the side effect does not run.
+- Label `host=ide` (authoring) or `host=runtime` (production). Same identity and trail on both.
+- Offline `eval-tool --offline` / `dash --once --offline` are sample fixtures, not production enforcement.
+- Scanners and ORR reports are evidence only. They never ALLOW.
