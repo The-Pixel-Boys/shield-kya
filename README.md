@@ -84,6 +84,16 @@ Custom tools are first-class via stable `toolId` + metadata. Register your own; 
 
 Package: [`@shield-agent/kya`](https://www.npmjs.com/package/@shield-agent/kya) · MCP: `server.json` / `mcpName` in package.
 
+### Cursor plugin
+
+This repo is also a [Cursor Plugin](https://cursor.com/docs/plugins) (`.cursor-plugin/plugin.json` + `mcp.json` + wrap skill).
+
+1. Install from the [Cursor Marketplace](https://cursor.com/marketplace) once listed, or load locally: symlink this directory into `~/.cursor/plugins/local/shield-kya` and reload the window.
+2. Configure `KYA_BASE_URL` and `KYA_API_KEY` (Plugins → Configure). Optional: `KYA_HOST` (`ide` | `runtime`), `KYA_AGENT_ID`.
+3. The MCP server is `npx -y @shield-agent/kya serve-mcp --stdio`. It is a **gate**, not a second PEP.
+
+Publisher application: [cursor.com/marketplace/publish](https://cursor.com/marketplace/publish).
+
 ---
 
 ## Comparison (honest)
