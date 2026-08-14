@@ -1,6 +1,6 @@
 # Shield KYA — public baseline
 
-**Know Your Agent** control plane for agent tools: identity, policy, dual-plane host labels, human approval, trail.
+**Know Your Agent** control plane for agent tools: identity, policy, dual-plane host labels, human approval, trail, policy-gated spawn, session shrink, signed claims.
 
 > **One command**
 
@@ -55,6 +55,8 @@ This directory is the **thin public surface** (MIT) for PLG: sample custom tools
 
 Same agent identity, policy, approval, and trail on both hosts. Missing `APPROVED` ⇒ **no** irreversible side effect. Risk may only **raise** severity, never auto-ALLOW.
 
+Creating an agent is a tool (`kya.agent.register`). A live session can shrink from Deploy → Build → Read without killing the agent. Hosted passports and session claims are signed (v2); this offline tree cannot mint those signatures.
+
 ---
 
 ## Sample custom tools only
@@ -66,6 +68,7 @@ No vertical packs required (disputes optional elsewhere).
 | `org.sample.safe.read` | `ALLOW` | Read-only sample |
 | `org.sample.data.write` | `REQUIRE_APPROVE` | Irreversible write |
 | `org.sample.never.event` | `DENY` | Never-event / hard deny |
+| `kya.agent.register` | `REQUIRE_APPROVE` | Creating an agent is a tool |
 
 Custom tools are first-class via stable `toolId` + metadata. Register your own; no prebuilt adapter required.
 
@@ -78,21 +81,13 @@ Custom tools are first-class via stable `toolId` + metadata. Register your own; 
 | `init` | Scaffold `.kya/` + sample tools |
 | `register-agent` | Register principal on a control plane |
 | `eval-tool` | Policy evaluate (`--offline` for local sample) |
+| `wrap` | Evaluate + open a ticket on REQUIRE_APPROVE. Never executes. |
+| `approve` / `reject` | Human decide (`kya.approve`). TUI does not decide. |
 | `serve-mcp` | Local MCP gate (HTTP or `--stdio`) |
 | `dash --once --offline` | Free terminal dashboard (sample panes; enterprise panes licensed) |
 | `orr run --path` | Read-only ORR report (evidence only — **not** a second PEP) |
 
 Package: [`@shield-agent/kya`](https://www.npmjs.com/package/@shield-agent/kya) · MCP: `server.json` / `mcpName` in package.
-
-### Cursor plugin
-
-This repo is also a [Cursor Plugin](https://cursor.com/docs/plugins) (`.cursor-plugin/plugin.json` + `mcp.json` + wrap skill).
-
-1. Install from the [Cursor Marketplace](https://cursor.com/marketplace) once listed, or load locally: symlink this directory into `~/.cursor/plugins/local/shield-kya` and reload the window.
-2. Configure `KYA_BASE_URL` and `KYA_API_KEY` (Plugins → Configure). Optional: `KYA_HOST` (`ide` | `runtime`), `KYA_AGENT_ID`.
-3. The MCP server is `npx -y @shield-agent/kya serve-mcp --stdio`. It is a **gate**, not a second PEP.
-
-Publisher application: [cursor.com/marketplace/publish](https://cursor.com/marketplace/publish).
 
 ---
 
@@ -118,6 +113,8 @@ Publisher application: [cursor.com/marketplace/publish](https://cursor.com/marke
 - Offline `--offline` evaluate / `dash` is a **sample fixture** for demos and tests — **not** the production PEP.
 - Production enforcement requires a control plane (local free console or hosted). Empty API key against an auth plane fails closed.
 - This baseline ships **sample custom tools only** — no disputes pack, no vendor marketplace adapter as a core dependency.
+- Unsigned v1 passport JSON is observational. Signed v2 claims need the hosted control-plane key.
+- Spawn without a control plane cannot be gated. Hosts that skip wrap still walk around session shrink.
 - ORR / scanners produce **evidence**; they never ALLOW irreversible side effects (no dual PEP).
 - Enterprise pin/private registry, multi-tenant density, ORR board ops, and support are a **separate tier** — they must not block day-1 solo PLG.
 - Growth unit economics for KYA = **observe metrics** (principals, evaluates, approvals, orphans) — not quality/speed OKRs.

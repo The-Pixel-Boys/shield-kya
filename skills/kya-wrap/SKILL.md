@@ -27,7 +27,7 @@ Same agent id, policy, approval, and trail on both. Label the host. Do not inven
 
 ## How to wrap
 
-1. Register the agent principal (`register-agent` or console).
+1. Register the agent principal (`register-agent` or console). Creating an agent is itself a tool (`kya.agent.register`) — it is not a free write.
 2. Give the tool a stable `toolId` (custom tools are first-class; no marketplace adapter required).
 3. Call evaluate (MCP `evaluate` / `eval-tool`) **before** the side effect.
 4. If `REQUIRE_APPROVE`, request approval and wait. Do not execute on a pending ticket.

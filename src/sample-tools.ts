@@ -45,6 +45,15 @@ export const SAMPLE_TOOLS: readonly SampleToolDescriptor[] = [
     dataClass: "RESTRICTED",
     metadata: { version: "1.0.0", owner: "sample" },
   },
+  {
+    toolId: "kya.agent.register",
+    displayName: "Register agent",
+    actionClass: "WRITE",
+    policyTier: "REQUIRE_APPROVE",
+    irreversible: true,
+    dataClass: "CONFIDENTIAL",
+    metadata: { version: "1.0.0", owner: "kya" },
+  },
 ] as const;
 
 export function findSampleTool(toolId: string): SampleToolDescriptor | undefined {

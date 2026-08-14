@@ -49,6 +49,7 @@ export interface PolicyEvaluateResponse {
 export interface RegisterAgentRequest {
   readonly name: string;
   readonly versionHash: string;
+  readonly breakGlassReason?: string;
 }
 
 export interface AgentResponse {
