@@ -2,6 +2,8 @@
 
 **Know Your Agent** control plane for agent tools: identity, policy, dual-plane host labels, human approval, trail, policy-gated spawn, session shrink, signed claims.
 
+An agent that can change a real system must ask Shield first. Register the agent, wrap the tool, get Allow / Hold / Deny. Hold waits for a person. The package does not scan a network. Agents that never call evaluate stay invisible.
+
 ```bash
 npx @shield-agent/kya@latest --help
 ```
@@ -26,6 +28,25 @@ npx @shield-agent/kya@latest dash --once --offline
 Public GitHub: https://github.com/The-Pixel-Boys/shield-kya
 
 This directory is the MIT public surface: sample tools, LIMITATIONS, dual-plane diagram, comparison table. The monorepo may stay private.
+
+---
+
+## How you use it
+
+Same four steps on a laptop or in a company:
+
+1. Stand up a control plane (local console or [hosted](https://shield-agent.com)).
+2. Register each agent as a named principal.
+3. Wrap the tools that write, export, deploy, or spawn so they evaluate first.
+4. When the verdict is Hold, someone works Approvals.
+
+**Laptop:** offline eval → `init` → `register-agent` → MCP with `KYA_HOST=ide` or wrap one write → Approvals.
+
+**Company:** one shared plane, keys per runtime, `host=ide` on laptops and `host=runtime` in production. Wrap the writes that matter. Operators live on Approvals. Unwrapped tools stay invisible. Office LAN and a vendor cloud use the same rules.
+
+`--offline` is a sample. Until a tool calls evaluate, a console looks empty. That is expected.
+
+Walkthrough: https://shield-agent.com/how-kya-works#using
 
 ---
 
@@ -108,6 +129,7 @@ Shield is protocol-first dual-plane identity, approval, and trail. AGT covers mu
 
 ## LIMITATIONS
 
+- This package does not scan a network or discover agents that never call evaluate.
 - Offline `--offline` evaluate / `dash` is a sample fixture for demos and tests. It is not the production PEP.
 - Production enforcement needs a control plane (local free console or hosted). An empty API key against an auth plane fails closed.
 - This baseline ships sample custom tools only. No vendor marketplace adapter as a core dependency.
