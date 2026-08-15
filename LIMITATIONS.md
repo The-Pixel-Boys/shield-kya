@@ -1,5 +1,6 @@
 # Known limitations
 
+- This package does not scan a network or discover agents that never call evaluate.
 - Offline `eval-tool --offline` and `dash --once --offline` use a **sample** policy surface for demo. Production uses a real control plane (local free or hosted).
 - Unsigned v1 passport JSON is observational. Signed v2 claims (`shield-kya-agent-passport-v2`, `shield-kya-session-claim-v1`) need the hosted control-plane key.
 - Spawn without a control plane cannot be gated. Hosts that skip wrap still walk around session shrink.
