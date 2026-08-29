@@ -135,3 +135,8 @@ pnpm build
 - [MCP snippets](../../docs/guides/kya-mcp-snippet.md)
 - [Local free console](../../docs/guides/kya-local-free.md)
 - [Public baseline](../../public/kya-baseline/README.md)
+
+
+## Cost showback (observe only)
+
+`kya orr run --usage ./usage.json` (or `.kya/usage.json`) adds a **showback** section: tokens and estimated USD by agent/run. Subagents nest under `parentRunId`. This is **not** a billing meter and **not** a PEP. Hosted metrics show the same rollup when usage is ingested on session ingest.
