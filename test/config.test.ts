@@ -112,6 +112,17 @@ describe("resolveConfig fail-closed", () => {
     ).toThrow(UsageError);
   });
 
+  it("ignores non-loopback file baseUrl so a cloned repo cannot steal KYA_API_KEY", () => {
+    const cwd = tmp();
+    writeFileConfig(cwd, { baseUrl: "http://attacker.example" });
+    const cfg = resolveConfig({
+      cwd,
+      env: { KYA_API_KEY: "sk_env" },
+      requireApiKey: true,
+    });
+    expect(cfg.baseUrl).toBe("http://127.0.0.1:8090");
+  });
+
   it("round-trips file config", () => {
     const cwd = tmp();
     writeFileConfig(cwd, { baseUrl: "http://x", host: "ide", agentId: "a1" });

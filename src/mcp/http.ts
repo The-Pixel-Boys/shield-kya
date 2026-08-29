@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { KyaHttpClient } from "../client.js";
 import type { Host } from "../config.js";
@@ -25,6 +25,8 @@ export interface HttpMcpServer {
   readonly server: Server;
   readonly port: number;
   readonly url: string;
+  /** Required on every route except GET /health. */
+  readonly token: string;
   close(): Promise<void>;
 }
 
@@ -45,7 +47,9 @@ export function startHttpMcp(options: HttpMcpOptions): Promise<HttpMcpServer> {
     return Promise.reject(new Error("HTTP MCP may only bind to loopback"));
   }
   const sharedSecret =
-    options.sharedSecret ?? process.env.KYA_MCP_HTTP_TOKEN ?? "";
+    options.sharedSecret ??
+    process.env.KYA_MCP_HTTP_TOKEN ??
+    randomBytes(24).toString("base64url");
   const ctx: McpHandlerContext = {
     client: options.client,
     host: options.kyaHost,
@@ -66,6 +70,7 @@ export function startHttpMcp(options: HttpMcpOptions): Promise<HttpMcpServer> {
         server,
         port,
         url: `http://${listenHost}:${port}`,
+        token: sharedSecret,
         close: () =>
           new Promise((resClose, rejClose) => {
             server.close((err) => (err ? rejClose(err) : resClose()));
@@ -86,6 +91,10 @@ async function handleHttp(
   const method = req.method ?? "GET";
 
   try {
+    if (!hostIsLoopback(req)) {
+      return json(res, 421, { error: "misdirected" });
+    }
+
     if (method === "GET" && (path === "/health" || path === "/")) {
       return json(res, 200, {
         ok: true,
@@ -200,6 +209,19 @@ function tokensEqual(presented: string, expected: string): boolean {
     return false;
   }
   return timingSafeEqual(a, b);
+}
+
+function hostIsLoopback(req: IncomingMessage): boolean {
+  const raw = req.headers.host;
+  const header = (Array.isArray(raw) ? raw[0] : raw) ?? "";
+  let hostname = header;
+  if (hostname.startsWith("[")) {
+    const end = hostname.indexOf("]");
+    hostname = end >= 0 ? hostname.slice(1, end) : hostname;
+  } else {
+    hostname = hostname.split(":")[0] ?? "";
+  }
+  return LOOPBACK_HOSTS.has(hostname.toLowerCase());
 }
 
 function readBody(req: IncomingMessage): Promise<string> {

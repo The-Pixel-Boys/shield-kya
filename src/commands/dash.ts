@@ -8,10 +8,8 @@ import { flagBool, flagString } from "../parse-args.js";
 import { type DashPane } from "../dash/entitlement.js";
 import { renderDash, type DashIo } from "../dash/dash.js";
 import { mapKey } from "../dash/input.js";
-import { isMachineApiKey } from "../client.js";
 import { runWrap, wrapExitCode } from "./wrap.js";
 import { runInvoke } from "./invoke.js";
-import { runDecide } from "./decide.js";
 import { runKillAgent, runShrinkSession } from "./ops.js";
 import { runOrr } from "./orr.js";
 
@@ -214,19 +212,8 @@ export async function runDash(
             } else if (action.type === "decide-approve" || action.type === "decide-reject") {
               const row = selected(last.approvals);
               if (!row) return;
-              if (isMachineApiKey(config.apiKey)) {
-                io.log(`Machine key cannot decide. kya ${action.type === "decide-approve" ? "approve" : "reject"} --id ${row.id}`);
-                return;
-              }
-              const decided = await runDecide(
-                cfg,
-                {
-                  id: row.id,
-                  decision: action.type === "decide-approve" ? "approve" : "reject",
-                },
-                client,
-              );
-              io.log(`${decided.status}: ${decided.id}`);
+              const verb = action.type === "decide-approve" ? "approve" : "reject";
+              io.log(`kya ${verb} --id ${row.id}  (TUI does not decide)`);
             }
           } catch (err: unknown) {
             if (err instanceof AuthRequiredError) io.error(err.message);

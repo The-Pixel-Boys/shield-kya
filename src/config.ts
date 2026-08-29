@@ -97,11 +97,11 @@ export function resolveConfig(options: ResolveOptions = {}): ResolvedConfig {
   const flags = options.flags ?? {};
   const file = readFileConfig(cwd);
 
+  const explicitBase = str(flags["base-url"]) ?? env.KYA_BASE_URL;
+  // CWD `.kya/config.json` must not redirect env API keys to an attacker origin.
+  const fileBase = isLoopbackUrl(file.baseUrl) ? file.baseUrl : undefined;
   const baseUrlRaw =
-    str(flags["base-url"]) ??
-    env.KYA_BASE_URL ??
-    file.baseUrl ??
-    "http://127.0.0.1:8090";
+    explicitBase ?? fileBase ?? "http://127.0.0.1:8090";
   const baseUrl = stripTrailingSlash(baseUrlRaw.trim());
 
   const apiKey =
@@ -161,6 +161,18 @@ export function resolveConfig(options: ResolveOptions = {}): ResolvedConfig {
 function str(v: string | boolean | undefined): string | undefined {
   if (typeof v === "string" && v.length > 0) return v;
   return undefined;
+}
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+
+function isLoopbackUrl(raw: string | undefined): boolean {
+  if (!raw) return false;
+  try {
+    const host = new URL(raw).hostname.toLowerCase();
+    return LOOPBACK_HOSTS.has(host);
+  } catch {
+    return false;
+  }
 }
 
 /** Ensure parent dir exists for a path. */

@@ -195,10 +195,14 @@ export class KyaHttpClient {
         agentId: this.agentId,
       },
     };
-    return this.request<PolicyEvaluateResponse>("/api/v1/kya/policy/evaluate", {
-      method: "POST",
-      body,
-    });
+    const response = await this.request<PolicyEvaluateResponse>(
+      "/api/v1/kya/policy/evaluate",
+      {
+        method: "POST",
+        body,
+      },
+    );
+    return requireVerdict(response);
   }
 
   async ingestSession(req: SessionIngestRequest): Promise<SessionIngestResponse> {
@@ -350,7 +354,8 @@ export class KyaHttpClient {
       method,
       headers,
       body,
-      signal: options.signal,
+      redirect: "error",
+      signal: options.signal ?? AbortSignal.timeout(15_000),
     });
     const text = await response.text();
     const parsed = parseJsonSafe(text);
@@ -421,4 +426,14 @@ function parseJsonSafe(text: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+const VERDICTS = new Set(["ALLOW", "DENY", "REQUIRE_APPROVE"]);
+
+function requireVerdict(response: PolicyEvaluateResponse): PolicyEvaluateResponse {
+  const verdict = (response?.verdict ?? "").toUpperCase();
+  if (!VERDICTS.has(verdict)) {
+    throw new HttpError(502, "control plane returned no verdict", response);
+  }
+  return { ...response, verdict };
 }
