@@ -1,8 +1,8 @@
 # `@shield-agent/kya`
 
-Light install CLI and local MCP gate for **Know Your Agent** (Shield KYA).
+CLI and local MCP gate for Shield’s Know Your Agent path.
 
-An agent that can change a real system must ask Shield first. Register the agent, wrap the tool, get Allow / Hold / Deny. Hold waits for a person. This package does not scan a network. Agents that never call evaluate stay invisible.
+If an agent can change a real system, it has to ask Shield first. You register the agent, wrap the tool, and get Allow, Hold, or Deny. Hold waits for a person. This package does not scan your network. Agents that never call evaluate stay invisible on purpose.
 
 Walkthrough: [how you use it](https://shield-agent.com/how-kya-works#using).
 
@@ -10,12 +10,11 @@ Walkthrough: [how you use it](https://shield-agent.com/how-kya-works#using).
 npx @shield-agent/kya@latest --help
 ```
 
-- Works on any collab host, cloud, or LLM that speaks MCP or OpenAPI.
-- Vertical packs are optional.
-- Sole PEP: Shield evaluates. This gate never auto-approves irreversible side effects.
-- Fail closed: empty `KYA_API_KEY` against an authenticated plane exits non-zero. `eval-tool` / `wrap` / `invoke` exit `0` on ALLOW, `4` on REQUIRE_APPROVE, `1` on DENY or unknown — so `eval-tool && write` cannot skip the gate.
-- Offline demo: `--offline` sample evaluate (`DENY` then `REQUIRE_APPROVE`) without a paid cloud.
-- Creating an agent is a tool. `kya.agent.register` evaluates `REQUIRE_APPROVE` offline. Human mint modes (allow / break-glass / approve) live on the control plane.
+It works with any host that speaks MCP or OpenAPI. Vertical packs are optional. Shield is the only policy decision point: this gate never auto-approves an irreversible side effect.
+
+If `KYA_API_KEY` is empty against an authenticated plane, network commands exit non-zero. `eval-tool`, `wrap`, and `invoke` exit `0` on ALLOW, `4` on REQUIRE_APPROVE, and `1` on DENY or unknown, so a line like `eval-tool && write` cannot skip the gate.
+
+`--offline` runs sample evaluate without a paid cloud (useful for DENY and REQUIRE_APPROVE demos). Creating an agent is itself a tool: offline, `kya.agent.register` comes back REQUIRE_APPROVE. Allow, break-glass, and approve mint modes live on the control plane.
 
 ## 15-minute path
 
@@ -34,7 +33,7 @@ npx @shield-agent/kya register-agent --name solo-builder --version-hash dev-loca
 npx @shield-agent/kya eval-tool --tool-id org.sample.never.event --irreversible
 npx @shield-agent/kya serve-mcp --stdio
 
-# Terminal dashboard (free individual panes; --offline works without a key)
+# Terminal dashboard (free panes; --offline works without a key)
 npx @shield-agent/kya dash --once --offline
 ```
 
@@ -51,14 +50,14 @@ Install hub: [https://shield-agent.com/install](https://shield-agent.com/install
                     approval + trail
 ```
 
-Tag sessions with `KYA_HOST=ide` or `KYA_HOST=runtime`. Same sole PEP either way.
+Tag sessions with `KYA_HOST=ide` or `KYA_HOST=runtime`. Same policy path either way.
 
 ## Environment
 
 | Variable | Required | Meaning |
 |----------|----------|---------|
 | `KYA_BASE_URL` | Yes (network cmds) | Control plane origin |
-| `KYA_API_KEY` | When auth is on | Bearer token |
+| `KYA_API_KEY` | When auth is on | API key (or Bearer JWT for decide verbs) |
 | `KYA_HOST` | No (default `ide`) | `ide` \| `runtime` |
 | `KYA_AGENT_ID` | After register | Agent principal id |
 | `KYA_MCP_PORT` | No (default `3920`) | HTTP MCP listen port |
@@ -71,9 +70,9 @@ Tag sessions with `KYA_HOST=ide` or `KYA_HOST=runtime`. Same sole PEP either way
 |------|------|
 | `kya.policy_evaluate` | `ALLOW` \| `DENY` \| `REQUIRE_APPROVE` |
 | `kya.session_ingest` | Observe / raise-only risk |
-| `kya.request_approval` | Open a human gate. Does not execute the side effect |
+| `kya.request_approval` | Open a human Hold. Does not execute the side effect |
 
-MCP Registry: `server.json` + package `mcpName` `io.github.The-Pixel-Boys/shield-kya`.
+MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Boys/shield-kya`.
 
 ```json
 {
@@ -99,9 +98,7 @@ npx @shield-agent/kya approve --id <approval-id>
 npx @shield-agent/kya reject --id <approval-id>
 ```
 
-`wrap` evaluates and may open a pending ticket. It never executes the side effect.
-`invoke` asks the live plane to authorize after Allow or APPROVED. It does not run the write on this machine.
-The TUI (`dash`) is observational. Keys `a`/`x` print this CLI. They do not decide.
+`wrap` evaluates and may open a pending ticket. It never executes the side effect. `invoke` asks the live plane to authorize after Allow or APPROVED. It does not run the write on this machine. The TUI (`dash`) is observational: keys `a` / `x` print CLI hints and do not decide.
 
 ## Claude connector
 
@@ -114,14 +111,13 @@ npx --no-install @shield-agent/kya@0.1.15 serve-mcp --stdio
 kya serve-mcp --stdio
 ```
 
-Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP settings, or use `.mcp.json` for Claude Code.
-Pack a Desktop extension with `npx @anthropic-ai/mcpb pack` (see `manifest.json` — launches packed `dist/cli.js`, not `npx -y`).
+Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP settings, or use `.mcp.json` for Claude Code. Pack a Desktop extension with `npx @anthropic-ai/mcpb pack` (see `manifest.json`). That pack runs the packed `dist/cli.js`, not `npx -y`.
 
-**Claude.ai / Cowork (hosted):** add custom connector URL `https://shield-agent.com/mcp` with request header `Authorization: Bearer <KYA_API_KEY>` (or `X-API-Key`). Not Directory-listed yet (API-key auth, no OAuth DCR).
+**Claude.ai / Cowork (hosted):** add a custom connector at `https://shield-agent.com/mcp` with request header `Authorization: Bearer <KYA_API_KEY>` (or `X-API-Key`). It is not Directory-listed yet (API-key auth, no OAuth DCR).
 
 ## Cursor plugin
 
-`.cursor-plugin/plugin.json` + `mcp.json` + wrap skill. Public listing repo: https://github.com/The-Pixel-Boys/shield-kya
+The package includes `.cursor-plugin/plugin.json`, `mcp.json`, and a wrap skill. Public listing repo: https://github.com/The-Pixel-Boys/shield-kya
 
 ## ORR (reporting only)
 
@@ -131,11 +127,15 @@ npx @shield-agent/kya orr run --path . --out ./orr-report --scorecard ./scorecar
 npx @shield-agent/kya orr run --path . --out ./orr-report --producer harness.agentshield --agentshield-json ./agentshield-report.json
 ```
 
-ORR is a **reporting orchestrator**. Scanners, `--scorecard`, and `harness.agentshield` are evidence. They never ALLOW high-stakes side effects (no dual PEP). AgentShield is optional and read-only: no `--fix`, no MiniClaw, no runtime hook. `@shield-agent/kya` does not depend on `ecc-agentshield`. If `--producer harness.agentshield` is set and neither `--agentshield-json` nor an `agentshield` binary is present, ORR records a coverage gap and still exits 0. Explicit `--producer harness.agentshield` always attempts; `--skip-optional-producers` only omits implicit optionals.
+ORR is a reporting board. Scanners, `--scorecard`, and `harness.agentshield` are evidence. They never ALLOW a high-stakes side effect, so they are not a second policy gate. AgentShield is optional and read-only: no `--fix`, no MiniClaw, no runtime hook. This package does not depend on `ecc-agentshield`. If you pass `--producer harness.agentshield` and have neither `--agentshield-json` nor an `agentshield` binary, ORR records a coverage gap and still exits 0. Explicit `--producer` always attempts; `--skip-optional-producers` only skips producers you did not ask for.
 
-## Enterprise (distinct tier)
+## Cost showback (observe only)
 
-Pin, private registry, multi-tenant density, ORR board ops, and support are never required for the day-1 npx path above.
+`kya orr run --usage ./usage.json` (or `.kya/usage.json`) adds a showback section: tokens and estimated USD by agent and run. Subagents nest under `parentRunId`. That section is not a billing meter and not a policy gate. Hosted metrics show the same rollup when usage is ingested with a session.
+
+## Enterprise (separate tier)
+
+Pin, private registry, multi-tenant density, ORR board ops, and support are not required for the day-1 `npx` path above.
 
 ## Develop
 
@@ -147,12 +147,6 @@ pnpm build
 
 ## Docs
 
-- [Light install](../../docs/guides/kya-light-install.md)
-- [MCP snippets](../../docs/guides/kya-mcp-snippet.md)
-- [Local free console](../../docs/guides/kya-local-free.md)
-- [Public baseline](../../public/kya-baseline/README.md)
-
-
-## Cost showback (observe only)
-
-`kya orr run --usage ./usage.json` (or `.kya/usage.json`) adds a **showback** section: tokens and estimated USD by agent/run. Subagents nest under `parentRunId`. This is **not** a billing meter and **not** a PEP. Hosted metrics show the same rollup when usage is ingested on session ingest.
+- [Install hub](https://shield-agent.com/install)
+- [How KYA works](https://shield-agent.com/how-kya-works)
+- See also `LIMITATIONS.md` in this repo
