@@ -8,11 +8,12 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  lstatSync,
   realpathSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join, relative, resolve, sep } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
 import { UsageError } from "../errors.js";
 import type { ParsedArgs } from "../parse-args.js";
 import { flagBool, flagString } from "../parse-args.js";
@@ -745,53 +746,63 @@ ${showbackMd}
 const MAX_USAGE_FILE_BYTES = 256 * 1024;
 
 function isInsideRoot(file: string, root: string): boolean {
-  const rel = relative(resolve(root), resolve(file));
-  return rel === "" || (!rel.startsWith("..") && !rel.startsWith(sep));
+  const a = resolve(file);
+  const b = resolve(root);
+  const prefix = b.endsWith(sep) ? b : b + sep;
+  return a === b || a.startsWith(prefix);
+}
+
+function confinedUsageFile(file: string, root: string): string | undefined {
+  try {
+    const st = lstatSync(file);
+    if (st.isSymbolicLink() || !st.isFile()) return undefined;
+    const realFile = realpathSync(file);
+    const realRoot = realpathSync(root);
+    if (!isInsideRoot(realFile, realRoot)) return undefined;
+    return realFile;
+  } catch {
+    return undefined;
+  }
 }
 
 function loadShowback(
   root: string,
   usagePath: string | undefined,
 ): ShowbackReport | undefined {
-  const candidates: string[] = [];
-  if (usagePath) {
-    const abs = resolve(usagePath);
-    if (!isInsideRoot(abs, root)) {
+  const explicit = Boolean(usagePath);
+  const requested = usagePath
+    ? resolve(usagePath)
+    : join(root, ".kya", "usage.json");
+  if (explicit && !isInsideRoot(requested, root)) {
+    throw new UsageError("--usage must be a file inside --path");
+  }
+  const confined = confinedUsageFile(requested, root);
+  if (!confined) {
+    if (explicit && existsSync(requested)) {
       throw new UsageError("--usage must be a file inside --path");
     }
-    try {
-      const realFile = realpathSync(abs);
-      const realRoot = realpathSync(root);
-      if (!isInsideRoot(realFile, realRoot)) {
-        throw new UsageError("--usage must be a file inside --path");
-      }
-    } catch (err) {
-      if (err instanceof UsageError) throw err;
-      /* missing file: keep candidate; loader skips */
-    }
-    candidates.push(abs);
-  } else {
-    candidates.push(join(root, ".kya", "usage.json"));
+    return undefined;
   }
-  for (const path of candidates) {
-    if (!existsSync(path) || !statSync(path).isFile()) continue;
-    try {
-      const st = statSync(path);
-      if (st.size > MAX_USAGE_FILE_BYTES) {
-        throw new UsageError("--usage file exceeds 256KB");
-      }
-      const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
-      const records = parseUsageRecords(
-        Array.isArray(raw) ? raw : (raw as { usage?: unknown }).usage,
-      );
-      if (records.length === 0) continue;
-      return buildShowback(records);
-    } catch (err) {
-      if (err instanceof UsageError) throw err;
-      /* ignore bad usage file; coverage stays empty */
+  try {
+    const st = statSync(confined);
+    if (st.size > MAX_USAGE_FILE_BYTES) {
+      if (explicit) throw new UsageError("--usage file exceeds 256KB");
+      return undefined;
     }
+    const raw = JSON.parse(readFileSync(confined, "utf8")) as unknown;
+    const records = parseUsageRecords(
+      Array.isArray(raw) ? raw : (raw as { usage?: unknown }).usage,
+    );
+    if (records.length === 0) return undefined;
+    return buildShowback(records);
+  } catch (err) {
+    if (err instanceof UsageError) throw err;
+    return undefined;
   }
-  return undefined;
+}
+
+function mdToken(s: string): string {
+  return s.replace(/[`|<>&\r\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 128);
 }
 
 function formatShowbackMarkdown(showback: ShowbackReport | undefined): string {
@@ -804,14 +815,14 @@ function formatShowbackMarkdown(showback: ShowbackReport | undefined): string {
       const usd =
         r.estimatedUsd === null ? " (USD n/a)" : " (~$" + String(r.estimatedUsd) + ")";
       const subs = r.subagentIds.length
-        ? "; subagents: " + r.subagentIds.join(", ")
+        ? "; subagents: " + r.subagentIds.map(mdToken).join(", ")
         : "";
       return (
-        '- run `' +
-        r.runId +
-        '` agent `' +
-        r.parentAgentId +
-        '`: ' +
+        "- run `" +
+        mdToken(r.runId) +
+        "` agent `" +
+        mdToken(r.parentAgentId) +
+        "`: " +
         String(r.tokensIn) +
         " in / " +
         String(r.tokensOut) +
