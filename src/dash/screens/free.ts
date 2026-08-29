@@ -12,8 +12,8 @@ export function homeBody(input: {
   readonly lastEval?: { toolId: string; verdict: string; reasonCode: string };
 }): string[] {
   const lines = [
-    "Individual free plan — local PEP playground, observe, ORR, MCP gate.",
-    "Enterprise web-parity panes stay locked until licensed.",
+    "OSS desk. Same verbs as the CLI. Shield is the only PEP.",
+    "Enterprise panes stay locked on this plan.",
     "",
     `cli          ${input.version}`,
     `offline      ${input.offline ? "yes (sample tools, not production PEP)" : "no"}`,
@@ -21,7 +21,9 @@ export function homeBody(input: {
     `plane        ${input.offline ? "offline" : input.baseUrl}`,
     `agentId      ${input.agentId ?? "(none — kya register-agent)"}`,
     "",
-    "Next: 2 policy  ·  6 orr  ·  7 mcp  ·  eval-tool --offline",
+    "2 policy (eval / wrap)   3 agents (list / kill)",
+    "4 approvals (invoke)     5 sessions (shrink)",
+    "6 orr  ·  7 mcp  ·  kya approve --id <id> (JWT)",
   ];
   if (input.lastEval) {
     lines.push(
@@ -57,6 +59,7 @@ export function policyOfflineBody(): string[] {
     "",
     `catalog      ${SAMPLE_TOOLS.length} sample tools (packs optional)`,
     "live         set KYA_BASE_URL + KYA_API_KEY and drop --offline",
+    "wrap         w on a live policy pane, or: kya wrap --tool-id …",
   ];
 }
 
@@ -69,6 +72,7 @@ export function policyLiveBody(evals: readonly PolicyEvaluateResponse[]): string
   }
   return [
     "Policy playground (live plane — Shield is sole PEP).",
+    "w wraps the write sample (ticket only). Never executes.",
     "",
     ...table(
       ["tool", "verdict", "reason"],
@@ -88,48 +92,71 @@ export function agentsOfflineBody(agentId?: string): string[] {
   ];
 }
 
-export function agentsLiveBody(rows: readonly { id: string; name: string; status?: string }[]): string[] {
+export function agentsLiveBody(
+  rows: readonly { id: string; name: string; status?: string }[],
+  cursor = 0,
+): string[] {
   return [
-    "Agents (free — register / inspect / kill).",
+    "Agents. k kill highlighted. n → kya register-agent --name …",
     "",
     ...table(
-      ["id", "name", "status"],
-      rows.map((a) => [a.id, a.name, a.status ?? ""]),
+      ["", "id", "name", "status"],
+      rows.map((a, i) => [i === cursor ? ">" : " ", a.id, a.name, a.status ?? ""]),
     ),
   ];
 }
 
 export function needsPlaneBody(pane: string): string[] {
+  const hint = {
+    policy: "Then: kya eval-tool  ·  kya wrap",
+    agents: "Then: kya agents  ·  kya register-agent  ·  kya kill --id",
+    approvals: "Then: kya approvals  ·  kya approve --id (JWT)",
+    sessions: "Then: kya sessions  ·  kya shrink --id --to BUILD",
+  }[pane] ?? "Then: kya dash --once";
   return [
     `${pane} needs a control plane.`,
-    "Set KYA_BASE_URL + KYA_API_KEY (local-free :8090 or hosted).",
-    "Empty key is fail-closed — this pane will not fake data.",
+    "Set KYA_BASE_URL + KYA_API_KEY (local-free :8093 or hosted).",
+    "Empty key is fail-closed. This pane will not fake data.",
+    hint,
   ];
 }
 
 export function approvalsLiveBody(
   rows: readonly { id: string; status: string; action?: string }[],
+  cursor = 0,
 ): string[] {
   return [
-    "Approvals (free — human queue). Approve/reject is the same PEP path as the web.",
-    "TUI never auto-approves.",
+    "Approvals. i invoke if APPROVED. a/x decide only with a JWT.",
+    "Machine keys: kya approve --id <id>",
     "",
     ...table(
-      ["id", "status", "action"],
-      rows.map((a) => [a.id, a.status, String(a.action ?? "")]),
+      ["", "id", "status", "action"],
+      rows.map((a, i) => [
+        i === cursor ? ">" : " ",
+        a.id,
+        a.status,
+        String(a.action ?? ""),
+      ]),
     ),
   ];
 }
 
 export function sessionsLiveBody(
-  rows: readonly { id: string; risk?: string; host?: string }[],
+  rows: readonly { id: string; risk?: string; host?: string; clearance?: string }[],
+  cursor = 0,
 ): string[] {
   return [
-    "Sessions (observe). Risk only raises policy; it cannot auto-allow.",
+    "Sessions. Risk only raises policy. b shrink BUILD  R shrink READ.",
     "",
     ...table(
-      ["id", "risk", "host"],
-      rows.map((s) => [s.id, s.risk ?? "", s.host ?? ""]),
+      ["", "id", "risk", "clearance", "host"],
+      rows.map((s, i) => [
+        i === cursor ? ">" : " ",
+        s.id,
+        s.risk ?? "",
+        s.clearance ?? "",
+        s.host ?? "",
+      ]),
     ),
   ];
 }
@@ -145,17 +172,18 @@ export function orrBody(summary?: {
     "",
     summary
       ? `last run     ${summary.overall ?? "?"} / ${summary.disposition ?? "?"}  ${summary.path ?? ""}`
-      : "Run: kya orr run --path . --out ./orr-report --skip-optional-producers",
+      : "o runs orr in ./orr-report. Or: kya orr run --path . --out ./orr-report",
   ];
 }
 
 export function mcpBody(input: { host: string; hasApiKey: boolean }): string[] {
   return [
-    "Local MCP gate (free).",
+    "Local MCP gate.",
     "  kya serve-mcp --stdio",
+    "  kya serve-mcp --port 13920",
     "  tools: kya.policy_evaluate | kya.session_ingest | kya.request_approval",
     `host         ${input.host}`,
     `api key      ${input.hasApiKey ? "set" : "empty — serve-mcp will fail-closed"}`,
-    "No irreversible side effect without APPROVED.",
+    "Dash will not start the server (it would steal this TTY).",
   ];
 }

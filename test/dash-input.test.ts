@@ -13,6 +13,15 @@ describe("mapKey", () => {
     expect(mapKey("q").type).toBe("quit");
     expect(mapKey("\u0003").type).toBe("quit");
     expect(mapKey("r").type).toBe("refresh");
-    expect(mapKey("o").type).toBe("offline");
+    expect(mapKey("O").type).toBe("offline");
+    expect(mapKey("o").type).toBe("orr-run");
+  });
+
+  it("maps operator keys and never auto-approves", () => {
+    expect(mapKey("w").type).toBe("wrap");
+    expect(mapKey("k").type).toBe("kill");
+    expect(mapKey("a").type).toBe("decide-approve");
+    expect(mapKey("x").type).toBe("decide-reject");
+    expect(mapKey("j").type).toBe("down");
   });
 });

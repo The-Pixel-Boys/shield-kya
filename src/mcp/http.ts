@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { KyaHttpClient } from "../client.js";
 import type { Host } from "../config.js";
@@ -16,6 +17,8 @@ export interface HttpMcpOptions {
   readonly client: KyaHttpClient;
   readonly kyaHost: Host;
   readonly agentId?: string;
+  /** Optional shared secret; also read from KYA_MCP_HTTP_TOKEN. */
+  readonly sharedSecret?: string;
 }
 
 export interface HttpMcpServer {
@@ -33,8 +36,16 @@ export interface HttpMcpServer {
  * - POST /mcp                  (JSON-RPC)
  * - POST /mcp/tools/:name      (direct tool call)
  */
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+const MAX_BODY_BYTES = 64 * 1024;
+
 export function startHttpMcp(options: HttpMcpOptions): Promise<HttpMcpServer> {
   const listenHost = options.host ?? "127.0.0.1";
+  if (!LOOPBACK_HOSTS.has(listenHost)) {
+    return Promise.reject(new Error("HTTP MCP may only bind to loopback"));
+  }
+  const sharedSecret =
+    options.sharedSecret ?? process.env.KYA_MCP_HTTP_TOKEN ?? "";
   const ctx: McpHandlerContext = {
     client: options.client,
     host: options.kyaHost,
@@ -42,7 +53,7 @@ export function startHttpMcp(options: HttpMcpOptions): Promise<HttpMcpServer> {
   };
 
   const server = createServer((req, res) => {
-    void handleHttp(req, res, ctx);
+    void handleHttp(req, res, ctx, sharedSecret);
   });
 
   return new Promise((resolve, reject) => {
@@ -68,6 +79,7 @@ async function handleHttp(
   req: IncomingMessage,
   res: ServerResponse,
   ctx: McpHandlerContext,
+  sharedSecret: string,
 ): Promise<void> {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   const path = url.pathname;
@@ -80,6 +92,10 @@ async function handleHttp(
         server: MCP_SERVER_INFO.name,
         version: MCP_SERVER_INFO.version,
       });
+    }
+
+    if (!authorizeMcp(req, res, sharedSecret)) {
+      return;
     }
 
     if (method === "GET" && path === "/connectors/mcp.json") {
@@ -113,7 +129,7 @@ async function handleHttp(
 
     if (method === "POST" && path === "/mcp") {
       const body = await readBody(req);
-      const msg = JSON.parse(body || "{}") as JsonRpcRequest;
+      const msg = parseJsonBody(body) as JsonRpcRequest;
       const response = await handleJsonRpc(msg, ctx);
       if (response === null) {
         res.writeHead(204);
@@ -127,16 +143,28 @@ async function handleHttp(
     if (method === "POST" && toolMatch) {
       const name = decodeURIComponent(toolMatch[1]!);
       const body = await readBody(req);
-      const args = body ? (JSON.parse(body) as Record<string, unknown>) : {};
+      const args = body
+        ? (parseJsonBody(body) as Record<string, unknown>)
+        : {};
       const result = await handleMcpToolCall(name, args, ctx);
       return json(res, result.isError ? 400 : 200, result);
     }
 
     json(res, 404, { error: "not found" });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    json(res, 500, { error: message });
+    if (err instanceof SyntaxError) {
+      return json(res, 400, { error: "invalid json" });
+    }
+    if (err instanceof Error && err.message === "body too large") {
+      return json(res, 413, { error: "body too large" });
+    }
+    json(res, 500, { error: "internal error" });
   }
+}
+
+function parseJsonBody(body: string): unknown {
+  if (!body) return {};
+  return JSON.parse(body) as unknown;
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {
@@ -148,10 +176,45 @@ function json(res: ServerResponse, status: number, body: unknown): void {
   res.end(payload);
 }
 
+function authorizeMcp(
+  req: IncomingMessage,
+  res: ServerResponse,
+  sharedSecret: string,
+): boolean {
+  if (!sharedSecret) {
+    return true;
+  }
+  const presented = req.headers["x-kya-mcp-token"];
+  const token = Array.isArray(presented) ? presented[0] : presented;
+  if (!token || !tokensEqual(token, sharedSecret)) {
+    json(res, 401, { error: "unauthorized" });
+    return false;
+  }
+  return true;
+}
+
+function tokensEqual(presented: string, expected: string): boolean {
+  const a = Buffer.from(presented);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) {
+    return false;
+  }
+  return timingSafeEqual(a, b);
+}
+
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (c: Buffer) => chunks.push(c));
+    let size = 0;
+    req.on("data", (c: Buffer) => {
+      size += c.length;
+      if (size > MAX_BODY_BYTES) {
+        req.destroy();
+        reject(new Error("body too large"));
+        return;
+      }
+      chunks.push(c);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });

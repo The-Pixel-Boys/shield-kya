@@ -9,6 +9,7 @@ import type { KyaHttpClient } from "../client.js";
 import type { Host } from "../config.js";
 import { computeArgsHash } from "../hash.js";
 import { findSampleTool } from "../sample-tools.js";
+import { clientSafeError } from "../errors.js";
 import { CLI_VERSION } from "../version.js";
 
 export const MCP_SERVER_INFO = {
@@ -121,8 +122,7 @@ export async function handleMcpToolCall(
         return textResult({ error: `unknown tool: ${name}` }, true);
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return textResult({ error: message }, true);
+    return textResult({ error: clientSafeError(err) }, true);
   }
 }
 

@@ -21,12 +21,13 @@ describe("KyaHttpClient", () => {
     ).toThrow(AuthRequiredError);
   });
 
-  it("POSTs register agent with bearer auth", async () => {
+  it("POSTs register agent with X-API-Key for sk_ tokens", async () => {
     const fetchImpl = mockFetch(async (url, init) => {
       expect(url).toBe("http://127.0.0.1:8090/api/v1/kya/agents");
       expect(init?.method).toBe("POST");
       const headers = init?.headers as Record<string, string>;
-      expect(headers.Authorization).toBe("Bearer sk_test");
+      expect(headers["X-API-Key"]).toBe("sk_test");
+      expect(headers.Authorization).toBeUndefined();
       expect(JSON.parse(String(init?.body))).toEqual({
         name: "solo-builder",
         versionHash: "dev-local",
@@ -52,6 +53,44 @@ describe("KyaHttpClient", () => {
       versionHash: "dev-local",
     });
     expect(agent.id).toBe("11111111-1111-1111-1111-111111111111");
+  });
+
+  it("lists agents via GET /api/v1/kya/agents", async () => {
+    const fetchImpl = mockFetch(async (url, init) => {
+      expect(url).toBe("http://plane/api/v1/kya/agents");
+      expect(init?.method ?? "GET").toBe("GET");
+      return new Response(
+        JSON.stringify([{ id: "a1", name: "solo", status: "ACTIVE" }]),
+        { status: 200 },
+      );
+    });
+    const client = new KyaHttpClient({
+      baseUrl: "http://plane",
+      apiKey: "sk_live_x",
+      fetch: fetchImpl,
+    });
+    const rows = await client.listAgents();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.name).toBe("solo");
+  });
+
+  it("shrinks a session", async () => {
+    const fetchImpl = mockFetch(async (url, init) => {
+      expect(url).toBe("http://plane/api/v1/kya/sessions/sess-1/shrink");
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toEqual({ to: "BUILD" });
+      return new Response(
+        JSON.stringify({ id: "sess-1", from: "DEPLOY", to: "BUILD" }),
+        { status: 200 },
+      );
+    });
+    const client = new KyaHttpClient({
+      baseUrl: "http://plane",
+      apiKey: "sk_live_x",
+      fetch: fetchImpl,
+    });
+    const out = await client.shrinkSession("sess-1", "BUILD");
+    expect(out.to).toBe("BUILD");
   });
 
   it("POSTs policy evaluate with sample tool metadata", async () => {
@@ -146,6 +185,53 @@ describe("KyaHttpClient", () => {
     });
     expect(ap.status).toBe("PENDING");
     expect(calls).toHaveLength(2);
+  });
+
+  it("POSTs human approve and reject on the decide path", async () => {
+    const fetchImpl = mockFetch(async (url, init) => {
+      expect(init?.method).toBe("POST");
+      if (url.endsWith("/approvals/appr-1/approve")) {
+        return new Response(
+          JSON.stringify({ id: "appr-1", status: "APPROVED" }),
+          { status: 200 },
+        );
+      }
+      if (url.endsWith("/approvals/appr-1/reject")) {
+        return new Response(
+          JSON.stringify({ id: "appr-1", status: "REJECTED" }),
+          { status: 200 },
+        );
+      }
+      return new Response("no", { status: 404 });
+    });
+    const client = new KyaHttpClient({
+      baseUrl: "http://plane",
+      apiKey: "sk",
+      fetch: fetchImpl,
+    });
+    const ok = await client.decideApproval("appr-1", "approve");
+    expect(ok.status).toBe("APPROVED");
+    const no = await client.decideApproval("appr-1", "reject");
+    expect(no.status).toBe("REJECTED");
+  });
+
+  it("sends Bearer for JWT-shaped keys", async () => {
+    const jwt = "eyJhbGciOiJIUzI1NiJ9.e30.sig";
+    const fetchImpl = mockFetch(async (_url, init) => {
+      const headers = init?.headers as Record<string, string>;
+      expect(headers.Authorization).toBe(`Bearer ${jwt}`);
+      expect(headers["X-API-Key"]).toBeUndefined();
+      return new Response(
+        JSON.stringify({ verdict: "ALLOW", reasonCode: "ALLOW" }),
+        { status: 200 },
+      );
+    });
+    const client = new KyaHttpClient({
+      baseUrl: "http://plane",
+      apiKey: jwt,
+      fetch: fetchImpl,
+    });
+    await client.evaluatePolicy({ toolId: "org.sample.safe.read" });
   });
 });
 

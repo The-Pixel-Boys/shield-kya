@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
  * @shield-agent/kya — light install CLI
- * Commands: init | register-agent | eval-tool | serve-mcp | orr run | dash
+ * Commands: init | register-agent | eval-tool | wrap | invoke | approve | reject
+ *   | agents | agent | passport | kill | approvals | sessions | shrink
+ *   | serve-mcp | orr run | dash
  * Fail-closed: empty KYA_API_KEY against auth plane → non-zero exit.
  * Offline sample: eval-tool --offline (demo only; not production PEP).
  */
@@ -30,6 +32,33 @@ import {
   runOrr,
 } from "./commands/orr.js";
 import { runDash } from "./commands/dash.js";
+import {
+  formatAgentTable,
+  formatApprovalTable,
+  formatSessionTable,
+  requireId,
+  runGetAgent,
+  runGetPassport,
+  runKillAgent,
+  runListAgents,
+  runListApprovals,
+  runListSessions,
+  runShrinkSession,
+  shrinkToFromArgs,
+} from "./commands/ops.js";
+import {
+  formatWrapHuman,
+  runWrap,
+  verdictExitCode,
+  wrapExitCode,
+  wrapInputFromArgs,
+} from "./commands/wrap.js";
+import { decideIdFromArgs, runDecide } from "./commands/decide.js";
+import {
+  formatInvokeHuman,
+  invokeInputFromArgs,
+  runInvoke,
+} from "./commands/invoke.js";
 
 const HELP = `Shield KYA light CLI — Know Your Agent (provider-agnostic)
 
@@ -40,9 +69,21 @@ Commands:
   init              Scaffold .kya/ config + sample tools + .env.example
   register-agent    POST /api/v1/kya/agents (human mint; server applies allow/break-glass/approve)
   eval-tool         Policy evaluate (HTTP plane or --offline sample)
+  wrap              Evaluate then (on REQUIRE_APPROVE) open a ticket. Never executes.
+  invoke            Authorize on the plane after Allow or APPROVED. Never runs the write here.
+  approve           Human APPROVE an approval id (kya.approve scope)
+  reject            Human REJECT an approval id (kya.approve scope)
+  agents            List registered agents
+  agent             Show one agent (--id)
+  passport          Observational passport JSON (--id)
+  kill              Pause an agent (--id)
+  approvals         List the human queue
+  sessions          List observed sessions
+  shrink            Drop session clearance (--id --to BUILD|READ|DEPLOY)
   serve-mcp         Local MCP gate (HTTP default; --stdio for hosts)
   orr run           Read-only ORR board (reporting only — not a second PEP)
-  dash              Terminal dashboard (free individual panes; enterprise if licensed)
+                    Optional: --producer harness.agentshield [--agentshield-json <file>]
+  dash              Terminal desk (FREE panes; actions on a TTY, --once for CI)
 
 Options (shared):
   --base-url <url>  Control plane origin (or KYA_BASE_URL)
@@ -63,6 +104,13 @@ Examples:
   npx @shield-agent/kya eval-tool --offline --tool-id kya.agent.register --irreversible
   npx @shield-agent/kya serve-mcp --stdio
   npx @shield-agent/kya orr run --path . --out ./orr-report --skip-optional-producers
+  npx @shield-agent/kya orr run --path . --producer harness.agentshield --agentshield-json ./agentshield-report.json
+  npx @shield-agent/kya wrap --offline --tool-id org.sample.data.write --irreversible
+  npx @shield-agent/kya invoke --tool-id org.sample.data.write --args-hash <hash>
+  npx @shield-agent/kya approve --id <approval-id>
+  npx @shield-agent/kya agents
+  npx @shield-agent/kya kill --id <agent-id>
+  npx @shield-agent/kya shrink --id <session-id> --to BUILD
   npx @shield-agent/kya dash --once --offline
   npx @shield-agent/kya dash --once --pane policy
 
@@ -161,6 +209,62 @@ export async function runCli(
         } else {
           io.log(formatEvalHuman(result));
         }
+        return verdictExitCode(result.response.verdict);
+      }
+
+      case "wrap": {
+        const input = wrapInputFromArgs(parsed);
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          requireApiKey: !input.offline,
+          offline: input.offline,
+        });
+        const result = await runWrap(config, input);
+        if (config.json) {
+          io.log(JSON.stringify(result, null, 2));
+        } else {
+          io.log(formatWrapHuman(result));
+        }
+        return wrapExitCode(result);
+      }
+
+      case "invoke": {
+        const input = invokeInputFromArgs(parsed);
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          requireApiKey: true,
+        });
+        const result = await runInvoke(config, input);
+        if (config.json) {
+          io.log(JSON.stringify(result, null, 2));
+        } else {
+          io.log(formatInvokeHuman(result));
+        }
+        return verdictExitCode(result.verdict);
+      }
+
+      case "approve":
+      case "reject": {
+        const id = decideIdFromArgs(parsed, parsed.command);
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          requireApiKey: true,
+        });
+        const result = await runDecide(config, {
+          id,
+          decision: parsed.command,
+        });
+        if (config.json) {
+          io.log(JSON.stringify(result, null, 2));
+        } else {
+          io.log(`${result.status}: ${result.id}`);
+        }
         return 0;
       }
 
@@ -221,6 +325,97 @@ export async function runCli(
           );
         }
         return result.exitCode;
+      }
+
+      case "agents": {
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          requireApiKey: true,
+        });
+        const rows = await runListAgents(config);
+        io.log(config.json ? JSON.stringify(rows, null, 2) : formatAgentTable(rows));
+        return 0;
+      }
+
+      case "agent": {
+        const id = requireId(parsed, "agent");
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          requireApiKey: true,
+        });
+        const row = await runGetAgent(config, id);
+        io.log(config.json ? JSON.stringify(row, null, 2) : formatAgentTable([row]));
+        return 0;
+      }
+
+      case "passport": {
+        const id = requireId(parsed, "passport");
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          requireApiKey: true,
+        });
+        const doc = await runGetPassport(config, id);
+        io.log(JSON.stringify(doc, null, 2));
+        return 0;
+      }
+
+      case "kill": {
+        const id = requireId(parsed, "kill");
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          requireApiKey: true,
+        });
+        const row = await runKillAgent(config, id);
+        if (config.json) io.log(JSON.stringify(row, null, 2));
+        else io.log(`${row.status ?? "PAUSED"}  ${row.id}  ${row.name}`);
+        return 0;
+      }
+
+      case "approvals": {
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          requireApiKey: true,
+        });
+        const rows = await runListApprovals(config);
+        io.log(config.json ? JSON.stringify(rows, null, 2) : formatApprovalTable(rows));
+        return 0;
+      }
+
+      case "sessions": {
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          requireApiKey: true,
+        });
+        const rows = await runListSessions(config);
+        io.log(config.json ? JSON.stringify(rows, null, 2) : formatSessionTable(rows));
+        return 0;
+      }
+
+      case "shrink": {
+        const id = requireId(parsed, "shrink");
+        const to = shrinkToFromArgs(parsed);
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          requireApiKey: true,
+        });
+        const row = await runShrinkSession(config, id, to);
+        if (config.json) io.log(JSON.stringify(row, null, 2));
+        else io.log(`clearance ${row.from} → ${row.to}  ${row.id}`);
+        return 0;
       }
 
       case "dash": {

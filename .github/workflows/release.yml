@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 11
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -41,8 +41,16 @@ jobs:
       - name: Smoke help + offline
         run: |
           node dist/cli.js --help
-          node dist/cli.js eval-tool --offline --tool-id org.sample.never.event --irreversible
-          node dist/cli.js eval-tool --offline --tool-id org.sample.data.write --irreversible
+          set +e
+          node dist/cli.js eval-tool --offline --tool-id org.sample.never.event --irreversible | tee /tmp/deny.txt
+          deny=${PIPESTATUS[0]}
+          node dist/cli.js eval-tool --offline --tool-id org.sample.data.write --irreversible | tee /tmp/ra.txt
+          ra=${PIPESTATUS[0]}
+          set -e
+          test "$deny" -eq 1
+          grep -q DENY /tmp/deny.txt
+          test "$ra" -eq 4
+          grep -q REQUIRE_APPROVE /tmp/ra.txt
       - run: pnpm pack --pack-destination /tmp
       - name: Publish to npm
         if: ${{ github.event_name == 'push' || inputs.dry_run == 'false' }}
