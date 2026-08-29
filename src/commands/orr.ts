@@ -14,6 +14,11 @@ import {
   tryRunAgentShieldCli,
   type AgentShieldSpawnFn,
 } from "../orr/agentshield.js";
+import {
+  buildShowback,
+  parseUsageRecords,
+  type ShowbackReport,
+} from "../showback/cost-per-task.js";
 
 export type OrrRating = "green" | "amber" | "red";
 export type OrrDisposition = "go" | "conditional" | "no_go";
@@ -69,6 +74,8 @@ export interface OrrReport {
   }[];
   readonly findings: readonly OrrFinding[];
   readonly coverage_gaps: readonly OrrCoverageGap[];
+  /** Observe-only token/USD showback. Never a PEP or billing meter. */
+  readonly showback?: ShowbackReport;
 }
 
 export interface OrrRunOptions {
@@ -88,6 +95,8 @@ export interface OrrRunOptions {
   readonly scorecardPath?: string;
   /** Optional AgentShield SecurityReport JSON dump. Evidence only — not a PEP. */
   readonly agentshieldJsonPath?: string;
+  /** Optional usage JSON (array). Observe-only showback. */
+  readonly usagePath?: string;
   /** Test seam. Production uses spawnSync("agentshield", ...). Never --fix. */
   readonly agentshieldSpawn?: AgentShieldSpawnFn;
 }
@@ -147,6 +156,7 @@ export function orrRunOptionsFromArgs(parsed: ParsedArgs): OrrRunOptions {
     jsonStdout: flagBool(parsed.flags, "json-stdout"),
     scorecardPath: flagString(parsed.flags, "scorecard"),
     agentshieldJsonPath: flagString(parsed.flags, "agentshield-json"),
+    usagePath: flagString(parsed.flags, "usage"),
   };
 }
 
@@ -237,8 +247,9 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
   }
 
   const disabled = new Set(options.disableCategories);
-  const categories = scoreCategories(findings, disabled);
   const scorecards = buildScorecards(findings, absPath, disabled);
+  const categories = scoreCategories(findings, scorecards, disabled);
+  const showback = loadShowback(absPath, options.usagePath);
   const overall = rollupOverall(categories);
   const disposition = rollupDisposition(overall, categories);
   const primary = pickPrimaryFailure(findings);
@@ -268,6 +279,7 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
     scorecards,
     findings,
     coverage_gaps: coverageGaps,
+    ...(showback ? { showback } : {}),
   };
 
   const outDir = resolve(options.out);
@@ -495,7 +507,32 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
     });
   }
 
-  return findings.map((f) =>
+  
+  const hasMaxSteps = /max[_-]?steps|maxSteps|MAX_STEPS/.test(textBlob);
+  const hasMaxTokens = /max[_-]?tokens|maxTokens|MAX_TOKENS/.test(textBlob);
+  const hasRetryCeiling =
+    /max[_-]?retries|maxRetries|MAX_RETRIES|boundedRetries|retry.?ceiling/i.test(
+      textBlob,
+    );
+  const hasRunBudget =
+    /maxCost|max_cost|max[_-]?budget|maxBudget|per[_-]?run[_-]?budget/i.test(
+      textBlob,
+    );
+  const hasInLoopCeiling =
+    hasMaxSteps || hasMaxTokens || hasRetryCeiling || hasRunBudget;
+  if (!hasInLoopCeiling) {
+    findings.push({
+      id: "sa.probe.no_in_loop_ceilings",
+      category: "cost_budget_gates",
+      severity: "info",
+      title: "No in-loop step/token/retry ceilings detected",
+      detail:
+        "Look for max_steps, max_tokens, max_retries, or maxCost in the agent loop. Soft gate only — ORR does not kill spend.",
+      evidence: "sa.first_party text probe",
+    });
+  }
+
+return findings.map((f) =>
     f.source_tool ? f : { ...f, source_tool: "sa.first_party" },
   );
 }
@@ -516,6 +553,7 @@ function pickPrimaryFailure(findings: readonly OrrFinding[]): OrrFinding | undef
 
 function scoreCategories(
   findings: readonly OrrFinding[],
+  scorecards: OrrReport["scorecards"],
   disabled: Set<string>,
 ): OrrCategory[] {
   return CATEGORY_META.filter((c) => !disabled.has(c.id)).map((c) => {
@@ -527,12 +565,23 @@ function scoreCategories(
     ) {
       rating = "amber";
     }
+    const softPartial = scorecards.some(
+      (sc) =>
+        sc.category === c.id &&
+        sc.hardness === "soft" &&
+        sc.result === "partial",
+    );
+    if (rating === "green" && softPartial) rating = "amber";
     const top = catFindings[0];
+    let tldr = top ? top.title : "No findings from SA first-party probes";
+    if (!top && softPartial) {
+      tldr = "Soft gate partial: in-loop ceilings not detected";
+    }
     return {
       id: c.id,
       label: c.label,
       rating,
-      tldr: top ? top.title : "No findings from SA first-party probes",
+      tldr,
     };
   });
 }
@@ -593,6 +642,20 @@ function buildScorecards(
       note: `scanned sample under ${basename(root)}`,
     });
   }
+  if (!disabled.has("cost_budget_gates")) {
+    const hasCeilings = !findings.some(
+      (f) => f.id === "sa.probe.no_in_loop_ceilings",
+    );
+    cards.push({
+      category: "cost_budget_gates",
+      name: "in_loop_ceilings",
+      result: hasCeilings ? "pass" : "partial",
+      hardness: "soft",
+      note: hasCeilings
+        ? "step/token/retry or run-budget signal present"
+        : "no in-loop ceilings detected (soft)",
+    });
+  }
   return cards;
 }
 
@@ -625,6 +688,7 @@ export function formatOrrMarkdown(report: OrrReport): string {
       : report.coverage_gaps
           .map((g) => `- \`${g.adapter_id}\`: ${g.reason}`)
           .join("\n");
+  const showbackMd = formatShowbackMarkdown(report.showback);
   const cards = report.scorecards
     .map(
       (s) =>
@@ -661,9 +725,81 @@ ${findings || "- (none)"}
 ## Coverage gaps
 ${gaps}
 
+## Showback
+${showbackMd}
+
 ---
-*ORR is a reporting orchestrator. Sole PEP remains Shield KYA (ALLOW / DENY / REQUIRE_APPROVE). Scanners are evidence only — never a second PEP.*
+*ORR is a reporting orchestrator. Sole PEP remains Shield KYA (ALLOW / DENY / REQUIRE_APPROVE). Scanners are evidence only - never a second PEP. Showback is estimate-only and not a billing meter.*
 `;
+}
+
+
+function loadShowback(
+  root: string,
+  usagePath: string | undefined,
+): ShowbackReport | undefined {
+  const candidates = [
+    usagePath ? resolve(usagePath) : undefined,
+    join(root, ".kya", "usage.json"),
+  ].filter((x): x is string => Boolean(x));
+  for (const path of candidates) {
+    if (!existsSync(path)) continue;
+    try {
+      const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
+      const records = parseUsageRecords(
+        Array.isArray(raw) ? raw : (raw as { usage?: unknown }).usage,
+      );
+      if (records.length === 0) continue;
+      return buildShowback(records);
+    } catch {
+      /* ignore bad usage file; coverage stays empty */
+    }
+  }
+  return undefined;
+}
+
+function formatShowbackMarkdown(showback: ShowbackReport | undefined): string {
+  if (!showback) {
+    return "- (none: pass --usage or .kya/usage.json for observe-only cost-per-task)";
+  }
+  const runs = showback.perRun
+    .slice(0, 20)
+    .map((r) => {
+      const usd =
+        r.estimatedUsd === null ? " (USD n/a)" : " (~$" + String(r.estimatedUsd) + ")";
+      const subs = r.subagentIds.length
+        ? "; subagents: " + r.subagentIds.join(", ")
+        : "";
+      return (
+        '- run `' +
+        r.runId +
+        '` agent `' +
+        r.parentAgentId +
+        '`: ' +
+        String(r.tokensIn) +
+        " in / " +
+        String(r.tokensOut) +
+        " out" +
+        usd +
+        subs
+      );
+    })
+    .join("\n");
+  const totalUsd =
+    showback.estimatedUsd === null
+      ? " (USD n/a)"
+      : " (~$" + String(showback.estimatedUsd) + ")";
+  return [
+    "- **Disclaimer:** " + showback.disclaimer,
+    "- **billingMeter:** false",
+    "- **Totals:** " +
+      showback.totalTokensIn +
+      " in / " +
+      showback.totalTokensOut +
+      " out" +
+      totalUsd,
+    runs || "- (no runs)",
+  ].join("\n");
 }
 
 function tryReadGitHead(root: string): string | undefined {

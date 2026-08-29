@@ -61,6 +61,19 @@ export interface AgentResponse {
   readonly createdAt?: string;
 }
 
+export interface SessionUsageRow {
+  readonly agentId: string;
+  readonly parentRunId?: string;
+  readonly runId?: string;
+  readonly model?: string;
+  readonly route?: string;
+  readonly environment?: string;
+  readonly tokensIn?: number;
+  readonly tokensOut?: number;
+  readonly reasoningTokens?: number;
+  readonly retries?: number;
+}
+
 export interface SessionIngestRequest {
   readonly sessionId: string;
   readonly source?: string;
@@ -71,6 +84,8 @@ export interface SessionIngestRequest {
   readonly hitCodes?: readonly string[];
   readonly payload?: Readonly<Record<string, unknown>>;
   readonly host?: Host;
+  /** Observe-only. Not a billing meter. Does not mint agents. */
+  readonly usage?: readonly SessionUsageRow[];
 }
 
 export interface SessionIngestResponse {

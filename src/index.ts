@@ -74,3 +74,12 @@ export {
 } from "./mcp/protocol.js";
 export { startHttpMcp, type HttpMcpServer } from "./mcp/http.js";
 export { startStdioMcp } from "./mcp/stdio.js";
+
+export {
+  buildShowback,
+  parseUsageRecords,
+  SHOWBACK_DISCLAIMER,
+  type UsageRecord,
+  type ShowbackReport,
+} from "./showback/cost-per-task.js";
+export { estimateRequestUsd, lookupRate, PUBLISHED_MODEL_RATES } from "./showback/rates.js";

@@ -66,6 +66,12 @@ export const MCP_TOOLS: readonly McpToolDef[] = [
         source: { type: "string" },
         model: { type: "string" },
         payload: { type: "object" },
+        usage: {
+          type: "array",
+          description:
+            "Observe-only token rows for showback. Not a billing meter. Does not mint agents.",
+          items: { type: "object" },
+        },
       },
       required: [],
     },
@@ -194,6 +200,25 @@ async function callSessionIngest(
       ? { tools: session.tools }
       : undefined);
 
+  const usage = Array.isArray(a.usage)
+    ? (a.usage as Record<string, unknown>[])
+        .filter((row) => row && typeof row === "object")
+        .map((row) => ({
+          agentId: str(row.agentId) ?? str(row.agent_id) ?? "",
+          parentRunId: str(row.parentRunId) ?? str(row.parent_run_id),
+          runId: str(row.runId) ?? str(row.run_id),
+          model: str(row.model),
+          route: str(row.route),
+          environment: str(row.environment) ?? str(row.env),
+          tokensIn: typeof row.tokensIn === "number" ? row.tokensIn : undefined,
+          tokensOut: typeof row.tokensOut === "number" ? row.tokensOut : undefined,
+          reasoningTokens:
+            typeof row.reasoningTokens === "number" ? row.reasoningTokens : undefined,
+          retries: typeof row.retries === "number" ? row.retries : undefined,
+        }))
+        .filter((row) => row.agentId.length > 0)
+    : undefined;
+
   const response = await ctx.client.ingestSession({
     sessionId,
     source: str(a.source) ?? str(session.source) ?? "mcp-gate",
@@ -202,6 +227,7 @@ async function callSessionIngest(
     hitCodes,
     payload,
     host,
+    ...(usage && usage.length > 0 ? { usage } : {}),
   });
   return textResult(response);
 }
