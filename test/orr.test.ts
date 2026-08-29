@@ -188,6 +188,28 @@ describe("orr run", () => {
     expect(formatOrrMarkdown(result.report)).toContain("billingMeter");
   });
 
+  it("rejects --usage outside --path", () => {
+    const root = tmp();
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "app.js"), "console.log(1)\n");
+    const outside = join(tmpdir(), "kya-usage-outside.json");
+    writeFileSync(outside, "[]\n");
+    expect(() =>
+      runOrr({
+        path: root,
+        out: join(root, "out"),
+        rubric: "0",
+        disableCategories: [],
+        formats: ["json"],
+        producers: ["sa.first_party"],
+        skipOptionalProducers: true,
+        quiet: true,
+        jsonStdout: false,
+        usagePath: outside,
+      }),
+    ).toThrow(/inside --path/);
+  });
+
   it("ingests --scorecard JSON as evidence only", () => {
     const root = tmp();
     mkdirSync(join(root, "src"), { recursive: true });

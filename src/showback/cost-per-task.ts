@@ -201,35 +201,79 @@ function roundUsd(n: number): number {
   return Math.round(n * 1_000_000) / 1_000_000;
 }
 
+const MAX_USAGE_ROWS = 100;
+const MAX_AGENT_ID = 128;
+const MAX_LABEL = 64;
+const MAX_TOKENS = 50_000_000;
+const SECRET_VALUE =
+  /sk_live_|rk_live_|sk_test_|rk_test_|whsec_|ghp_|github_pat_|sk-ant-|sk-proj-|AKIA|AIza|xai-|hf_|npm_[A-Za-z0-9]|Bearer\s+[A-Za-z0-9._-]{8,}/i;
+
 export function parseUsageRecords(raw: unknown): UsageRecord[] {
   if (!Array.isArray(raw)) {
     throw new Error("usage must be an array");
   }
-  if (raw.length > 500) {
-    throw new Error("usage exceeds 500 rows");
+  if (raw.length > MAX_USAGE_ROWS) {
+    throw new Error("usage exceeds 100 rows");
   }
   const out: UsageRecord[] = [];
   for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
     const o = item as Record<string, unknown>;
-    const agentId = typeof o.agentId === "string" ? o.agentId : typeof o.agent_id === "string" ? o.agent_id : "";
-    if (!agentId.trim()) continue;
-    const tokensIn = num(o.tokensIn ?? o.tokens_in);
-    const tokensOut = num(o.tokensOut ?? o.tokens_out);
+    const agentId = boundRequired(
+      typeof o.agentId === "string" ? o.agentId : typeof o.agent_id === "string" ? o.agent_id : "",
+      MAX_AGENT_ID,
+    );
+    if (!agentId) continue;
+    const parentRunId = boundOptional(str(o.parentRunId ?? o.parent_run_id), MAX_LABEL);
+    const runId = boundOptional(str(o.runId ?? o.run_id), MAX_LABEL);
+    const model = boundOptional(str(o.model), MAX_LABEL);
+    const route = boundOptional(str(o.route), MAX_LABEL);
+    const environment = boundOptional(str(o.environment ?? o.env), MAX_LABEL);
+    if (
+      secretShaped(agentId) ||
+      secretShaped(parentRunId) ||
+      secretShaped(runId) ||
+      secretShaped(model) ||
+      secretShaped(route) ||
+      secretShaped(environment)
+    ) {
+      continue;
+    }
     out.push({
-      agentId: agentId.trim(),
-      parentRunId: str(o.parentRunId ?? o.parent_run_id),
-      runId: str(o.runId ?? o.run_id),
-      model: str(o.model),
-      route: str(o.route),
-      environment: str(o.environment ?? o.env),
-      tokensIn,
-      tokensOut,
-      reasoningTokens: optionalNum(o.reasoningTokens ?? o.reasoning_tokens),
-      retries: optionalNum(o.retries),
+      agentId,
+      parentRunId,
+      runId,
+      model,
+      route,
+      environment,
+      tokensIn: clampTokens(num(o.tokensIn ?? o.tokens_in)),
+      tokensOut: clampTokens(num(o.tokensOut ?? o.tokens_out)),
+      reasoningTokens: clampTokens(optionalNum(o.reasoningTokens ?? o.reasoning_tokens) ?? 0),
+      retries: Math.min(100, optionalNum(o.retries) ?? 0),
     });
   }
   return out;
+}
+
+function secretShaped(value: string | undefined): boolean {
+  return Boolean(value && SECRET_VALUE.test(value));
+}
+
+function boundRequired(raw: string, max: number): string | undefined {
+  const t = raw.trim();
+  if (!t || t.length > max) return undefined;
+  return t;
+}
+
+function boundOptional(raw: string | undefined, max: number): string | undefined {
+  if (!raw) return undefined;
+  if (raw.length > max) return undefined;
+  return raw;
+}
+
+function clampTokens(n: number): number {
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(MAX_TOKENS, Math.floor(n));
 }
 
 function str(v: unknown): string | undefined {
