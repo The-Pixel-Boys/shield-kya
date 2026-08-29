@@ -103,6 +103,19 @@ npx @shield-agent/kya reject --id <approval-id>
 `invoke` asks the live plane to authorize after Allow or APPROVED. It does not run the write on this machine.
 The TUI (`dash`) is observational. Keys `a`/`x` print this CLI. They do not decide.
 
+## Claude connector
+
+**Desktop / Claude Code (local stdio):**
+
+```bash
+npx -y @shield-agent/kya@0.1.14 serve-mcp --stdio
+```
+
+Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP settings, or use `.mcp.json` for Claude Code.
+Pack a Desktop extension with `npx @anthropic-ai/mcpb pack` (see `manifest.json`).
+
+**Claude.ai / Cowork (hosted):** add custom connector URL `https://shield-agent.com/mcp` with request header `Authorization: Bearer <KYA_API_KEY>`. Not Directory-listed yet (API-key auth, no OAuth DCR).
+
 ## Cursor plugin
 
 `.cursor-plugin/plugin.json` + `mcp.json` + wrap skill. Public listing repo: https://github.com/The-Pixel-Boys/shield-kya

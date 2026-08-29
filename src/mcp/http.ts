@@ -193,13 +193,29 @@ function authorizeMcp(
   if (!sharedSecret) {
     return true;
   }
-  const presented = req.headers["x-kya-mcp-token"];
-  const token = Array.isArray(presented) ? presented[0] : presented;
-  if (!token || !tokensEqual(token, sharedSecret)) {
-    json(res, 401, { error: "unauthorized" });
+  const presented = extractMcpToken(req);
+  if (!presented || !tokensEqual(presented, sharedSecret)) {
+    json(res, 401, {
+      error: "unauthorized",
+      hint: "send X-KYA-MCP-Token or Authorization: Bearer <token>",
+    });
     return false;
   }
   return true;
+}
+
+/** Prefer X-KYA-MCP-Token; also accept Authorization Bearer (Claude connector shape). */
+function extractMcpToken(req: IncomingMessage): string | undefined {
+  const header = req.headers["x-kya-mcp-token"];
+  const fromHeader = Array.isArray(header) ? header[0] : header;
+  if (fromHeader && fromHeader.trim()) return fromHeader.trim();
+  const authRaw = req.headers.authorization;
+  const auth = Array.isArray(authRaw) ? authRaw[0] : authRaw;
+  if (auth && auth.length > 7 && auth.slice(0, 7).toLowerCase() === "bearer ") {
+    const token = auth.slice(7).trim();
+    return token || undefined;
+  }
+  return undefined;
 }
 
 function tokensEqual(presented: string, expected: string): boolean {
