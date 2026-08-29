@@ -1,0 +1,87 @@
+{
+  "manifest_version": "0.3",
+  "name": "shield-kya",
+  "display_name": "Shield KYA",
+  "version": "0.1.14",
+  "description": "Know Your Agent MCP gate: ALLOW / DENY / REQUIRE_APPROVE. Sole PEP is Shield.",
+  "long_description": "Local Claude Desktop extension that runs `npx @shield-agent/kya serve-mcp --stdio` and talks to your Shield control plane (local or https://shield-agent.com). Tools evaluate policy, ingest session risk, and open Hold tickets. They never execute irreversible side effects.",
+  "author": {
+    "name": "Shield Agent",
+    "email": "it@shield-agent.com",
+    "url": "https://shield-agent.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/The-Pixel-Boys/shield-kya.git"
+  },
+  "homepage": "https://shield-agent.com/install",
+  "documentation": "https://shield-agent.com/docs/kya/install",
+  "support": "https://github.com/The-Pixel-Boys/shield-kya/issues",
+  "icon": "assets/logo.svg",
+  "server": {
+    "type": "node",
+    "entry_point": "claude/run-stdio.mjs",
+    "mcp_config": {
+      "command": "npx",
+      "args": ["-y", "@shield-agent/kya@0.1.14", "serve-mcp", "--stdio"],
+      "env": {
+        "KYA_BASE_URL": "${user_config.base_url}",
+        "KYA_API_KEY": "${user_config.api_key}",
+        "KYA_HOST": "${user_config.host}",
+        "KYA_AGENT_ID": "${user_config.agent_id}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "kya.policy_evaluate",
+      "description": "Evaluate ALLOW | DENY | REQUIRE_APPROVE at the tool boundary"
+    },
+    {
+      "name": "kya.session_ingest",
+      "description": "Raise-only session / risk observation"
+    },
+    {
+      "name": "kya.request_approval",
+      "description": "Open a human Hold ticket. Does not execute the side effect"
+    }
+  ],
+  "tools_generated": false,
+  "keywords": ["kya", "know-your-agent", "policy", "mcp", "approval", "claude"],
+  "license": "MIT",
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  },
+  "user_config": {
+    "base_url": {
+      "type": "string",
+      "title": "Control plane URL",
+      "description": "Shield KYA origin (https://shield-agent.com or http://127.0.0.1:8090)",
+      "required": true,
+      "default": "https://shield-agent.com"
+    },
+    "api_key": {
+      "type": "string",
+      "title": "API key",
+      "description": "Machine API key (sk_live_…). Stored in the OS keychain.",
+      "sensitive": true,
+      "required": true
+    },
+    "host": {
+      "type": "string",
+      "title": "Host plane",
+      "description": "ide = authoring. runtime = production work.",
+      "required": false,
+      "default": "ide"
+    },
+    "agent_id": {
+      "type": "string",
+      "title": "Agent id",
+      "description": "Registered agent principal id (optional until first register).",
+      "required": false
+    }
+  }
+}

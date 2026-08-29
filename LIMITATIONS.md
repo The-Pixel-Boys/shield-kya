@@ -17,3 +17,6 @@
 
 - Showback USD is an estimate from a checked-in published rate table. Unknown models report tokens only. ORR / metrics never ALLOW, DENY, or kill on spend.
 - `--usage` must sit inside `--path`. Usage rows drop secret-shaped strings and labels over 64/128 chars. Hosted ingest is merchant-scoped and length-capped the same way.
+
+- Hosted Claude connector uses machine API keys (Bearer). It is a custom connector, not an Anthropic Directory listing. OAuth DCR is a later slice.
+- Local HTTP MCP remains loopback-only. Do not bind it to a public interface.
