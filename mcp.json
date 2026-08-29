@@ -2,7 +2,7 @@
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["-y", "@shield-agent/kya", "serve-mcp", "--stdio"],
+      "args": ["-y", "@shield-agent/kya@0.1.8", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "${KYA_BASE_URL}",
         "KYA_API_KEY": "${KYA_API_KEY}",

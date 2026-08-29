@@ -1,4 +1,4 @@
-import { AuthRequiredError, HttpError, KyaError } from "./errors.js";
+import { AuthRequiredError, HttpError, KyaError, UsageError } from "./errors.js";
 import type { Host } from "./config.js";
 import { computeArgsHash } from "./hash.js";
 import { findSampleTool } from "./sample-tools.js";
@@ -79,18 +79,67 @@ export interface SessionIngestResponse {
   readonly host?: string;
 }
 
+export interface InvokeToolRequest {
+  readonly toolId: string;
+  readonly agentId?: string;
+  readonly argsHash?: string;
+  readonly args?: unknown;
+  readonly host?: Host;
+  readonly actionClass?: string;
+  readonly irreversible?: boolean;
+  readonly risk?: string;
+}
+
+export interface InvokeToolResponse {
+  readonly ok: boolean;
+  readonly verdict: string;
+  readonly reasonCode: string;
+  readonly toolId: string;
+  readonly argsHash: string;
+  readonly dispatched: string;
+  readonly approvalRequestId?: string | null;
+  readonly sideEffect: string;
+}
+
 export interface CreateApprovalRequest {
   readonly agentId: string;
+  /** Plane field name is work-item id (legacy `disputeId` on the wire). */
   readonly disputeId: string;
   readonly packVersion?: string;
   readonly action?: string;
   readonly toolId?: string;
+  readonly argsHash?: string;
+  readonly host?: Host;
+  readonly irreversible?: boolean;
+  readonly reasonCode?: string;
 }
 
 export interface ApprovalResponse {
   readonly id: string;
   readonly status: string;
   readonly [key: string]: unknown;
+}
+
+export type SessionClearance = "READ" | "BUILD" | "DEPLOY";
+
+export interface SessionListItem {
+  readonly id: string;
+  readonly sessionId?: string;
+  readonly riskLevel?: string;
+  readonly host?: string;
+  readonly source?: string;
+  readonly model?: string;
+  readonly clearance?: string;
+}
+
+export interface ShrinkResponse {
+  readonly id: string;
+  readonly from: string;
+  readonly to: string;
+}
+
+export function isMachineApiKey(apiKey: string): boolean {
+  return apiKey.trim().startsWith("sk_");
 }
 
 /**
@@ -162,6 +211,30 @@ export class KyaHttpClient {
     });
   }
 
+  async invokeTool(req: InvokeToolRequest): Promise<InvokeToolResponse> {
+    const toolId = req.toolId.trim();
+    if (!toolId) {
+      throw new UsageError("invoke requires --tool-id");
+    }
+    const agentId = (req.agentId ?? this.agentId ?? "").trim();
+    if (!agentId) {
+      throw new UsageError("invoke requires --agent-id or KYA_AGENT_ID");
+    }
+    const argsHash = (req.argsHash ?? computeArgsHash(req.args ?? {})).trim();
+    return this.request<InvokeToolResponse>("/api/v1/kya/tools/invoke", {
+      method: "POST",
+      body: {
+        agentId,
+        toolId,
+        argsHash,
+        host: req.host ?? this.host,
+        actionClass: req.actionClass,
+        irreversible: req.irreversible ?? true,
+        risk: req.risk ?? "LOW",
+      },
+    });
+  }
+
   async requestApproval(req: CreateApprovalRequest): Promise<ApprovalResponse> {
     return this.request<ApprovalResponse>("/api/v1/kya/approvals", {
       method: "POST",
@@ -171,8 +244,81 @@ export class KyaHttpClient {
         packVersion: req.packVersion ?? "generic",
         action: req.action ?? req.toolId,
         toolId: req.toolId ?? req.action,
+        argsHash: req.argsHash,
+        host: req.host ?? this.host,
+        irreversible: req.irreversible,
+        reasonCode: req.reasonCode,
       },
     });
+  }
+
+  async listAgents(): Promise<AgentResponse[]> {
+    const rows = await this.request<AgentResponse[] | { agents?: AgentResponse[] }>(
+      "/api/v1/kya/agents",
+    );
+    if (Array.isArray(rows)) return rows;
+    return Array.isArray(rows?.agents) ? rows.agents : [];
+  }
+
+  async getAgent(id: string): Promise<AgentResponse> {
+    const trimmed = id.trim();
+    if (!trimmed) throw new UsageError("agent id required");
+    return this.request<AgentResponse>(`/api/v1/kya/agents/${encodeURIComponent(trimmed)}`);
+  }
+
+  async killAgent(id: string): Promise<AgentResponse> {
+    const trimmed = id.trim();
+    if (!trimmed) throw new UsageError("agent id required");
+    return this.request<AgentResponse>(
+      `/api/v1/kya/agents/${encodeURIComponent(trimmed)}/kill`,
+      { method: "POST" },
+    );
+  }
+
+  async getPassport(id: string): Promise<Record<string, unknown>> {
+    const trimmed = id.trim();
+    if (!trimmed) throw new UsageError("agent id required");
+    return this.request<Record<string, unknown>>(
+      `/api/v1/kya/agents/${encodeURIComponent(trimmed)}/passport`,
+    );
+  }
+
+  async listApprovals(): Promise<ApprovalResponse[]> {
+    const rows = await this.request<ApprovalResponse[]>("/api/v1/kya/approvals");
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  async listSessions(): Promise<SessionListItem[]> {
+    const rows = await this.request<SessionListItem[]>("/api/v1/kya/sessions");
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  async shrinkSession(id: string, to: SessionClearance): Promise<ShrinkResponse> {
+    const trimmed = id.trim();
+    if (!trimmed) throw new UsageError("session id required");
+    return this.request<ShrinkResponse>(
+      `/api/v1/kya/sessions/${encodeURIComponent(trimmed)}/shrink`,
+      { method: "POST", body: { to } },
+    );
+  }
+
+  /** Human decide. Requires kya.approve. Never called by wrap or offline eval. */
+  async decideApproval(
+    id: string,
+    decision: "approve" | "reject",
+  ): Promise<ApprovalResponse> {
+    const trimmed = id.trim();
+    if (!trimmed) {
+      throw new UsageError("approval id required");
+    }
+    const res = await this.request<ApprovalResponse>(
+      `/api/v1/kya/approvals/${encodeURIComponent(trimmed)}/${decision}`,
+      { method: "POST" },
+    );
+    if (!res || typeof res.id !== "string" || typeof res.status !== "string") {
+      throw new HttpError(200, "approval decide returned no id/status", res);
+    }
+    return res;
   }
 
   async request<T>(
@@ -192,7 +338,7 @@ export class KyaHttpClient {
       ...(options.headers ?? {}),
     };
     if (this.apiKey) {
-      headers.Authorization = `Bearer ${this.apiKey}`;
+      applyPlaneAuth(headers, this.apiKey);
     }
     let body: string | undefined;
     if (options.body !== undefined) {
@@ -257,6 +403,15 @@ export function buildEvaluateFromToolArgs(input: {
 
 function stripTrailingSlash(url: string): string {
   return url.endsWith("/") ? url.slice(0, -1) : url;
+}
+
+/** Machine keys use X-API-Key. JWTs stay Bearer. */
+export function applyPlaneAuth(headers: Record<string, string>, apiKey: string): void {
+  if (apiKey.startsWith("sk_")) {
+    headers["X-API-Key"] = apiKey;
+    return;
+  }
+  headers.Authorization = `Bearer ${apiKey}`;
 }
 
 function parseJsonSafe(text: string): unknown {

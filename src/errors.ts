@@ -37,3 +37,14 @@ export class UsageError extends KyaError {
     this.name = "UsageError";
   }
 }
+
+/** Client-visible error text. Never forwards unknown Error.message (stack-derived). */
+export function clientSafeError(err: unknown): string {
+  if (err instanceof HttpError) {
+    return `control plane HTTP ${err.status}`;
+  }
+  if (err instanceof KyaError) {
+    return err.message;
+  }
+  return "request failed";
+}

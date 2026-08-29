@@ -27,6 +27,7 @@ export {
   type SessionIngestRequest,
   type CreateApprovalRequest,
   type FetchLike,
+  isMachineApiKey,
 } from "./client.js";
 export { computeArgsHash, canonicalJson } from "./hash.js";
 export { SAMPLE_TOOLS, findSampleTool, type SampleToolDescriptor } from "./sample-tools.js";

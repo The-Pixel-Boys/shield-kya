@@ -44,12 +44,17 @@ export interface DashOptions {
   readonly pane: DashPane;
   readonly client?: KyaHttpClient;
   readonly fetchPlaneEntitlement?: () => Promise<{ plan?: string; features?: string[] }>;
+  readonly cursor?: number;
+  readonly orrSummary?: { overall?: string; disposition?: string; path?: string };
 }
 
 export interface DashSnapshot {
   readonly frame: string;
   readonly plan: Entitlement["plan"];
   readonly pane: DashPane;
+  readonly agents: readonly { id: string; name: string; status?: string }[];
+  readonly approvals: readonly { id: string; status: string; action?: string }[];
+  readonly sessions: readonly { id: string; risk?: string; host?: string; clearance?: string }[];
 }
 
 export async function renderDash(
@@ -64,7 +69,7 @@ export async function renderDash(
   const offline = options.offline || config.offline;
   const pane = options.pane;
   const hasKey = Boolean(config.apiKey && config.apiKey.trim());
-  const body = await bodyFor(config, { ...options, offline }, ent, pane, hasKey);
+  const packed = await bodyFor(config, { ...options, offline }, ent, pane, hasKey);
 
   const status: StatusStrip = {
     plan: ent.plan === "enterprise" ? "ENTERPRISE" : "FREE",
@@ -72,12 +77,38 @@ export async function renderDash(
     plane: offline ? "offline" : config.baseUrl || "unset",
     pane,
   };
-  const text = frame(status, ent, body);
+  const text = frame(status, ent, packed.body);
   assertNoSecrets(text);
   if (config.apiKey && config.apiKey.length >= 8 && text.includes(config.apiKey)) {
     throw new Error("dashboard frame leaked api key");
   }
-  return { frame: text, plan: ent.plan, pane };
+  return {
+    frame: text,
+    plan: ent.plan,
+    pane,
+    agents: packed.agents,
+    approvals: packed.approvals,
+    sessions: packed.sessions,
+  };
+}
+
+interface PackedBody {
+  readonly body: readonly string[];
+  readonly agents: DashSnapshot["agents"];
+  readonly approvals: DashSnapshot["approvals"];
+  readonly sessions: DashSnapshot["sessions"];
+}
+
+function pack(
+  body: readonly string[],
+  extra?: Partial<PackedBody>,
+): PackedBody {
+  return {
+    body,
+    agents: extra?.agents ?? [],
+    approvals: extra?.approvals ?? [],
+    sessions: extra?.sessions ?? [],
+  };
 }
 
 async function bodyFor(
@@ -86,60 +117,71 @@ async function bodyFor(
   ent: Entitlement,
   pane: DashPane,
   hasKey: boolean,
-): Promise<readonly string[]> {
-  if (!paneAllowed(ent, pane)) return lockedPane(pane);
+): Promise<PackedBody> {
+  if (!paneAllowed(ent, pane)) return pack(lockedPane(pane));
 
   const live = !options.offline && hasKey && Boolean(options.client);
+  const cursor = options.cursor ?? 0;
 
   switch (pane) {
     case "home":
-      return homeBody({
-        version: DASH_VERSION,
-        offline: options.offline,
-        hasApiKey: hasKey,
-        baseUrl: config.baseUrl,
-        agentId: config.agentId,
-      });
+      return pack(
+        homeBody({
+          version: DASH_VERSION,
+          offline: options.offline,
+          hasApiKey: hasKey,
+          baseUrl: config.baseUrl,
+          agentId: config.agentId,
+        }),
+      );
     case "policy":
-      if (options.offline) return policyOfflineBody();
-      if (!live) return needsPlaneBody("policy");
-      return policyLiveBody(await sampleLiveEvals(options.client!));
-    case "agents":
-      if (!live) return agentsOfflineBody(config.agentId);
-      return agentsLiveBody(await loadAgents(options.client!, config.agentId));
-    case "approvals":
-      if (!live) return needsPlaneBody("approvals");
-      return approvalsLiveBody(await loadApprovals(options.client!));
+      if (options.offline) return pack(policyOfflineBody());
+      if (!live) return pack(needsPlaneBody("policy"));
+      return pack(policyLiveBody(await sampleLiveEvals(options.client!)));
+    case "agents": {
+      if (!live) return pack(agentsOfflineBody(config.agentId));
+      const agents = await loadAgents(options.client!);
+      return pack(agentsLiveBody(agents, cursor), { agents });
+    }
+    case "approvals": {
+      if (!live) return pack(needsPlaneBody("approvals"));
+      const approvals = await loadApprovals(options.client!);
+      return pack(approvalsLiveBody(approvals, cursor), { approvals });
+    }
     case "sessions":
-      if (!live) return needsPlaneBody("sessions");
+      if (!live) return pack(needsPlaneBody("sessions"));
       try {
-        return sessionsLiveBody(await loadSessions(options.client!));
+        const sessions = await loadSessions(options.client!);
+        return pack(sessionsLiveBody(sessions, cursor), { sessions });
       } catch {
-        return ["Could not load sessions from the plane."];
+        return pack(["Could not load sessions from the plane."]);
       }
     case "orr":
-      return orrBody();
+      return pack(orrBody(options.orrSummary));
     case "mcp":
-      return mcpBody({ host: config.host, hasApiKey: hasKey });
+      return pack(mcpBody({ host: config.host, hasApiKey: hasKey }));
     case "dashboard":
-      if (!live) return needsPlaneBody("dashboard");
-      return dashboardBody(await loadDashboard(options.client!));
+      if (!live) return pack(needsPlaneBody("dashboard"));
+      return pack(dashboardBody(await loadDashboard(options.client!)));
     case "cases":
-      if (!live) return needsPlaneBody("cases");
-      return loadCases(options.client!);
+      if (!live) return pack(needsPlaneBody("cases"));
+      return pack(await loadCases(options.client!));
     case "metrics":
-      if (!live) return needsPlaneBody("metrics");
-      return metricsBody(await loadMetrics(options.client!));
+      if (!live) return pack(needsPlaneBody("metrics"));
+      return pack(metricsBody(await loadMetrics(options.client!)));
     case "edge":
-      if (!live) return needsPlaneBody("edge");
-      return edgeBody(await loadEdge(options.client!));
+      if (!live) return pack(needsPlaneBody("edge"));
+      return pack(edgeBody(await loadEdge(options.client!)));
     case "settings":
-      if (!live) return needsPlaneBody("settings");
-      return settingsBody([
-        "API keys / team / SSO / billing: use the web console for mutations; TUI is read-first.",
-      ]);
+      if (!live) return pack(needsPlaneBody("settings"));
+      return pack(
+        settingsBody([
+          "API keys / team / SSO / billing stay on the web console.",
+          "OSS desk: kya agents | kill | wrap | invoke | shrink",
+        ]),
+      );
     default:
-      return [`unknown pane: ${String(pane)}`];
+      return pack([`unknown pane: ${String(pane)}`]);
   }
 }
 
@@ -157,16 +199,12 @@ async function sampleLiveEvals(client: KyaHttpClient): Promise<PolicyEvaluateRes
 
 async function loadAgents(
   client: KyaHttpClient,
-  agentId?: string,
 ): Promise<{ id: string; name: string; status?: string }[]> {
-  if (!agentId) return [];
   try {
-    const a = await client.request<{ id: string; name: string; status?: string }>(
-      `/api/v1/kya/agents/${agentId}`,
-    );
-    return [{ id: a.id, name: a.name, status: a.status }];
+    const rows = await client.listAgents();
+    return rows.map((a) => ({ id: a.id, name: a.name, status: a.status }));
   } catch {
-    return [{ id: agentId, name: "(unreachable)", status: "?" }];
+    return [];
   }
 }
 
@@ -183,13 +221,12 @@ async function loadSessions(
   client: KyaHttpClient,
 ): Promise<{ id: string; risk?: string; host?: string }[]> {
   try {
-    const rows = await client.request<Array<{ id: string; riskLevel?: string; host?: string }>>(
-      "/api/v1/kya/sessions",
-    );
-    return (Array.isArray(rows) ? rows : []).map((s) => ({
+    const rows = await client.listSessions();
+    return rows.map((s) => ({
       id: s.id,
       risk: s.riskLevel,
       host: s.host,
+      clearance: s.clearance,
     }));
   } catch {
     throw new Error("sessions_unavailable");

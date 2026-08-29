@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -26,9 +29,15 @@ jobs:
       - run: pnpm build
       - name: Offline DENY then REQUIRE_APPROVE
         run: |
+          set +e
           node dist/cli.js eval-tool --offline --tool-id org.sample.never.event --irreversible | tee /tmp/deny.txt
-          grep -q DENY /tmp/deny.txt
+          deny=${PIPESTATUS[0]}
           node dist/cli.js eval-tool --offline --tool-id org.sample.data.write --irreversible | tee /tmp/ra.txt
+          ra=${PIPESTATUS[0]}
+          set -e
+          test "$deny" -eq 1
+          grep -q DENY /tmp/deny.txt
+          test "$ra" -eq 4
           grep -q REQUIRE_APPROVE /tmp/ra.txt
           node dist/cli.js --help | tee /tmp/kya-help.txt
           grep -q dash /tmp/kya-help.txt

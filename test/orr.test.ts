@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   formatOrrMarkdown,
   orrRunOptionsFromArgs,
+  readScorecardEvidence,
   runOrr,
   runSaFirstPartyProbes,
 } from "../src/commands/orr.js";
@@ -94,6 +95,43 @@ describe("orr run", () => {
     const md = formatOrrMarkdown(result.report);
     expect(md).toContain("ORR:");
     expect(md).toMatch(/[Ss]ole PEP/);
+  });
+
+  it("ingests --scorecard JSON as evidence only", () => {
+    const root = tmp();
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "app.js"), "console.log('x')\n");
+    const scorecard = join(root, "scorecard.json");
+    writeFileSync(
+      scorecard,
+      JSON.stringify({
+        score: 7.2,
+        checks: [{ name: "Pinned-Dependencies", score: 8 }],
+      }),
+    );
+    const ingested = readScorecardEvidence(scorecard);
+    expect(ingested.some((f) => f.id === "sa.scorecard.ingested")).toBe(true);
+    expect(ingested.every((f) => !/ALLOW/i.test(f.title))).toBe(true);
+
+    const result = runOrr({
+      path: root,
+      out: join(root, "out"),
+      rubric: "0",
+      disableCategories: [],
+      formats: ["json"],
+      producers: ["sa.first_party", "openssf.scorecard"],
+      skipOptionalProducers: false,
+      quiet: true,
+      jsonStdout: false,
+      scorecardPath: scorecard,
+    });
+    expect(
+      result.report.findings.some((f) => f.id === "sa.scorecard.ingested"),
+    ).toBe(true);
+    expect(
+      result.report.coverage_gaps.some((g) => g.adapter_id === "openssf.scorecard"),
+    ).toBe(false);
+    expect(JSON.stringify(result.report)).not.toMatch(/"verdict":"ALLOW"/);
   });
 
   it("scores green-ish control plane when wrap/evaluate present", () => {
