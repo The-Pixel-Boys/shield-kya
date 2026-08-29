@@ -80,7 +80,7 @@ MCP Registry: `server.json` + package `mcpName` `io.github.The-Pixel-Boys/shield
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["-y", "@shield-agent/kya", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.1.15", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -108,13 +108,16 @@ The TUI (`dash`) is observational. Keys `a`/`x` print this CLI. They do not deci
 **Desktop / Claude Code (local stdio):**
 
 ```bash
-npx -y @shield-agent/kya@0.1.14 serve-mcp --stdio
+# Prefer a preinstalled package (no registry auto-install):
+npx --no-install @shield-agent/kya@0.1.15 serve-mcp --stdio
+# Or after npm i -g / local install:
+kya serve-mcp --stdio
 ```
 
 Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP settings, or use `.mcp.json` for Claude Code.
-Pack a Desktop extension with `npx @anthropic-ai/mcpb pack` (see `manifest.json`).
+Pack a Desktop extension with `npx @anthropic-ai/mcpb pack` (see `manifest.json` — launches packed `dist/cli.js`, not `npx -y`).
 
-**Claude.ai / Cowork (hosted):** add custom connector URL `https://shield-agent.com/mcp` with request header `Authorization: Bearer <KYA_API_KEY>`. Not Directory-listed yet (API-key auth, no OAuth DCR).
+**Claude.ai / Cowork (hosted):** add custom connector URL `https://shield-agent.com/mcp` with request header `Authorization: Bearer <KYA_API_KEY>` (or `X-API-Key`). Not Directory-listed yet (API-key auth, no OAuth DCR).
 
 ## Cursor plugin
 
