@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "shield-kya",
   "display_name": "Shield KYA",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "Know Your Agent MCP gate: ALLOW / DENY / REQUIRE_APPROVE. Sole PEP is Shield.",
-  "long_description": "Local Claude Desktop extension that runs `npx @shield-agent/kya serve-mcp --stdio` and talks to your Shield control plane (local or https://shield-agent.com). Tools evaluate policy, ingest session risk, and open Hold tickets. They never execute irreversible side effects.",
+  "long_description": "Local Claude Desktop extension that runs the packaged `dist/cli.js serve-mcp --stdio` against your Shield control plane (local or https://shield-agent.com). Tools evaluate policy, ingest session risk, and open Hold tickets. They never execute irreversible side effects.",
   "author": {
     "name": "Shield Agent",
     "email": "it@shield-agent.com",
@@ -22,8 +22,8 @@
     "type": "node",
     "entry_point": "claude/run-stdio.mjs",
     "mcp_config": {
-      "command": "npx",
-      "args": ["-y", "@shield-agent/kya@0.1.14", "serve-mcp", "--stdio"],
+      "command": "node",
+      "args": ["${__dirname}/dist/cli.js", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "${user_config.base_url}",
         "KYA_API_KEY": "${user_config.api_key}",

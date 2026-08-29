@@ -142,7 +142,8 @@ async function callPolicyEvaluate(
     return textResult({ error: "action or toolId required" }, true);
   }
   const sample = findSampleTool(toolId);
-  const host = parseHost(str(a.host), ctx.host);
+  // Dual-plane host is operator config — never tool-attacker-controlled.
+  const host = ctx.host;
   const argsObj =
     a.args && typeof a.args === "object" && !Array.isArray(a.args)
       ? (a.args as Record<string, unknown>)
@@ -161,6 +162,7 @@ async function callPolicyEvaluate(
     approvalStatus: "NONE",
     env: {
       host,
+      sessionId: str(a.sessionId),
       agentId: str(a.agentId) ?? ctx.agentId,
     },
   });
@@ -180,10 +182,7 @@ async function callSessionIngest(
     str(session.sessionId) ??
     str(session.id) ??
     randomUUID();
-  const host = parseHost(
-    str(a.host) ?? str(session.host),
-    ctx.host,
-  );
+  const host = ctx.host;
   const riskLevel =
     str(a.riskLevel) ??
     str(session.riskLevel) ??
@@ -269,11 +268,6 @@ function textResult(data: unknown, isError = false): McpCallResult {
 function str(v: unknown): string | undefined {
   if (typeof v === "string" && v.length > 0) return v;
   return undefined;
-}
-
-function parseHost(raw: string | undefined, fallback: Host): Host {
-  if (raw === "ide" || raw === "runtime") return raw;
-  return fallback;
 }
 
 function isUuid(s: string): boolean {

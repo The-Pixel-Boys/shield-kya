@@ -275,9 +275,69 @@ describe("HTTP serve-mcp", () => {
       headers: { "x-kya-mcp-token": "s3cret-token" },
     });
     expect(ok.status).toBe(200);
+    const viaBearer = await fetch(`${http.url}/mcp/tools`, {
+      headers: { Authorization: "Bearer s3cret-token" },
+    });
+    expect(viaBearer.status).toBe(200);
     const health = await fetch(`${http.url}/health`);
     expect(health.status).toBe(200);
     await http.close();
+  });
+
+  it("empty sharedSecret option still requires a generated token", async () => {
+    const prev = process.env.KYA_MCP_HTTP_TOKEN;
+    process.env.KYA_MCP_HTTP_TOKEN = "";
+    try {
+      const { startHttpMcp } = await import("../src/mcp/http.js");
+      const http = await startHttpMcp({
+        port: 0,
+        client: mockClient(),
+        kyaHost: "runtime",
+        sharedSecret: "",
+      });
+      expect(http.token.length).toBeGreaterThan(8);
+      const denied = await fetch(`${http.url}/mcp/tools`);
+      expect(denied.status).toBe(401);
+      const ok = await fetch(`${http.url}/mcp/tools`, {
+        headers: { "x-kya-mcp-token": http.token },
+      });
+      expect(ok.status).toBe(200);
+      await http.close();
+    } finally {
+      if (prev === undefined) delete process.env.KYA_MCP_HTTP_TOKEN;
+      else process.env.KYA_MCP_HTTP_TOKEN = prev;
+    }
+  });
+});
+
+describe("MCP host lock", () => {
+  it("policy_evaluate ignores tool host and uses operator ctx.host", async () => {
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.env.host).toBe("runtime");
+      return new Response(
+        JSON.stringify({
+          verdict: "ALLOW",
+          reasonCode: "ALLOW",
+          toolId: body.toolId,
+          host: body.env.host,
+        }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+    const client = new KyaHttpClient({
+      baseUrl: baseConfig.baseUrl,
+      apiKey: baseConfig.apiKey,
+      host: "runtime",
+      fetch: fetchImpl,
+    });
+    const result = await handleMcpToolCall(
+      "kya.policy_evaluate",
+      { toolId: "org.sample.safe.read", host: "ide" },
+      { client, host: "runtime" },
+    );
+    expect(result.isError).toBeFalsy();
+    expect(fetchImpl).toHaveBeenCalled();
   });
 });
 

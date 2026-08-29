@@ -46,9 +46,10 @@ export function startHttpMcp(options: HttpMcpOptions): Promise<HttpMcpServer> {
   if (!LOOPBACK_HOSTS.has(listenHost)) {
     return Promise.reject(new Error("HTTP MCP may only bind to loopback"));
   }
+  // Use || so empty KYA_MCP_HTTP_TOKEN does not fail-open the privileged proxy.
   const sharedSecret =
-    options.sharedSecret ??
-    process.env.KYA_MCP_HTTP_TOKEN ??
+    options.sharedSecret ||
+    process.env.KYA_MCP_HTTP_TOKEN ||
     randomBytes(24).toString("base64url");
   const ctx: McpHandlerContext = {
     client: options.client,
@@ -190,9 +191,6 @@ function authorizeMcp(
   res: ServerResponse,
   sharedSecret: string,
 ): boolean {
-  if (!sharedSecret) {
-    return true;
-  }
   const presented = extractMcpToken(req);
   if (!presented || !tokensEqual(presented, sharedSecret)) {
     json(res, 401, {
