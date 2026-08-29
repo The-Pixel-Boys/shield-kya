@@ -23,7 +23,8 @@ describe("Cursor marketplace plugin", () => {
     const server = mcp.mcpServers["shield-kya"];
     expect(server.command).toBe("npx");
     expect(server.args).toEqual([
-      "@shield-agent/kya@0.1.9",
+      "--no-install",
+      "@shield-agent/kya@0.1.15",
       "serve-mcp",
       "--stdio",
     ]);
