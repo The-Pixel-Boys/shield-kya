@@ -97,6 +97,97 @@ describe("orr run", () => {
     expect(md).toMatch(/[Ss]ole PEP/);
   });
 
+
+  it("marks cost_budget_gates amber when in-loop ceilings are missing", () => {
+    const root = tmp();
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "app.js"), "console.log('hello')\n");
+    const result = runOrr({
+      path: root,
+      out: join(root, "out"),
+      rubric: "0",
+      disableCategories: [],
+      formats: ["json"],
+      producers: ["sa.first_party"],
+      skipOptionalProducers: true,
+      quiet: true,
+      jsonStdout: false,
+    });
+    const cost = result.report.categories.find((c) => c.id === "cost_budget_gates");
+    expect(cost?.rating).toBe("amber");
+    expect(
+      result.report.scorecards.some(
+        (s) => s.name === "in_loop_ceilings" && s.result === "partial",
+      ),
+    ).toBe(true);
+    expect(
+      result.report.findings.some((f) => f.id === "sa.probe.no_in_loop_ceilings"),
+    ).toBe(true);
+  });
+
+  it("passes in_loop_ceilings when max_steps is present", () => {
+    const root = tmp();
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(
+      join(root, "src", "agent.ts"),
+      "const max_steps = 12;\nexport function wrapTool() {}\nPolicyEngine\nREQUIRE_APPROVE\n",
+    );
+    const result = runOrr({
+      path: root,
+      out: join(root, "out"),
+      rubric: "0",
+      disableCategories: [],
+      formats: ["json"],
+      producers: ["sa.first_party"],
+      skipOptionalProducers: true,
+      quiet: true,
+      jsonStdout: false,
+    });
+    expect(
+      result.report.findings.some((f) => f.id === "sa.probe.no_in_loop_ceilings"),
+    ).toBe(false);
+    expect(
+      result.report.scorecards.some(
+        (s) => s.name === "in_loop_ceilings" && s.result === "pass",
+      ),
+    ).toBe(true);
+  });
+
+  it("loads --usage into report.showback", () => {
+    const root = tmp();
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "app.js"), "console.log(1)\n");
+    const usage = join(root, "usage.json");
+    writeFileSync(
+      usage,
+      JSON.stringify([
+        {
+          agentId: "bot",
+          runId: "r1",
+          model: "gpt-4o-mini",
+          tokensIn: 1000,
+          tokensOut: 0,
+        },
+      ]),
+    );
+    const result = runOrr({
+      path: root,
+      out: join(root, "out"),
+      rubric: "0",
+      disableCategories: [],
+      formats: ["json", "md"],
+      producers: ["sa.first_party"],
+      skipOptionalProducers: true,
+      quiet: true,
+      jsonStdout: false,
+      usagePath: usage,
+    });
+    expect(result.report.showback?.billingMeter).toBe(false);
+    expect(result.report.showback?.totalTokensIn).toBe(1000);
+    expect(formatOrrMarkdown(result.report)).toContain("Showback");
+    expect(formatOrrMarkdown(result.report)).toContain("billingMeter");
+  });
+
   it("ingests --scorecard JSON as evidence only", () => {
     const root = tmp();
     mkdirSync(join(root, "src"), { recursive: true });
