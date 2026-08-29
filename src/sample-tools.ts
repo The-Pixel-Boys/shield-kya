@@ -57,5 +57,7 @@ export const SAMPLE_TOOLS: readonly SampleToolDescriptor[] = [
 ] as const;
 
 export function findSampleTool(toolId: string): SampleToolDescriptor | undefined {
-  return SAMPLE_TOOLS.find((t) => t.toolId === toolId);
+  const id = toolId.trim().toLowerCase();
+  if (!id) return undefined;
+  return SAMPLE_TOOLS.find((t) => t.toolId.toLowerCase() === id);
 }

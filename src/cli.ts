@@ -281,6 +281,9 @@ export async function runCli(
           io.log(
             `KYA MCP gate listening on ${result.http.url} (host=${config.host})`,
           );
+          io.log(
+            `  token: ${result.http.token}  (header X-KYA-MCP-Token; /health is open)`,
+          );
           io.log("  GET  /health");
           io.log("  GET  /connectors/mcp.json");
           io.log("  GET  /mcp/tools");
