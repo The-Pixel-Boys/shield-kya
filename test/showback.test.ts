@@ -126,4 +126,29 @@ describe("buildShowback", () => {
     expect(rows[0].parentRunId).toBe("run-9");
     expect(rows[0].tokensIn).toBe(10);
   });
+
+  it("drops secret-shaped and overlong labels", () => {
+    expect(
+      parseUsageRecords([
+        { agentId: "Bearer not-a-real-token-value", tokensIn: 1, tokensOut: 0 },
+        { agentId: "ok", model: "xai-notarealsecretvalue", tokensIn: 1, tokensOut: 0 },
+        { agentId: "a".repeat(200), tokensIn: 1, tokensOut: 0 },
+        { agentId: "bot", model: "gpt-4o-mini", tokensIn: 3, tokensOut: 0 },
+      ]),
+    ).toEqual([
+      expect.objectContaining({ agentId: "bot", tokensIn: 3 }),
+    ]);
+  });
+
+  it("rejects more than 100 rows", () => {
+    expect(() =>
+      parseUsageRecords(
+        Array.from({ length: 101 }, (_, i) => ({
+          agentId: "bot",
+          tokensIn: i,
+          tokensOut: 0,
+        })),
+      ),
+    ).toThrow(/100 rows/);
+  });
 });
