@@ -11,6 +11,7 @@ import { computeArgsHash } from "../hash.js";
 import { findSampleTool } from "../sample-tools.js";
 import { clientSafeError } from "../errors.js";
 import { CLI_VERSION } from "../version.js";
+import { parseUsageRecords } from "../showback/cost-per-task.js";
 
 export const MCP_SERVER_INFO = {
   name: "shield-kya",
@@ -200,24 +201,12 @@ async function callSessionIngest(
       ? { tools: session.tools }
       : undefined);
 
-  const usage = Array.isArray(a.usage)
-    ? (a.usage as Record<string, unknown>[])
-        .filter((row) => row && typeof row === "object")
-        .map((row) => ({
-          agentId: str(row.agentId) ?? str(row.agent_id) ?? "",
-          parentRunId: str(row.parentRunId) ?? str(row.parent_run_id),
-          runId: str(row.runId) ?? str(row.run_id),
-          model: str(row.model),
-          route: str(row.route),
-          environment: str(row.environment) ?? str(row.env),
-          tokensIn: typeof row.tokensIn === "number" ? row.tokensIn : undefined,
-          tokensOut: typeof row.tokensOut === "number" ? row.tokensOut : undefined,
-          reasoningTokens:
-            typeof row.reasoningTokens === "number" ? row.reasoningTokens : undefined,
-          retries: typeof row.retries === "number" ? row.retries : undefined,
-        }))
-        .filter((row) => row.agentId.length > 0)
-    : undefined;
+  let usage;
+  try {
+    usage = Array.isArray(a.usage) ? parseUsageRecords(a.usage) : undefined;
+  } catch {
+    return textResult({ error: "usage invalid" }, true);
+  }
 
   const response = await ctx.client.ingestSession({
     sessionId,

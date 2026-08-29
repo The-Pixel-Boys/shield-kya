@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -186,6 +186,31 @@ describe("orr run", () => {
     expect(result.report.showback?.totalTokensIn).toBe(1000);
     expect(formatOrrMarkdown(result.report)).toContain("Showback");
     expect(formatOrrMarkdown(result.report)).toContain("billingMeter");
+  });
+
+  it("skips default usage.json when it is a symlink", () => {
+    const root = tmp();
+    mkdirSync(join(root, "src"), { recursive: true });
+    mkdirSync(join(root, ".kya"), { recursive: true });
+    writeFileSync(join(root, "src", "app.js"), "console.log(1)\n");
+    const outside = join(tmpdir(), "kya-usage-link-target.json");
+    writeFileSync(
+      outside,
+      JSON.stringify([{ agentId: "leaked", model: "gpt-4o-mini", tokensIn: 9, tokensOut: 0 }]),
+    );
+    symlinkSync(outside, join(root, ".kya", "usage.json"));
+    const result = runOrr({
+      path: root,
+      out: join(root, "out"),
+      rubric: "0",
+      disableCategories: [],
+      formats: ["json"],
+      producers: ["sa.first_party"],
+      skipOptionalProducers: true,
+      quiet: true,
+      jsonStdout: false,
+    });
+    expect(result.report.showback).toBeUndefined();
   });
 
   it("rejects --usage outside --path", () => {

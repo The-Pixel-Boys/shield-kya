@@ -4,6 +4,7 @@
  */
 
 import { estimateRequestUsd } from "./rates.js";
+import { redactEvidence } from "../orr/agentshield.js";
 
 export interface UsageRecord {
   readonly agentId: string;
@@ -205,8 +206,10 @@ const MAX_USAGE_ROWS = 100;
 const MAX_AGENT_ID = 128;
 const MAX_LABEL = 64;
 const MAX_TOKENS = 50_000_000;
-const SECRET_VALUE =
-  /sk_live_|rk_live_|sk_test_|rk_test_|whsec_|ghp_|github_pat_|sk-ant-|sk-proj-|AKIA|AIza|xai-|hf_|npm_[A-Za-z0-9]|Bearer\s+[A-Za-z0-9._-]{8,}|xox[bpas]-|-----BEGIN |eyJ[A-Za-z0-9_-]{20,}\.|postgres:\/\/|mysql:\/\/|mongodb(\+srv)?:\/\//i;
+function secretShaped(value: string | undefined): boolean {
+  if (!value) return false;
+  return redactEvidence(value) !== value;
+}
 
 export function parseUsageRecords(raw: unknown): UsageRecord[] {
   if (!Array.isArray(raw)) {
@@ -255,9 +258,7 @@ export function parseUsageRecords(raw: unknown): UsageRecord[] {
   return out;
 }
 
-function secretShaped(value: string | undefined): boolean {
-  return Boolean(value && SECRET_VALUE.test(value));
-}
+
 
 function boundRequired(raw: string, max: number): string | undefined {
   const t = raw.trim();
