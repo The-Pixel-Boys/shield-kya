@@ -206,7 +206,7 @@ const MAX_AGENT_ID = 128;
 const MAX_LABEL = 64;
 const MAX_TOKENS = 50_000_000;
 const SECRET_VALUE =
-  /sk_live_|rk_live_|sk_test_|rk_test_|whsec_|ghp_|github_pat_|sk-ant-|sk-proj-|AKIA|AIza|xai-|hf_|npm_[A-Za-z0-9]|Bearer\s+[A-Za-z0-9._-]{8,}/i;
+  /sk_live_|rk_live_|sk_test_|rk_test_|whsec_|ghp_|github_pat_|sk-ant-|sk-proj-|AKIA|AIza|xai-|hf_|npm_[A-Za-z0-9]|Bearer\s+[A-Za-z0-9._-]{8,}|xox[bpas]-|-----BEGIN |eyJ[A-Za-z0-9_-]{20,}\.|postgres:\/\/|mysql:\/\/|mongodb(\+srv)?:\/\//i;
 
 export function parseUsageRecords(raw: unknown): UsageRecord[] {
   if (!Array.isArray(raw)) {
