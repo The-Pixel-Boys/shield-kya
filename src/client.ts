@@ -3,6 +3,7 @@ import type { Host } from "./config.js";
 import { computeArgsHash } from "./hash.js";
 import { findSampleTool } from "./sample-tools.js";
 import { CLI_VERSION } from "./version.js";
+import { parseUsageRecords } from "./showback/cost-per-task.js";
 
 export type FetchLike = typeof fetch;
 
@@ -221,11 +222,13 @@ export class KyaHttpClient {
   }
 
   async ingestSession(req: SessionIngestRequest): Promise<SessionIngestResponse> {
+    const usage = req.usage ? parseUsageRecords(req.usage) : undefined;
     return this.request<SessionIngestResponse>("/api/v1/kya/sessions/ingest", {
       method: "POST",
       body: {
         ...req,
         host: req.host ?? this.host,
+        ...(usage && usage.length > 0 ? { usage } : { usage: undefined }),
       },
     });
   }
