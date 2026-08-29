@@ -75,7 +75,7 @@ export function frame(status: StatusStrip, ent: Entitlement, body: readonly stri
   ];
   const foot = [
     hline(),
-    clip("1-7 panes  d/c/m/e/s enterprise  r refresh  o offline  q quit  ? help"),
+    clip("1-7 panes  j/k move  w wrap  i invoke  b shrink  o orr  O offline  q quit"),
   ];
   return [...head, ...body.map((l) => clip(l)), ...foot].join("\n");
 }

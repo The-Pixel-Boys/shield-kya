@@ -33,6 +33,14 @@ describe("runCli", () => {
     expect(logs.join("\n")).toContain("init");
     expect(logs.join("\n")).toContain("serve-mcp");
     expect(logs.join("\n")).toContain("dash");
+    expect(logs.join("\n")).toContain("wrap");
+    expect(logs.join("\n")).toContain("invoke");
+    expect(logs.join("\n")).toContain("approve");
+    expect(logs.join("\n")).toContain("agents");
+    expect(logs.join("\n")).toContain("kill");
+    expect(logs.join("\n")).toContain("shrink");
+    expect(logs.join("\n")).toContain("sessions");
+    expect(logs.join("\n")).toContain("approvals");
   });
 
   it("init succeeds without API key", async () => {
@@ -79,7 +87,7 @@ describe("runCli", () => {
       {},
       cwd,
     );
-    expect(deny).toBe(0);
+    expect(deny).toBe(1);
     expect(logs.join("\n")).toMatch(/verdict: DENY/);
 
     const logs2: string[] = [];
@@ -104,8 +112,22 @@ describe("runCli", () => {
       {},
       cwd,
     );
-    expect(ra).toBe(0);
+    expect(ra).toBe(4);
     expect(logs2.join("\n")).toMatch(/REQUIRE_APPROVE/);
+  });
+
+  it("invoke --offline fails closed", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "kya-cli-"));
+    dirs.push(cwd);
+    const { io, errors } = captureIo();
+    const code = await runCli(
+      ["invoke", "--offline", "--tool-id", "org.sample.data.write"],
+      io,
+      { KYA_BASE_URL: "http://127.0.0.1:8090", KYA_API_KEY: "sk_test" },
+      cwd,
+    );
+    expect(code).toBe(2);
+    expect(errors.join("\n") + "").toMatch(/offline/i);
   });
 
   it("register-agent fails closed without key", async () => {

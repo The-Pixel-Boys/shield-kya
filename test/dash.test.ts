@@ -110,6 +110,25 @@ describe("kya dash --once", () => {
     expect(logs.join("\n")).toMatch(/control plane|KYA_API_KEY/i);
   });
 
+  it("offline free panes name the CLI verbs", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "kya-dash-"));
+    dirs.push(cwd);
+    const cases = [
+      ["policy", /wrap/i],
+      ["agents", /register-agent/i],
+      ["approvals", /approve/i],
+      ["sessions", /shrink/i],
+      ["mcp", /serve-mcp/i],
+    ] as const;
+    for (const [pane, re] of cases) {
+      const { io, logs } = captureIo();
+      const code = await runCli(["dash", "--once", "--offline", "--pane", pane], io, {}, cwd);
+      expect(code).toBe(0);
+      expect(logs.join("\n")).toMatch(re);
+      expect(logs.join("\n")).not.toMatch(/sk_live_/);
+    }
+  });
+
   it("dash --once policy still treats once as boolean", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "kya-dash-"));
     dirs.push(cwd);

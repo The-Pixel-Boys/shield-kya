@@ -234,6 +234,44 @@ describe("HTTP serve-mcp", () => {
 
     await result.http!.close();
   });
+
+  it("does not echo exception text on invalid JSON", async () => {
+    const { startHttpMcp } = await import("../src/mcp/http.js");
+    const http = await startHttpMcp({
+      port: 0,
+      client: mockClient(),
+      kyaHost: "ide",
+    });
+    const res = await fetch(`${http.url}/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{not-json",
+    });
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(body)).not.toMatch(/Unexpected|SyntaxError|stack/i);
+    expect(body.error).toBe("invalid json");
+    await http.close();
+  });
+
+  it("requires shared secret on tools when configured", async () => {
+    const { startHttpMcp } = await import("../src/mcp/http.js");
+    const http = await startHttpMcp({
+      port: 0,
+      client: mockClient(),
+      kyaHost: "ide",
+      sharedSecret: "s3cret-token",
+    });
+    const denied = await fetch(`${http.url}/mcp/tools`);
+    expect(denied.status).toBe(401);
+    const ok = await fetch(`${http.url}/mcp/tools`, {
+      headers: { "x-kya-mcp-token": "s3cret-token" },
+    });
+    expect(ok.status).toBe(200);
+    const health = await fetch(`${http.url}/health`);
+    expect(health.status).toBe(200);
+    await http.close();
+  });
 });
 
 describe("stdio MCP", () => {

@@ -1,4 +1,13 @@
+# Single-package workspace so `pnpm install` works in CI (working-directory: sdks/kya).
 packages:
   - "."
+
+# Allow esbuild native binary install (vitest/vite dependency).
 allowBuilds:
   esbuild: true
+
+# GHSA-fx2h-pf6j-xcff / GHSA-4w7w-66w2-5vf9 / GHSA-v6wh-96g9-6wx3 (vite)
+# GHSA-67mh-4wv8-2f99 (esbuild)
+overrides:
+  vite: 6.4.3
+  esbuild: 0.25.12

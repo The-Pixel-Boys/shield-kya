@@ -8,6 +8,12 @@ import { basename, join, resolve } from "node:path";
 import { UsageError } from "../errors.js";
 import type { ParsedArgs } from "../parse-args.js";
 import { flagBool, flagString } from "../parse-args.js";
+import {
+  AGENTSHIELD_PRODUCER_ID,
+  readAgentShieldJson,
+  tryRunAgentShieldCli,
+  type AgentShieldSpawnFn,
+} from "../orr/agentshield.js";
 
 export type OrrRating = "green" | "amber" | "red";
 export type OrrDisposition = "go" | "conditional" | "no_go";
@@ -20,6 +26,7 @@ export interface OrrFinding {
   readonly title: string;
   readonly detail: string;
   readonly evidence?: string;
+  readonly source_tool?: string;
 }
 
 export interface OrrCategory {
@@ -77,6 +84,12 @@ export interface OrrRunOptions {
   readonly failOn?: "no_go" | "conditional";
   readonly quiet: boolean;
   readonly jsonStdout: boolean;
+  /** Optional OpenSSF Scorecard / readiness JSON. Evidence only — not a PEP. */
+  readonly scorecardPath?: string;
+  /** Optional AgentShield SecurityReport JSON dump. Evidence only — not a PEP. */
+  readonly agentshieldJsonPath?: string;
+  /** Test seam. Production uses spawnSync("agentshield", ...). Never --fix. */
+  readonly agentshieldSpawn?: AgentShieldSpawnFn;
 }
 
 const CATEGORY_META: readonly { id: string; label: string }[] = [
@@ -132,6 +145,8 @@ export function orrRunOptionsFromArgs(parsed: ParsedArgs): OrrRunOptions {
     failOn,
     quiet: flagBool(parsed.flags, "quiet"),
     jsonStdout: flagBool(parsed.flags, "json-stdout"),
+    scorecardPath: flagString(parsed.flags, "scorecard"),
+    agentshieldJsonPath: flagString(parsed.flags, "agentshield-json"),
   };
 }
 
@@ -172,14 +187,42 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
     options.commitSha ??
     tryReadGitHead(absPath) ??
     undefined;
-  const findings = runSaFirstPartyProbes(absPath);
+  const findings = [...runSaFirstPartyProbes(absPath)];
   const coverageGaps: OrrCoverageGap[] = [];
   const producersRequested = [...options.producers];
+  if (options.scorecardPath && !producersRequested.includes("openssf.scorecard")) {
+    producersRequested.push("openssf.scorecard");
+  }
+  if (
+    options.agentshieldJsonPath &&
+    !producersRequested.includes(AGENTSHIELD_PRODUCER_ID)
+  ) {
+    producersRequested.push(AGENTSHIELD_PRODUCER_ID);
+  }
+
+  if (options.scorecardPath) {
+    findings.push(...readScorecardEvidence(options.scorecardPath));
+  }
+
+  const agentShieldRequested =
+    producersRequested.includes(AGENTSHIELD_PRODUCER_ID) ||
+    Boolean(options.agentshieldJsonPath);
+  if (agentShieldRequested) {
+    if (options.agentshieldJsonPath) {
+      findings.push(...readAgentShieldJson(options.agentshieldJsonPath));
+    } else {
+      const asResult = tryRunAgentShieldCli(absPath, options.agentshieldSpawn);
+      if ("findings" in asResult) findings.push(...asResult.findings);
+      else coverageGaps.push(asResult.gap);
+    }
+  }
 
   if (!options.skipOptionalProducers) {
     for (const p of producersRequested) {
       if (p === "sa.first_party") continue;
+      if (p === AGENTSHIELD_PRODUCER_ID) continue;
       if (p === "openssf.scorecard") {
+        if (options.scorecardPath) continue;
         coverageGaps.push({
           adapter_id: p,
           reason: "binary_not_found_or_not_run_in_o1",
@@ -198,9 +241,7 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
   const scorecards = buildScorecards(findings, absPath, disabled);
   const overall = rollupOverall(categories);
   const disposition = rollupDisposition(overall, categories);
-  const primary =
-    findings.find((f) => f.severity === "critical" || f.severity === "high") ??
-    findings[0];
+  const primary = pickPrimaryFailure(findings);
   const report: OrrReport = {
     rubric_version: "0",
     generated_at: new Date().toISOString(),
@@ -252,6 +293,77 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
   }
 
   return { report, reportJsonPath, reportMdPath, exitCode };
+}
+
+/**
+ * Ingest an OpenSSF Scorecard / readiness JSON dump as **evidence**.
+ * Never maps a score to ALLOW. Missing file is a coverage gap finding.
+ */
+export function readScorecardEvidence(scorecardPath: string): OrrFinding[] {
+  const abs = resolve(scorecardPath);
+  if (!existsSync(abs) || !statSync(abs).isFile()) {
+    return [
+      {
+        id: "sa.scorecard.missing",
+        category: "enterprise_readiness",
+        severity: "info",
+        title: "Scorecard file not found",
+        detail:
+          `${scorecardPath} was requested as an optional producer. Evidence only — not a PEP.`,
+        evidence: abs,
+        source_tool: "openssf.scorecard",
+      },
+    ];
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(abs, "utf8"));
+  } catch {
+    return [
+      {
+        id: "sa.scorecard.unreadable",
+        category: "enterprise_readiness",
+        severity: "low",
+        title: "Scorecard JSON unreadable",
+        detail: "Could not parse --scorecard file. ORR stays observational.",
+        evidence: abs,
+        source_tool: "openssf.scorecard",
+      },
+    ];
+  }
+  const obj = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  const score = typeof obj.score === "number" ? obj.score : undefined;
+  const checks = Array.isArray(obj.checks) ? obj.checks : [];
+  const findings: OrrFinding[] = [
+    {
+      id: "sa.scorecard.ingested",
+      category: "enterprise_readiness",
+      severity: "info",
+      title: "Scorecard ingested as evidence",
+      detail:
+        score === undefined
+          ? "Scorecard dump loaded. Does not ALLOW side effects."
+          : `Scorecard score=${score} (evidence only — not a PEP).`,
+      evidence: abs,
+      source_tool: "openssf.scorecard",
+    },
+  ];
+  for (const raw of checks.slice(0, 24)) {
+    if (!raw || typeof raw !== "object") continue;
+    const check = raw as Record<string, unknown>;
+    const name = typeof check.name === "string" ? check.name : "check";
+    const checkScore = check.score;
+    findings.push({
+      id: `sa.scorecard.check.${name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`,
+      category: "enterprise_readiness",
+      severity: "info",
+      title: `Scorecard ${name}`,
+      detail: `score=${String(checkScore ?? "n/a")} — evidence only`,
+      evidence: abs,
+      source_tool: "openssf.scorecard",
+    });
+  }
+  return findings;
 }
 
 /** SA first-party probes: evidence only; scanners never ALLOW. */
@@ -383,7 +495,23 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
     });
   }
 
-  return findings;
+  return findings.map((f) =>
+    f.source_tool ? f : { ...f, source_tool: "sa.first_party" },
+  );
+}
+
+function pickPrimaryFailure(findings: readonly OrrFinding[]): OrrFinding | undefined {
+  const isSa = (f: OrrFinding) =>
+    f.source_tool === "sa.first_party" ||
+    f.id.startsWith("sa.probe.") ||
+    f.id.startsWith("sa.scorecard.");
+  const highish = (f: OrrFinding) =>
+    f.severity === "critical" || f.severity === "high";
+  return (
+    findings.find((f) => isSa(f) && highish(f)) ??
+    findings.find(highish) ??
+    findings[0]
+  );
 }
 
 function scoreCategories(
