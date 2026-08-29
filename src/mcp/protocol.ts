@@ -141,10 +141,7 @@ async function callPolicyEvaluate(
       ? (a.args as Record<string, unknown>)
       : {};
   const argsHash = str(a.argsHash) ?? computeArgsHash(argsObj);
-  const irreversible =
-    typeof a.irreversible === "boolean"
-      ? a.irreversible
-      : (sample?.irreversible ?? false);
+  const irreversible = sample?.irreversible ?? true;
 
   const response = await ctx.client.evaluatePolicy({
     toolId,
@@ -154,7 +151,7 @@ async function callPolicyEvaluate(
     actionClass: sample?.actionClass,
     dataClass: sample?.dataClass,
     sessionRisk: str(a.sessionRisk) ?? "LOW",
-    approvalStatus: str(a.approvalStatus) ?? "NONE",
+    approvalStatus: "NONE",
     env: {
       host,
       agentId: str(a.agentId) ?? ctx.agentId,

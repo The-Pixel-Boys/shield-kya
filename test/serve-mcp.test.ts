@@ -199,15 +199,19 @@ describe("HTTP serve-mcp", () => {
 
     const health = await fetch(`${base}/health`).then((r) => r.json());
     expect(health.ok).toBe(true);
+    expect(result.http!.token.length).toBeGreaterThan(8);
 
-    const tools = await fetch(`${base}/mcp/tools`).then((r) => r.json());
+    const auth = { "x-kya-mcp-token": result.http!.token };
+    const tools = await fetch(`${base}/mcp/tools`, { headers: auth }).then(
+      (r) => r.json(),
+    );
     expect(tools.tools.map((t: { name: string }) => t.name)).toContain(
       "kya.policy_evaluate",
     );
 
     const evalRes = await fetch(`${base}/mcp/tools/kya.policy_evaluate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify({
         toolId: "org.sample.never.event",
         irreversible: true,
@@ -219,7 +223,7 @@ describe("HTTP serve-mcp", () => {
 
     const rpc = await fetch(`${base}/mcp`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 9,
@@ -244,7 +248,10 @@ describe("HTTP serve-mcp", () => {
     });
     const res = await fetch(`${http.url}/mcp`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-kya-mcp-token": http.token,
+      },
       body: "{not-json",
     });
     const body = await res.json();

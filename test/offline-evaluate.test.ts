@@ -47,4 +47,28 @@ describe("offline-evaluate", () => {
     });
     expect(r.verdict).toBe("REQUIRE_APPROVE");
   });
+
+  it("case-folded never.event is still DENY", () => {
+    const r = evaluateOffline({
+      toolId: "ORG.SAMPLE.NEVER.EVENT",
+      irreversible: false,
+    });
+    expect(r.verdict).toBe("DENY");
+    expect(r.opaAllow).toBe(false);
+  });
+
+  it("unknown tool without irreversible is REQUIRE_APPROVE not ALLOW", () => {
+    const r = evaluateOffline({ toolId: "shell.exec" });
+    expect(r.verdict).toBe("REQUIRE_APPROVE");
+    expect(r.reasonCode).toBe("UNKNOWN_TOOL");
+    expect(r.opaAllow).toBe(false);
+  });
+
+  it("DENY sets opaAllow false", () => {
+    const r = evaluateOffline({
+      toolId: "org.sample.never.event",
+      irreversible: true,
+    });
+    expect(r.opaAllow).toBe(false);
+  });
 });

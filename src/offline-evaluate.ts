@@ -6,7 +6,7 @@
 
 import type { Host } from "./config.js";
 import type { PolicyEvaluateRequest, PolicyEvaluateResponse } from "./client.js";
-import { SAMPLE_TOOLS, type ActionClass, type PolicyVerdict } from "./sample-tools.js";
+import { findSampleTool, type ActionClass, type PolicyVerdict } from "./sample-tools.js";
 
 export type SessionRisk = "LOW" | "MEDIUM" | "HIGH";
 
@@ -19,7 +19,7 @@ function baseTier(
     return { verdict: "DENY", reasonCode: "EMPTY_TOOL" };
   }
 
-  const known = SAMPLE_TOOLS.find((t) => t.toolId === toolId);
+  const known = findSampleTool(toolId);
   if (known?.policyTier) {
     if (known.policyTier === "DENY") {
       return { verdict: "DENY", reasonCode: "NEVER_EVENT" };
@@ -41,7 +41,7 @@ function baseTier(
     return { verdict: "REQUIRE_APPROVE", reasonCode: "UNKNOWN_IRREVERSIBLE" };
   }
 
-  return { verdict: "ALLOW", reasonCode: "ALLOW" };
+  return { verdict: "REQUIRE_APPROVE", reasonCode: "UNKNOWN_TOOL" };
 }
 
 /** Raise-only: risk may bump ALLOW → REQUIRE_APPROVE; never lowers DENY/REQUIRE_APPROVE. */
@@ -83,7 +83,7 @@ export function evaluateOffline(
     localVerdict: base.verdict,
     sessionRisk: risk,
     host: resolvedHost,
-    opaAllow: true,
+    opaAllow: final.verdict === "ALLOW",
     opaReason: "OFFLINE_SAMPLE",
   };
 }
