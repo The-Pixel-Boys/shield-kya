@@ -3,8 +3,16 @@
  * Reporting orchestrator only: not a second PEP; never mints principals or allows side effects.
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, join, relative, resolve, sep } from "node:path";
 import { UsageError } from "../errors.js";
 import type { ParsedArgs } from "../parse-args.js";
 import { flagBool, flagString } from "../parse-args.js";
@@ -734,24 +742,52 @@ ${showbackMd}
 }
 
 
+const MAX_USAGE_FILE_BYTES = 256 * 1024;
+
+function isInsideRoot(file: string, root: string): boolean {
+  const rel = relative(resolve(root), resolve(file));
+  return rel === "" || (!rel.startsWith("..") && !rel.startsWith(sep));
+}
+
 function loadShowback(
   root: string,
   usagePath: string | undefined,
 ): ShowbackReport | undefined {
-  const candidates = [
-    usagePath ? resolve(usagePath) : undefined,
-    join(root, ".kya", "usage.json"),
-  ].filter((x): x is string => Boolean(x));
-  for (const path of candidates) {
-    if (!existsSync(path)) continue;
+  const candidates: string[] = [];
+  if (usagePath) {
+    const abs = resolve(usagePath);
+    if (!isInsideRoot(abs, root)) {
+      throw new UsageError("--usage must be a file inside --path");
+    }
     try {
+      const realFile = realpathSync(abs);
+      const realRoot = realpathSync(root);
+      if (!isInsideRoot(realFile, realRoot)) {
+        throw new UsageError("--usage must be a file inside --path");
+      }
+    } catch (err) {
+      if (err instanceof UsageError) throw err;
+      /* missing file: keep candidate; loader skips */
+    }
+    candidates.push(abs);
+  } else {
+    candidates.push(join(root, ".kya", "usage.json"));
+  }
+  for (const path of candidates) {
+    if (!existsSync(path) || !statSync(path).isFile()) continue;
+    try {
+      const st = statSync(path);
+      if (st.size > MAX_USAGE_FILE_BYTES) {
+        throw new UsageError("--usage file exceeds 256KB");
+      }
       const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
       const records = parseUsageRecords(
         Array.isArray(raw) ? raw : (raw as { usage?: unknown }).usage,
       );
       if (records.length === 0) continue;
       return buildShowback(records);
-    } catch {
+    } catch (err) {
+      if (err instanceof UsageError) throw err;
       /* ignore bad usage file; coverage stays empty */
     }
   }
