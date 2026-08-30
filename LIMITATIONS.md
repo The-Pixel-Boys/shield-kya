@@ -23,3 +23,4 @@
 - Gemini CLI supports stdio and hosted `httpUrl` with a Bearer header. Gemini Enterprise / Spark custom MCP OAuth is out of scope.
 - Grok (grok.com) custom connectors need a public HTTPS URL. Localhost and private IPs are rejected. If the UI only offers OAuth or no auth, use Codex, Gemini CLI, or the xAI SDK instead of turning auth off.
 - Local HTTP MCP remains loopback-only. Do not bind it to a public interface.
+- Optional `kya sandbox` (Firecracker) is a runtime wrap beside the gate, not a hypervisor product. Binaries are not in npm. Default off (`KYA_SANDBOX`). MCP still never executes spawn/exec. Kernel bugs and unwrapped shells remain residual risk (see ADR 0007).

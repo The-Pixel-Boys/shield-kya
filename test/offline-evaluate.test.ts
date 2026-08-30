@@ -71,4 +71,26 @@ describe("offline-evaluate", () => {
     });
     expect(r.opaAllow).toBe(false);
   });
+
+  it("sandbox exec without sandboxId is DENY MISSING_SANDBOX_ID", () => {
+    const r = evaluateOffline({
+      toolId: "org.sample.sandbox.exec",
+      irreversible: true,
+      actionClass: "EXTERNAL_SIDE_EFFECT",
+      env: { host: "runtime" },
+    });
+    expect(r.verdict).toBe("DENY");
+    expect(r.reasonCode).toBe("MISSING_SANDBOX_ID");
+  });
+
+  it("sandbox exec with sandboxId is REQUIRE_APPROVE", () => {
+    const r = evaluateOffline({
+      toolId: "org.sample.sandbox.exec",
+      irreversible: true,
+      actionClass: "EXTERNAL_SIDE_EFFECT",
+      env: { host: "runtime", sandboxId: "sbx-1" },
+    });
+    expect(r.verdict).toBe("REQUIRE_APPROVE");
+    expect(r.reasonCode).not.toBe("MISSING_SANDBOX_ID");
+  });
 });

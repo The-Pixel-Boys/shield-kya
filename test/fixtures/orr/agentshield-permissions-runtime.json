@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-08-22T00:00:00.000Z",
+  "targetPath": "/tmp/harness-under-review",
+  "findings": [
+    {
+      "id": "permissions-bash-star",
+      "severity": "critical",
+      "category": "permissions",
+      "title": "Overly permissive allow rule: Bash(*)",
+      "description": "Unrestricted shell in active settings.",
+      "file": ".claude/settings.json",
+      "line": 3,
+      "evidence": "allow: [\"Bash(*)\"]",
+      "runtimeConfidence": "active-runtime"
+    }
+  ],
+  "score": { "overall": 40, "grade": "D" },
+  "summary": { "critical": 1, "high": 0, "medium": 0, "low": 0, "info": 0 }
+}
