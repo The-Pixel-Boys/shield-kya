@@ -9,7 +9,7 @@ describe("host connectors packaging", () => {
     const toml = readFileSync(join(root, "openai/codex.config.example.toml"), "utf8");
     expect(toml).toContain('command = "npx"');
     expect(toml).toContain("--no-install");
-    expect(toml).toContain("@shield-agent/kya@0.1.17");
+    expect(toml).toContain("@shield-agent/kya@0.1.18");
     expect(toml).not.toContain('"-y"');
     expect(toml).not.toMatch(/args = \[[^\]]*"-y"/);
     expect(toml).toContain("env_vars");
@@ -27,6 +27,7 @@ describe("host connectors packaging", () => {
     expect(tool.server_url).toBe("https://shield-agent.com/mcp");
     expect(tool.authorization).toBe("Bearer ${KYA_API_KEY}");
     expect(tool.require_approval).toBeUndefined();
+    expect(tool.allowed_tools).toEqual(["kya.policy_evaluate"]);
     expect(raw).not.toMatch(/sk_live_/);
   });
 
@@ -38,7 +39,7 @@ describe("host connectors packaging", () => {
     expect(local.mcpServers["shield-kya"].command).toBe("npx");
     expect(local.mcpServers["shield-kya"].args).toEqual([
       "--no-install",
-      "@shield-agent/kya@0.1.17",
+      "@shield-agent/kya@0.1.18",
       "serve-mcp",
       "--stdio",
     ]);
@@ -60,7 +61,7 @@ describe("host connectors packaging", () => {
     const md = readFileSync(join(root, "grok/README.md"), "utf8");
     expect(md).toContain("https://shield-agent.com/mcp");
     expect(md.toLowerCase()).toContain("localhost");
-    expect(md).toMatch(/still requires the Bearer key/i);
+    expect(md.toLowerCase()).not.toMatch(/tunnel|ngrok|localtunnel/);
     expect(md).toContain("os.environ[\"KYA_API_KEY\"]");
     expect(md).toContain("kya.policy_evaluate");
   });
