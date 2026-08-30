@@ -3,7 +3,7 @@
     "shield-kya": {
       "description": "Know Your Agent local MCP gate: wrap-before-write, named-agent registry, Hold/Clear.",
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.1.16", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.1.17", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "${KYA_BASE_URL}",
         "KYA_API_KEY": "${KYA_API_KEY}",

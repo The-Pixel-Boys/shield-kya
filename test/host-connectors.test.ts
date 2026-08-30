@@ -5,50 +5,63 @@ import { describe, expect, it } from "vitest";
 const root = join(import.meta.dirname, "..");
 
 describe("host connectors packaging", () => {
-  it("Codex example uses --no-install and pins 0.1.16", () => {
+  it("Codex example uses --no-install, inherits API key, no inline secret", () => {
     const toml = readFileSync(join(root, "openai/codex.config.example.toml"), "utf8");
     expect(toml).toContain('command = "npx"');
     expect(toml).toContain("--no-install");
-    expect(toml).toContain("@shield-agent/kya@0.1.16");
+    expect(toml).toContain("@shield-agent/kya@0.1.17");
     expect(toml).not.toContain('"-y"');
     expect(toml).not.toMatch(/args = \[[^\]]*"-y"/);
+    expect(toml).toContain("env_vars");
     expect(toml).toContain("KYA_API_KEY");
+    expect(toml).not.toMatch(/KYA_API_KEY\s*=\s*"[^$"]+"/);
     expect(toml).toContain('url = "https://shield-agent.com/mcp"');
     expect(toml).toContain("bearer_token_env_var");
   });
 
-  it("Responses example points at hosted /mcp with Bearer placeholder", () => {
+  it("Responses example uses env placeholder and does not disable OpenAI-side approval", () => {
     const raw = readFileSync(join(root, "openai/responses-mcp.example.json"), "utf8");
     const j = JSON.parse(raw);
     const tool = j.tools[0];
     expect(tool.type).toBe("mcp");
     expect(tool.server_url).toBe("https://shield-agent.com/mcp");
-    expect(tool.authorization).toMatch(/^Bearer /);
+    expect(tool.authorization).toBe("Bearer ${KYA_API_KEY}");
+    expect(tool.require_approval).toBeUndefined();
     expect(raw).not.toMatch(/sk_live_/);
   });
 
-  it("Gemini settings example covers stdio and hosted httpUrl", () => {
-    const j = JSON.parse(
+  it("Gemini stdio example is stdio-only; hosted is a separate file", () => {
+    const local = JSON.parse(
       readFileSync(join(root, "gemini/settings.example.json"), "utf8"),
     );
-    const local = j.mcpServers["shield-kya"];
-    expect(local.command).toBe("npx");
-    expect(local.args).toEqual([
+    expect(Object.keys(local.mcpServers)).toEqual(["shield-kya"]);
+    expect(local.mcpServers["shield-kya"].command).toBe("npx");
+    expect(local.mcpServers["shield-kya"].args).toEqual([
       "--no-install",
-      "@shield-agent/kya@0.1.16",
+      "@shield-agent/kya@0.1.17",
       "serve-mcp",
       "--stdio",
     ]);
-    const hosted = j.mcpServers["shield-kya-hosted"];
-    expect(hosted.httpUrl).toBe("https://shield-agent.com/mcp");
-    expect(hosted.headers.Authorization).toContain("Bearer");
+    expect(local.mcpServers["shield-kya"].trust).toBe(false);
+
+    const hosted = JSON.parse(
+      readFileSync(join(root, "gemini/settings.hosted.example.json"), "utf8"),
+    );
+    expect(Object.keys(hosted.mcpServers)).toEqual(["shield-kya"]);
+    expect(hosted.mcpServers["shield-kya"].httpUrl).toBe("https://shield-agent.com/mcp");
+    expect(hosted.mcpServers["shield-kya"].headers.Authorization).toBe(
+      "Bearer ${KYA_API_KEY}",
+    );
+    expect(hosted.mcpServers["shield-kya"].command).toBeUndefined();
+    expect(hosted.mcpServers["shield-kya"].trust).toBe(false);
   });
 
-  it("Grok README documents hosted URL and rejects localhost as product path", () => {
+  it("Grok README requires Bearer on hosted URL and does not productize tunnels", () => {
     const md = readFileSync(join(root, "grok/README.md"), "utf8");
     expect(md).toContain("https://shield-agent.com/mcp");
     expect(md.toLowerCase()).toContain("localhost");
-    expect(md).toMatch(/rejects|cannot reach loopback|not something we ship/i);
+    expect(md).toMatch(/still requires the Bearer key/i);
+    expect(md).toContain("os.environ[\"KYA_API_KEY\"]");
     expect(md).toContain("kya.policy_evaluate");
   });
 });
