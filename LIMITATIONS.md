@@ -19,4 +19,7 @@
 - `--usage` must sit inside `--path`. Usage rows drop secret-shaped strings and labels over 64/128 chars. Hosted ingest is merchant-scoped and length-capped the same way.
 
 - The hosted Claude connector uses machine API keys (Bearer). It is a custom connector, not an Anthropic Directory listing. OAuth DCR is a later slice.
+- OpenAI: Codex CLI and the Responses API use the same `/mcp` URL with a machine API key. ChatGPT Apps on chatgpt.com (Developer Mode) are deferred until OAuth DCR. ChatGPT cannot attach a local stdio server.
+- Gemini CLI supports stdio and hosted `httpUrl` with a Bearer header. Gemini Enterprise / Spark custom MCP OAuth is out of scope.
+- Grok (grok.com) custom connectors need a public HTTPS URL. Localhost and private IPs are rejected. If the UI only offers OAuth or no auth, use Codex, Gemini CLI, or the xAI SDK instead of turning auth off.
 - Local HTTP MCP remains loopback-only. Do not bind it to a public interface.
