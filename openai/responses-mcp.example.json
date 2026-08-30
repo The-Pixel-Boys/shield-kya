@@ -6,7 +6,8 @@
       "type": "mcp",
       "server_label": "shield-kya",
       "server_url": "https://shield-agent.com/mcp",
-      "authorization": "Bearer ${KYA_API_KEY}"
+      "authorization": "Bearer ${KYA_API_KEY}",
+      "allowed_tools": ["kya.policy_evaluate"]
     }
   ],
   "input": "Evaluate whether tool org.sample.data.write should proceed. Use the shield-kya policy tool. Do not invent an approval."

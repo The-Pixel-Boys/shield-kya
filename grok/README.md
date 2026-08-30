@@ -9,7 +9,7 @@ Same three MCP tools as Claude and Codex: `kya.policy_evaluate`, `kya.session_in
 3. Server URL: `https://shield-agent.com/mcp`.
 4. Auth: machine API key as `Authorization: Bearer <KYA_API_KEY>` when the UI offers a request header / API key field. If the UI only offers OAuth or None, stop and use the xAI SDK or Codex/Gemini CLI instead. Do not turn auth off.
 
-Grok rejects `localhost` and private IPs. A tunnel is only for your own debugging and still requires the Bearer key. We do not ship or support unauthenticated public tunnels.
+Grok rejects `localhost` and private IPs. Do not expose OSS HTTP MCP through a public URL. Use `https://shield-agent.com/mcp` with a Bearer machine key.
 
 ## Hosted (xAI SDK)
 
@@ -40,7 +40,7 @@ chat = client.chat.create(
 There is no grok.com stdio path. For a local agent host use the same stdio launch as Claude:
 
 ```bash
-npx --no-install @shield-agent/kya@0.1.17 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.1.18 serve-mcp --stdio
 ```
 
 Env: `KYA_BASE_URL`, `KYA_API_KEY`, `KYA_HOST`. Codex and Gemini example configs in this package show the full snippets.
