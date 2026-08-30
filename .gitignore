@@ -1,9 +1,6 @@
 node_modules/
 dist/
 coverage/
-*.tgz
+*.tsbuildinfo
 .DS_Store
-.env
 .kya/
-*.log
-package-lock.json

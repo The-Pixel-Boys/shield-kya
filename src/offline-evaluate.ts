@@ -70,6 +70,21 @@ export function evaluateOffline(
   host: Host = "ide",
 ): PolicyEvaluateResponse {
   const irreversible = req.irreversible ?? false;
+  const known = findSampleTool(req.toolId);
+  const sandboxId = req.env?.sandboxId?.trim();
+  if (known?.requiresSandbox && !sandboxId) {
+    return {
+      verdict: "DENY",
+      reasonCode: "MISSING_SANDBOX_ID",
+      toolId: req.toolId,
+      argsHash: req.argsHash,
+      localVerdict: "DENY",
+      sessionRisk: (req.sessionRisk as SessionRisk | undefined) ?? "LOW",
+      host: req.env?.host ?? host,
+      opaAllow: false,
+      opaReason: "OFFLINE_SAMPLE",
+    };
+  }
   const base = baseTier(req.toolId, irreversible, req.actionClass);
   const risk = (req.sessionRisk as SessionRisk | undefined) ?? "LOW";
   const final = applySessionRisk(base, risk);

@@ -15,6 +15,8 @@ export interface SampleToolDescriptor {
   readonly irreversible: boolean;
   readonly dataClass: DataClass;
   readonly metadata: Readonly<Record<string, unknown>>;
+  /** When true, evaluate DENY MISSING_SANDBOX_ID unless env.sandboxId is set. */
+  readonly requiresSandbox?: boolean;
 }
 
 export const SAMPLE_TOOLS: readonly SampleToolDescriptor[] = [
@@ -53,6 +55,44 @@ export const SAMPLE_TOOLS: readonly SampleToolDescriptor[] = [
     irreversible: true,
     dataClass: "CONFIDENTIAL",
     metadata: { version: "1.0.0", owner: "kya" },
+  },
+  {
+    toolId: "org.sample.sandbox.spawn",
+    displayName: "Sandbox spawn",
+    actionClass: "WRITE",
+    policyTier: "REQUIRE_APPROVE",
+    irreversible: true,
+    dataClass: "INTERNAL",
+    metadata: { version: "1.0.0", owner: "sample" },
+  },
+  {
+    toolId: "org.sample.sandbox.exec",
+    displayName: "Sandbox exec",
+    actionClass: "EXTERNAL_SIDE_EFFECT",
+    policyTier: "REQUIRE_APPROVE",
+    irreversible: true,
+    dataClass: "RESTRICTED",
+    requiresSandbox: true,
+    metadata: { version: "1.0.0", owner: "sample", requiresSandbox: true },
+  },
+  {
+    toolId: "org.sample.sandbox.net_open",
+    displayName: "Sandbox net open",
+    actionClass: "EXTERNAL_SIDE_EFFECT",
+    policyTier: "REQUIRE_APPROVE",
+    irreversible: true,
+    dataClass: "INTERNAL",
+    requiresSandbox: true,
+    metadata: { version: "1.0.0", owner: "sample", requiresSandbox: true },
+  },
+  {
+    toolId: "org.sample.sandbox.kill",
+    displayName: "Sandbox kill",
+    actionClass: "WRITE",
+    policyTier: "ALLOW",
+    irreversible: false,
+    dataClass: "INTERNAL",
+    metadata: { version: "1.0.0", owner: "sample" },
   },
 ] as const;
 

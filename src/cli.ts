@@ -59,6 +59,7 @@ import {
   invokeInputFromArgs,
   runInvoke,
 } from "./commands/invoke.js";
+import { runSandboxCommand } from "./commands/sandbox.js";
 
 const HELP = `Shield KYA light CLI — Know Your Agent (provider-agnostic)
 
@@ -84,6 +85,8 @@ Commands:
   orr run           Read-only ORR board (reporting only — not a second PEP)
                     Optional: --producer harness.agentshield [--agentshield-json <file>]
   dash              Terminal desk (FREE panes; actions on a TTY, --once for CI)
+  sandbox           Opt-in Firecracker wrap (spawn|exec|kill|status). Not MCP.
+                    Requires KYA_SANDBOX=mock|firecracker. MCP still never execs.
 
 Options (shared):
   --base-url <url>  Control plane origin (or KYA_BASE_URL)
@@ -431,6 +434,10 @@ export async function runCli(
           offline: parsed.flags["offline"] === true || parsed.flags["offline"] === "true",
         });
         return await runDash(config, parsed, io, env);
+      }
+
+      case "sandbox": {
+        return await runSandboxCommand(parsed);
       }
 
       default:

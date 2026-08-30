@@ -1,0 +1,30 @@
+{
+  "timestamp": "2026-08-22T00:00:00.000Z",
+  "targetPath": "/tmp/harness-under-review",
+  "findings": [
+    {
+      "id": "mcp-npx-y-filesystem",
+      "severity": "high",
+      "category": "mcp",
+      "title": "Template MCP server \"filesystem\" uses npx -y (auto-install)",
+      "description": "Catalog entry, not confirmed runtime enablement.",
+      "file": "mcp-configs/mcp-servers.json",
+      "line": 4,
+      "evidence": "npx -y @modelcontextprotocol/server-filesystem",
+      "runtimeConfidence": "template-example"
+    },
+    {
+      "id": "mcp-auto-approve-github",
+      "severity": "high",
+      "category": "mcp",
+      "title": "Template defines risky MCP server: github",
+      "description": "Template inventory of a remote GitHub MCP.",
+      "file": "mcp-configs/mcp-servers.json",
+      "line": 18,
+      "evidence": "autoApprove: [\"*\"]",
+      "runtimeConfidence": "template-example"
+    }
+  ],
+  "score": { "overall": 75, "grade": "B" },
+  "summary": { "critical": 0, "high": 2, "medium": 0, "low": 0, "info": 0 }
+}
