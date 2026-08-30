@@ -2,20 +2,14 @@
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.1.16", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.1.17", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "https://shield-agent.com",
         "KYA_API_KEY": "${KYA_API_KEY}",
         "KYA_HOST": "ide"
       },
-      "timeout": 30000
-    },
-    "shield-kya-hosted": {
-      "httpUrl": "https://shield-agent.com/mcp",
-      "headers": {
-        "Authorization": "Bearer ${KYA_API_KEY}"
-      },
-      "timeout": 30000
+      "timeout": 30000,
+      "trust": false
     }
   }
 }

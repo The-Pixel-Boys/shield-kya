@@ -1,13 +1,12 @@
 {
-  "comment": "OpenAI Responses API remote MCP — hosted Shield KYA. Replace YOUR_KYA_API_KEY. ChatGPT Apps (chatgpt.com) are deferred until OAuth DCR.",
+  "comment": "OpenAI Responses API remote MCP — hosted Shield KYA. Put the machine key in env, not in git. ChatGPT Apps (chatgpt.com) are deferred until OAuth DCR. Leave OpenAI-side tool confirmation at the API default (do not auto-approve MCP calls).",
   "model": "gpt-5.6",
   "tools": [
     {
       "type": "mcp",
       "server_label": "shield-kya",
       "server_url": "https://shield-agent.com/mcp",
-      "authorization": "Bearer YOUR_KYA_API_KEY",
-      "require_approval": "never"
+      "authorization": "Bearer ${KYA_API_KEY}"
     }
   ],
   "input": "Evaluate whether tool org.sample.data.write should proceed. Use the shield-kya policy tool. Do not invent an approval."
