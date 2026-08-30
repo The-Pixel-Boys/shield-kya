@@ -1,0 +1,24 @@
+# Codex CLI / IDE — Shield KYA MCP
+# Copy into ~/.codex/config.toml (or project .codex/config.toml in a trusted project).
+# Docs: https://developers.openai.com/codex/mcp
+#
+# ChatGPT Apps (chatgpt.com Developer Mode) are deferred: that path wants OAuth.
+# Use Codex here, or the hosted Responses API snippet in responses-mcp.example.json.
+
+# --- Local stdio (OSS) ---
+[mcp_servers.shield-kya]
+command = "npx"
+args = ["--no-install", "@shield-agent/kya@0.1.16", "serve-mcp", "--stdio"]
+startup_timeout_sec = 20
+
+[mcp_servers.shield-kya.env]
+KYA_BASE_URL = "https://shield-agent.com"
+KYA_API_KEY = "replace-me"
+KYA_HOST = "ide"
+# KYA_AGENT_ID = "optional-after-register"
+
+# --- Hosted Streamable HTTP (same three tools) ---
+# [mcp_servers.shield-kya-hosted]
+# url = "https://shield-agent.com/mcp"
+# bearer_token_env_var = "KYA_API_KEY"
+# startup_timeout_sec = 20

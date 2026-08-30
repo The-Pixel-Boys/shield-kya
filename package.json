@@ -1,6 +1,6 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Know Your Agent light CLI + local MCP gate (provider-agnostic, zero vertical packs required).",
   "license": "MIT",
   "type": "module",
@@ -31,7 +31,10 @@
     "assets",
     "skills",
     "rules",
-    ".cursor-plugin"
+    ".cursor-plugin",
+    "openai",
+    "gemini",
+    "grok"
   ],
   "homepage": "https://shield-agent.com/install",
   "repository": {

@@ -1,0 +1,14 @@
+{
+  "comment": "OpenAI Responses API remote MCP — hosted Shield KYA. Replace YOUR_KYA_API_KEY. ChatGPT Apps (chatgpt.com) are deferred until OAuth DCR.",
+  "model": "gpt-5.6",
+  "tools": [
+    {
+      "type": "mcp",
+      "server_label": "shield-kya",
+      "server_url": "https://shield-agent.com/mcp",
+      "authorization": "Bearer YOUR_KYA_API_KEY",
+      "require_approval": "never"
+    }
+  ],
+  "input": "Evaluate whether tool org.sample.data.write should proceed. Use the shield-kya policy tool. Do not invent an approval."
+}

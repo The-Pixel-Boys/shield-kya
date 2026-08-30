@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "shield-kya",
   "display_name": "Shield KYA",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Know Your Agent MCP gate: ALLOW / DENY / REQUIRE_APPROVE. Sole PEP is Shield.",
   "long_description": "Local Claude Desktop extension that runs the packaged `dist/cli.js serve-mcp --stdio` against your Shield control plane (local or https://shield-agent.com). Tools evaluate policy, ingest session risk, and open Hold tickets. They never execute irreversible side effects.",
   "author": {
@@ -23,7 +23,11 @@
     "entry_point": "claude/run-stdio.mjs",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/dist/cli.js", "serve-mcp", "--stdio"],
+      "args": [
+        "${__dirname}/dist/cli.js",
+        "serve-mcp",
+        "--stdio"
+      ],
       "env": {
         "KYA_BASE_URL": "${user_config.base_url}",
         "KYA_API_KEY": "${user_config.api_key}",
@@ -47,10 +51,21 @@
     }
   ],
   "tools_generated": false,
-  "keywords": ["kya", "know-your-agent", "policy", "mcp", "approval", "claude"],
+  "keywords": [
+    "kya",
+    "know-your-agent",
+    "policy",
+    "mcp",
+    "approval",
+    "claude"
+  ],
   "license": "MIT",
   "compatibility": {
-    "platforms": ["darwin", "win32", "linux"],
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
     "runtimes": {
       "node": ">=20.0.0"
     }
@@ -66,7 +81,7 @@
     "api_key": {
       "type": "string",
       "title": "API key",
-      "description": "Machine API key (sk_live_…). Stored in the OS keychain.",
+      "description": "Machine API key (sk_live_\u2026). Stored in the OS keychain.",
       "sensitive": true,
       "required": true
     },
