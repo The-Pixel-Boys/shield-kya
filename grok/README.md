@@ -40,7 +40,7 @@ chat = client.chat.create(
 There is no grok.com stdio path. For a local agent host use the same stdio launch as Claude:
 
 ```bash
-npx --no-install @shield-agent/kya@0.1.18 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.1.19 serve-mcp --stdio
 ```
 
 Env: `KYA_BASE_URL`, `KYA_API_KEY`, `KYA_HOST`. Codex and Gemini example configs in this package show the full snippets.

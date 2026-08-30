@@ -25,6 +25,7 @@ export async function runEvalTool(
     irreversible?: boolean;
     sessionRisk?: string;
     approvalStatus?: string;
+    sandboxId?: string;
     offline?: boolean;
   },
   client?: KyaHttpClient,
@@ -47,6 +48,7 @@ export async function runEvalTool(
     agentId: config.agentId,
     sessionRisk: input.sessionRisk,
     approvalStatus: input.approvalStatus,
+    sandboxId: input.sandboxId,
   });
   // Prefer sample actionClass for offline + HTTP when known
   const request =
@@ -88,12 +90,13 @@ export function evalToolInputFromArgs(parsed: ParsedArgs): {
   irreversible: boolean;
   sessionRisk?: string;
   approvalStatus?: string;
+  sandboxId?: string;
   offline: boolean;
 } {
   const toolId = flagString(parsed.flags, "tool-id", "toolId");
   if (!toolId) {
     throw new UsageError(
-      "eval-tool requires --tool-id <id> [--args '{}'] [--irreversible] [--offline]",
+      "eval-tool requires --tool-id <id> [--args '{}'] [--irreversible] [--sandbox-id] [--offline]",
     );
   }
   const argsRaw = flagString(parsed.flags, "args");
@@ -108,8 +111,17 @@ export function evalToolInputFromArgs(parsed: ParsedArgs): {
   const irreversible = flagBool(parsed.flags, "irreversible");
   const sessionRisk = flagString(parsed.flags, "session-risk", "risk");
   const approvalStatus = flagString(parsed.flags, "approval-status");
+  const sandboxId = flagString(parsed.flags, "sandbox-id", "sandboxId");
   const offline = flagBool(parsed.flags, "offline");
-  return { toolId, args, irreversible, sessionRisk, approvalStatus, offline };
+  return {
+    toolId,
+    args,
+    irreversible,
+    sessionRisk,
+    approvalStatus,
+    sandboxId,
+    offline,
+  };
 }
 
 export function formatEvalHuman(result: EvalToolResult): string {

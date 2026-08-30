@@ -32,6 +32,7 @@ export interface PolicyEvaluateRequest {
     readonly sessionId?: string;
     readonly agentId?: string;
     readonly correlationId?: string;
+    readonly sandboxId?: string;
   };
 }
 
@@ -408,6 +409,7 @@ export function buildEvaluateFromToolArgs(input: {
   agentId?: string;
   sessionRisk?: string;
   approvalStatus?: string;
+  sandboxId?: string;
 }): PolicyEvaluateRequest {
   const args = input.args ?? {};
   return {
@@ -420,6 +422,7 @@ export function buildEvaluateFromToolArgs(input: {
     env: {
       host: input.host,
       agentId: input.agentId,
+      sandboxId: input.sandboxId,
     },
   };
 }
