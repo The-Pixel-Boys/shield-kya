@@ -21,9 +21,9 @@ export function homeBody(input: {
     `plane        ${input.offline ? "offline" : input.baseUrl}`,
     `agentId      ${input.agentId ?? "(none — kya register-agent)"}`,
     "",
-    "2 policy (eval / wrap)   3 agents (list / kill)",
-    "4 approvals (invoke)     5 sessions (shrink)",
-    "6 orr  ·  7 mcp  ·  kya approve --id <id> (JWT)",
+    "2 policy (e force-eval / w wrap)   3 agents (k kill, confirm y)",
+    "4 approvals (i invoke)             5 sessions (b/R shrink, confirm y)",
+    "6 orr  ·  7 mcp  ·  8 sandbox  ·  p auto-refresh  ·  t passport  ·  O offline",
   ];
   if (input.lastEval) {
     lines.push(
@@ -63,15 +63,21 @@ export function policyOfflineBody(): string[] {
   ];
 }
 
-export function policyLiveBody(evals: readonly PolicyEvaluateResponse[]): string[] {
+export function policyLiveBody(
+  evals: readonly PolicyEvaluateResponse[],
+  fromCache = false,
+): string[] {
   if (evals.length === 0) {
     return [
       "Policy playground (live plane).",
-      "No evaluations this session. Press r after wiring KYA_API_KEY.",
+      "No evaluations this session. Press e to eval samples (or r after wiring KYA_API_KEY).",
     ];
   }
   return [
-    "Policy playground (live plane — Shield is sole PEP).",
+    "Policy playground (live plane. Shield is sole PEP).",
+    fromCache
+      ? "Cached samples (e force-eval, avoids spam on every paint)."
+      : "Fresh samples from the plane.",
     "w wraps the write sample (ticket only). Never executes.",
     "",
     ...table(
@@ -97,13 +103,38 @@ export function agentsLiveBody(
   cursor = 0,
 ): string[] {
   return [
-    "Agents. k kill highlighted. n → kya register-agent --name …",
+    "Agents. k kill highlighted (y confirms). n → kya register-agent --name …",
     "",
     ...table(
       ["", "id", "name", "status"],
       rows.map((a, i) => [i === cursor ? ">" : " ", a.id, a.name, a.status ?? ""]),
     ),
   ];
+}
+
+export function sandboxBody(input: {
+  readonly backend: string;
+  readonly rows: readonly { sandboxId: string; status: string; backend: string }[];
+}): string[] {
+  const lines = [
+    "Sandbox (opt-in Firecracker wrap). Not MCP. Never auto-exec.",
+    `KYA_SANDBOX   ${input.backend || "(unset — set mock|firecracker)"}`,
+    "Spawn/exec go through evaluate first. DENY / Hold block side effects.",
+    "",
+  ];
+  if (!input.backend) {
+    lines.push("Set KYA_SANDBOX=mock for local desk, or firecracker when ready.");
+    return lines;
+  }
+  lines.push(
+    ...table(
+      ["id", "status", "backend"],
+      input.rows.map((r) => [r.sandboxId, r.status, r.backend]),
+    ),
+    "",
+    "CLI: kya sandbox spawn | exec | kill | status",
+  );
+  return lines;
 }
 
 export function needsPlaneBody(pane: string): string[] {

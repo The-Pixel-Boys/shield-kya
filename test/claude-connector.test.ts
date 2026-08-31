@@ -24,7 +24,7 @@ describe("Claude connector packaging", () => {
       expect(server.command).toBe("npx");
       expect(server.args).toContain("--no-install");
       expect(server.args).not.toContain("-y");
-      expect(server.args).toContain("@shield-agent/kya@0.1.20");
+      expect(server.args).toContain("@shield-agent/kya@0.1.21");
       expect(server.args).toContain("serve-mcp");
       expect(server.args).toContain("--stdio");
       expect(server.env.KYA_BASE_URL).toBeTruthy();
