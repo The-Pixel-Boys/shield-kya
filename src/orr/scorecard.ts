@@ -129,8 +129,32 @@ function defaultScorecardSpawn(
     maxBuffer: options.maxBuffer,
     windowsHide: options.windowsHide,
     shell: false,
-    env: process.env,
+    env: sanitizedScorecardEnv(process.env),
   });
+}
+
+/** Do not leak KYA / cloud tokens into Scorecard child process. */
+export function sanitizedScorecardEnv(
+  env: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = { ...env };
+  for (const key of Object.keys(out)) {
+    const upper = key.toUpperCase();
+    if (
+      upper === "KYA_API_KEY" ||
+      upper === "NODE_AUTH_TOKEN" ||
+      upper.includes("API_KEY") ||
+      upper.includes("SECRET") ||
+      upper.includes("TOKEN") ||
+      upper.includes("PASSWORD") ||
+      upper.startsWith("AWS_") ||
+      upper.startsWith("GH_") ||
+      upper === "GITHUB_TOKEN"
+    ) {
+      delete out[key];
+    }
+  }
+  return out;
 }
 
 function bufferToString(value: string | Buffer): string {

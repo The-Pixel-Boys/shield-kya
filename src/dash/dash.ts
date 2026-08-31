@@ -52,6 +52,8 @@ export interface DashOptions {
   readonly policyCache?: import("./policy-cache.js").PolicySampleCache;
   /** Force a fresh live policy sample (ignores TTL). */
   readonly forcePolicyEval?: boolean;
+  /** When set, frame shows a CONFIRM banner (no separate log-only prompt). */
+  readonly confirmLine?: string;
 }
 
 export interface DashSnapshot {
@@ -83,7 +85,7 @@ export async function renderDash(
     plane: offline ? "offline" : config.baseUrl || "unset",
     pane,
   };
-  const text = frame(status, ent, packed.body);
+  const text = frame(status, ent, packed.body, options.confirmLine);
   assertNoSecrets(text);
   if (config.apiKey && config.apiKey.length >= 8 && text.includes(config.apiKey)) {
     throw new Error("dashboard frame leaked api key");

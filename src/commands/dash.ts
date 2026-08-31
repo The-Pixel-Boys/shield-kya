@@ -1,7 +1,7 @@
 import { stdin as stdinFd, stdout as stdoutFd } from "node:process";
 import { emitKeypressEvents } from "node:readline";
 import type { ResolvedConfig } from "../config.js";
-import { KyaHttpClient } from "../client.js";
+import { isMachineApiKey, KyaHttpClient } from "../client.js";
 import { AuthRequiredError } from "../errors.js";
 import type { ParsedArgs } from "../parse-args.js";
 import { flagBool, flagString } from "../parse-args.js";
@@ -9,6 +9,7 @@ import { type DashPane } from "../dash/entitlement.js";
 import { renderDash, type DashIo } from "../dash/dash.js";
 import { mapKey } from "../dash/input.js";
 import { PolicySampleCache } from "../dash/policy-cache.js";
+import { assertNoSecrets } from "../dash/render.js";
 import { runWrap, wrapExitCode } from "./wrap.js";
 import { runInvoke } from "./invoke.js";
 import { runKillAgent, runShrinkSession } from "./ops.js";
@@ -16,18 +17,16 @@ import { runOrr } from "./orr.js";
 
 const AUTO_REFRESH_MS = 5_000;
 
-const ORR_PRODUCERS = ["sa.first_party", "openssf.scorecard"] as const;
-
-function deskOrr(cwd: string, producer: string) {
-  const producers = producer === "sa.first_party" ? ["sa.first_party"] : ["sa.first_party", producer];
+/** TUI ORR stays first_party only — Scorecard spawn is CLI-explicit (no env leak / stdin race). */
+function deskOrr(cwd: string) {
   return runOrr({
     path: cwd,
     out: `${cwd}/orr-report`,
     rubric: "0",
     disableCategories: [],
     formats: ["json", "md"],
-    producers: [...producers],
-    skipOptionalProducers: producer === "sa.first_party",
+    producers: ["sa.first_party"],
+    skipOptionalProducers: true,
     quiet: true,
     jsonStdout: false,
   });
@@ -74,9 +73,11 @@ export function dashOptionsFromArgs(parsed: ParsedArgs): {
 }
 
 type PendingConfirm =
-  | { kind: "kill"; id: string }
-  | { kind: "shrink"; id: string; to: "BUILD" | "READ" }
-  | { kind: "decide"; id: string; decision: "approve" | "reject" };
+  | { kind: "kill"; id: string; prompt: string }
+  | { kind: "shrink"; id: string; to: "BUILD" | "READ"; prompt: string }
+  | { kind: "decide"; id: string; decision: "approve" | "reject"; prompt: string }
+  | { kind: "invoke"; id: string; toolId: string; prompt: string }
+  | { kind: "wrap"; prompt: string };
 
 export async function runDash(
   config: ResolvedConfig,
@@ -95,7 +96,7 @@ export async function runDash(
   let forcePolicyEval = false;
   let autoRefresh = false;
   let pending: PendingConfirm | undefined;
-  let orrProducerIdx = 0;
+  let busy = false;
 
   let pane = opts.pane;
   let cursor = 0;
@@ -106,7 +107,9 @@ export async function runDash(
     sessions: [] as { id: string; risk?: string; host?: string; clearance?: string }[],
   };
 
-  const paint = async () => {
+  const confirmLine = () => pending?.prompt;
+
+  const paint = async (optsPaint?: { clear?: boolean }) => {
     const snap = await renderDash(
       { ...config, offline },
       {
@@ -125,6 +128,7 @@ export async function runDash(
         orrSummary,
         policyCache,
         forcePolicyEval,
+        confirmLine: confirmLine(),
       },
       env,
     );
@@ -134,8 +138,8 @@ export async function runDash(
       approvals: [...snap.approvals],
       sessions: [...snap.sessions],
     };
-    // Interactive: clear screen before repaint to avoid scroll spam.
-    if (!once && tty) {
+    // Never ANSI-clear while a confirm is armed (keeps the prompt visible).
+    if (!once && tty && optsPaint?.clear !== false && !pending) {
       try {
         stdoutFd.write("\x1b[2J\x1b[H");
       } catch {
@@ -150,19 +154,26 @@ export async function runDash(
     rows.length === 0 ? undefined : rows[Math.min(cursor, rows.length - 1)];
 
   if (once) {
-    await paint();
+    await paint({ clear: false });
     return 0;
   }
 
-  await paint();
+  await paint({ clear: false });
 
   emitKeypressEvents(stdinFd);
   stdinFd.setRawMode?.(true);
   stdinFd.resume();
+  // Bracketed paste: ignore paste chunks so `ay`/`ky` cannot one-shot confirm.
+  try {
+    stdoutFd.write("\x1b[?2004h");
+  } catch {
+    /* ignore */
+  }
 
   return await new Promise<number>((resolve) => {
-    let painting = false;
     let refreshTimer: ReturnType<typeof setInterval> | undefined;
+    let pasteBuf = "";
+    let inPaste = false;
 
     const stopRefresh = () => {
       if (refreshTimer) {
@@ -175,15 +186,15 @@ export async function runDash(
       stopRefresh();
       if (!autoRefresh || offline || !client) return;
       refreshTimer = setInterval(() => {
-        if (painting || pending) return;
-        painting = true;
+        if (busy || pending) return;
+        busy = true;
         void paint()
           .catch((err: unknown) => {
             if (err instanceof AuthRequiredError) io.error(err.message);
             else io.error(err instanceof Error ? err.message : String(err));
           })
           .finally(() => {
-            painting = false;
+            busy = false;
           });
       }, AUTO_REFRESH_MS);
     };
@@ -191,23 +202,53 @@ export async function runDash(
     const syncClient = () => {
       client = makeClient(config, offline);
       if (offline) policyCache.invalidate();
-      if (!offline && client) startRefresh();
+      if (!offline && client && autoRefresh) startRefresh();
       else stopRefresh();
     };
 
+    const stillLive = () => !offline && Boolean(client);
+
+    const arm = (job: PendingConfirm) => {
+      pending = job;
+      void paint({ clear: false });
+    };
+
     const runPaint = () => {
-      painting = true;
+      if (busy) return;
+      busy = true;
       void paint()
         .catch((err: unknown) => {
           if (err instanceof AuthRequiredError) io.error(err.message);
           else io.error(err instanceof Error ? err.message : String(err));
         })
         .finally(() => {
-          painting = false;
+          busy = false;
         });
     };
 
-    const onKey = (str: string | undefined, key: { name?: string; ctrl?: boolean } | undefined) => {
+    const onKey = (str: string | undefined, key: { name?: string; ctrl?: boolean; sequence?: string } | undefined) => {
+      const seq = key?.sequence ?? str ?? "";
+      // Bracketed paste begin/end
+      if (seq.includes("\x1b[200~") || str === "\x1b[200~") {
+        inPaste = true;
+        pasteBuf = "";
+        return;
+      }
+      if (inPaste) {
+        if (seq.includes("\x1b[201~") || str === "\x1b[201~") {
+          inPaste = false;
+          pasteBuf = "";
+          if (pending) {
+            pending = undefined;
+            io.log("paste ignored — confirm cancelled");
+            void paint({ clear: false });
+          }
+        } else {
+          pasteBuf += str ?? "";
+        }
+        return;
+      }
+
       const raw = key?.ctrl && key.name === "c" ? "\u0003" : (str ?? key?.name ?? "");
       const action = mapKey(raw);
 
@@ -215,27 +256,63 @@ export async function runDash(
         if (action.type === "confirm-yes") {
           const job = pending;
           pending = undefined;
-          if (!client || offline) {
+          if (!stillLive()) {
             io.log("Need a live plane (drop offline / set KYA_API_KEY).");
+            void paint({ clear: false });
             return;
           }
+          const liveClient = client!;
           const cfg = { ...config, offline: false };
+          busy = true;
           void (async () => {
             try {
+              if (!stillLive()) {
+                io.log("offline mid-flight — aborted");
+                return;
+              }
               if (job.kind === "kill") {
-                const killed = await runKillAgent(cfg, job.id, client!);
+                const killed = await runKillAgent(cfg, job.id, liveClient);
+                if (!stillLive()) return;
                 io.log(`${killed.status ?? "PAUSED"}  ${killed.id}`);
               } else if (job.kind === "shrink") {
-                const sh = await runShrinkSession(cfg, job.id, job.to, client!);
+                const sh = await runShrinkSession(cfg, job.id, job.to, liveClient);
+                if (!stillLive()) return;
                 io.log(`clearance ${sh.from} → ${sh.to}`);
-              } else {
-                const res = await client!.decideApproval(job.id, job.decision);
+              } else if (job.kind === "decide") {
+                // Machine sk_* keys must not decide — JWT / kya.approve only.
+                if (isMachineApiKey(config.apiKey ?? "")) {
+                  io.log(
+                    `Machine API keys cannot ${job.decision} from the TUI. Run: kya ${job.decision} --id ${job.id}`,
+                  );
+                  return;
+                }
+                const res = await liveClient.decideApproval(job.id, job.decision);
+                if (!stillLive()) return;
                 io.log(`${job.decision} → ${res.status}  ${res.id}`);
+              } else if (job.kind === "invoke") {
+                const result = await runInvoke(
+                  cfg,
+                  { toolId: job.toolId, irreversible: true },
+                  liveClient,
+                );
+                if (!stillLive()) return;
+                io.log(
+                  `invoke ${result.verdict} dispatched=${result.dispatched} ${result.sideEffect} (does not run the write)`,
+                );
+              } else if (job.kind === "wrap") {
+                const result = await runWrap(
+                  cfg,
+                  { toolId: "org.sample.data.write", irreversible: true },
+                  liveClient,
+                );
+                if (!stillLive()) return;
+                io.log(`wrap exit ${wrapExitCode(result)} ${result.eval.response.verdict}`);
               }
             } catch (err: unknown) {
               if (err instanceof AuthRequiredError) io.error(err.message);
               else io.error(err instanceof Error ? err.message : String(err));
             } finally {
+              busy = false;
               await paint();
             }
           })();
@@ -243,6 +320,7 @@ export async function runDash(
         }
         pending = undefined;
         io.log("cancelled");
+        void paint({ clear: false });
         return;
       }
 
@@ -253,11 +331,11 @@ export async function runDash(
       }
       if (action.type === "help") {
         io.log(
-          "1-8 panes · j/k · e eval · p auto-refresh · w wrap · k kill · i invoke · b/R shrink · o orr · t passport · a/x decide (y confirm) · O offline · q",
+          "1-8 panes · j/k · e eval · p auto-refresh · w wrap · k kill · i invoke · b/R shrink · o orr · t passport · a/x decide (y confirm; sk_* refused) · O offline · q",
         );
         return;
       }
-      if (action.type === "noop" || painting) return;
+      if (action.type === "noop" || busy) return;
 
       if (action.type === "up") {
         cursor = Math.max(0, cursor - 1);
@@ -284,88 +362,104 @@ export async function runDash(
         io.log("Register: kya register-agent --name solo --version-hash dev-local");
         return;
       } else if (action.type === "refresh") {
-        // fall through to paint
+        // fall through
       } else if (!offline && client) {
-        const cfg = { ...config, offline: false };
-        void (async () => {
+        if (action.type === "wrap") {
+          arm({ kind: "wrap", prompt: "wrap sample org.sample.data.write (ticket only)?" });
+          return;
+        }
+        if (action.type === "kill") {
+          const row = selected(last.agents);
+          if (!row) return;
+          arm({ kind: "kill", id: row.id, prompt: `kill agent ${row.id}?` });
+          return;
+        }
+        if (action.type === "invoke") {
+          const row = selected(last.approvals);
+          if (!row) return;
+          const toolId = String(row.action ?? "org.sample.data.write");
+          arm({
+            kind: "invoke",
+            id: row.id,
+            toolId,
+            prompt: `invoke ${row.id} tool=${toolId}? (does not run the write)`,
+          });
+          return;
+        }
+        if (action.type === "shrink-build" || action.type === "shrink-read") {
+          const row = selected(last.sessions);
+          if (!row) return;
+          const to = action.type === "shrink-build" ? "BUILD" : "READ";
+          arm({ kind: "shrink", id: row.id, to, prompt: `shrink ${row.id} → ${to}?` });
+          return;
+        }
+        if (action.type === "orr-run") {
+          busy = true;
           try {
-            if (action.type === "wrap") {
-              const result = await runWrap(
-                cfg,
-                { toolId: "org.sample.data.write", irreversible: true },
-                client!,
-              );
-              io.log(`wrap exit ${wrapExitCode(result)} ${result.eval.response.verdict}`);
-            } else if (action.type === "kill") {
-              const row = selected(last.agents);
-              if (!row) return;
-              pending = { kind: "kill", id: row.id };
-              io.log(`kill ${row.id}? press y to confirm, any other key to cancel`);
-              return;
-            } else if (action.type === "invoke") {
-              const row = selected(last.approvals);
-              if (!row) return;
-              const result = await runInvoke(
-                cfg,
-                { toolId: String(row.action ?? "org.sample.data.write"), irreversible: true },
-                client!,
-              );
-              io.log(
-                `invoke ${result.verdict} dispatched=${result.dispatched} ${result.sideEffect} (does not run the write)`,
-              );
-            } else if (action.type === "shrink-build" || action.type === "shrink-read") {
-              const row = selected(last.sessions);
-              if (!row) return;
-              const to = action.type === "shrink-build" ? "BUILD" : "READ";
-              pending = { kind: "shrink", id: row.id, to };
-              io.log(`shrink ${row.id} → ${to}? press y to confirm, any other key to cancel`);
-              return;
-            } else if (action.type === "orr-run") {
-              const producer = ORR_PRODUCERS[orrProducerIdx % ORR_PRODUCERS.length]!;
-              orrProducerIdx += 1;
-              io.log(`orr producer=${producer}`);
-              const result = deskOrr(config.cwd, producer);
-              orrSummary = {
-                overall: result.report.overall,
-                disposition: result.report.disposition,
-                path: result.reportJsonPath ?? result.reportMdPath,
-              };
-            } else if (action.type === "passport") {
-              const row = selected(last.agents);
-              if (!row) {
-                io.log("Select an agent (pane 3) then press t");
-                return;
-              }
-              const passport = await client!.getPassport(row.id);
-              io.log(JSON.stringify(passport, null, 2));
-            } else if (action.type === "decide-approve" || action.type === "decide-reject") {
-              const row = selected(last.approvals);
-              if (!row) return;
-              const decision = action.type === "decide-approve" ? "approve" : "reject";
-              pending = { kind: "decide", id: row.id, decision };
-              io.log(
-                `${decision} ${row.id}? press y to confirm (needs kya.approve). Any other key cancels.`,
-              );
-              return;
-            }
-          } catch (err: unknown) {
-            if (err instanceof AuthRequiredError) io.error(err.message);
-            else io.error(err instanceof Error ? err.message : String(err));
+            const result = deskOrr(config.cwd);
+            orrSummary = {
+              overall: result.report.overall,
+              disposition: result.report.disposition,
+              path: result.reportJsonPath ?? result.reportMdPath,
+            };
+            io.log("orr producer=sa.first_party (Scorecard: use CLI --producer openssf.scorecard)");
           } finally {
-            await paint();
+            busy = false;
           }
-        })();
+        } else if (action.type === "passport") {
+          const row = selected(last.agents);
+          if (!row) {
+            io.log("Select an agent (pane 3) then press t");
+            return;
+          }
+          busy = true;
+          void (async () => {
+            try {
+              if (!stillLive()) return;
+              const passport = await client!.getPassport(row.id);
+              const dump = JSON.stringify(passport, null, 2);
+              assertNoSecrets("", dump);
+              io.log(dump);
+            } catch (err: unknown) {
+              if (err instanceof AuthRequiredError) io.error(err.message);
+              else io.error(err instanceof Error ? err.message : String(err));
+            } finally {
+              busy = false;
+              await paint();
+            }
+          })();
+          return;
+        } else if (action.type === "decide-approve" || action.type === "decide-reject") {
+          const row = selected(last.approvals);
+          if (!row) return;
+          const decision = action.type === "decide-approve" ? "approve" : "reject";
+          if (isMachineApiKey(config.apiKey ?? "")) {
+            io.log(
+              `Machine API keys cannot ${decision} from the TUI. Run: kya ${decision} --id ${row.id}`,
+            );
+            return;
+          }
+          arm({
+            kind: "decide",
+            id: row.id,
+            decision,
+            prompt: `${decision} ${row.id}? (needs kya.approve JWT scope)`,
+          });
+          return;
+        } else {
+          runPaint();
+          return;
+        }
+        runPaint();
         return;
       } else if (action.type === "orr-run") {
-        const producer = ORR_PRODUCERS[orrProducerIdx % ORR_PRODUCERS.length]!;
-        orrProducerIdx += 1;
-        io.log(`orr producer=${producer}`);
-        const result = deskOrr(config.cwd, producer);
+        const result = deskOrr(config.cwd);
         orrSummary = {
           overall: result.report.overall,
           disposition: result.report.disposition,
           path: result.reportJsonPath ?? result.reportMdPath,
         };
+        io.log("orr producer=sa.first_party");
       } else if (
         action.type === "wrap" ||
         action.type === "kill" ||
@@ -385,6 +479,11 @@ export async function runDash(
 
     const cleanup = () => {
       stopRefresh();
+      try {
+        stdoutFd.write("\x1b[?2004l");
+      } catch {
+        /* ignore */
+      }
       stdinFd.setRawMode?.(false);
       stdinFd.off("keypress", onKey);
       stdinFd.pause();
