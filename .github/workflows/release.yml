@@ -1,9 +1,9 @@
 name: release-npm
 
-# Dual publish:
-# 1) npm @shield-agent/kya (this workflow)
-# 2) MCP Registry submit using server.json + package.json mcpName after npm is live
-# Requires repo secret NPM_TOKEN with publish access to @shield-agent scope.
+# npm for @shield-agent/kya is published from the monorepo via tag kya-v*
+# (The-Pixel-Boys/shield-agent). This public repo keeps the workflow for
+# workflow_dispatch dry-runs and optional publish when NPM_TOKEN is set.
+# Tag pushes without NPM_TOKEN must NOT fail main/tag status — skip publish.
 
 on:
   push:
@@ -53,7 +53,13 @@ jobs:
           grep -q REQUIRE_APPROVE /tmp/ra.txt
       - run: pnpm pack --pack-destination /tmp
       - name: Publish to npm
-        if: ${{ github.event_name == 'push' || inputs.dry_run == 'false' }}
+        if: ${{ (github.event_name == 'push' || inputs.dry_run == 'false') && secrets.NPM_TOKEN != '' }}
         run: pnpm publish --no-git-checks --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Skip npm (monorepo is source of truth)
+        if: ${{ (github.event_name == 'push' || inputs.dry_run == 'false') && secrets.NPM_TOKEN == '' }}
+        run: |
+          echo "NPM_TOKEN is not set on The-Pixel-Boys/shield-kya."
+          echo "Publish @shield-agent/kya from monorepo tag kya-v* on The-Pixel-Boys/shield-agent."
+          echo "Skipping npm publish so this tag/main check stays green."
