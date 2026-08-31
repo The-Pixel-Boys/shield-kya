@@ -11,7 +11,7 @@
 # --- Local stdio (OSS) ---
 [mcp_servers.shield-kya]
 command = "npx"
-args = ["--no-install", "@shield-agent/kya@0.1.21", "serve-mcp", "--stdio"]
+args = ["--no-install", "@shield-agent/kya@0.1.22", "serve-mcp", "--stdio"]
 startup_timeout_sec = 20
 env_vars = ["KYA_BASE_URL", "KYA_API_KEY", "KYA_HOST", "KYA_AGENT_ID"]
 

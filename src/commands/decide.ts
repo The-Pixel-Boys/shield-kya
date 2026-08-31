@@ -1,5 +1,5 @@
 import type { ResolvedConfig } from "../config.js";
-import { KyaHttpClient, type ApprovalResponse } from "../client.js";
+import { isMachineApiKey, KyaHttpClient, type ApprovalResponse } from "../client.js";
 import { UsageError } from "../errors.js";
 import type { ParsedArgs } from "../parse-args.js";
 import { flagString } from "../parse-args.js";
@@ -12,6 +12,12 @@ export async function runDecide(
   const id = input.id.trim();
   if (!id) {
     throw new UsageError(`${input.decision} requires --id <approval-id>`);
+  }
+  const key = config.apiKey ?? "";
+  if (isMachineApiKey(key)) {
+    throw new UsageError(
+      `Machine API keys (sk_*) cannot ${input.decision}. Use a JWT with kya.approve (or console).`,
+    );
   }
   const http =
     client ??

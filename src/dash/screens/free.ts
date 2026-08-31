@@ -23,7 +23,8 @@ export function homeBody(input: {
     "",
     "2 policy (e force-eval / w wrap)   3 agents (k kill, confirm y)",
     "4 approvals (i invoke)             5 sessions (b/R shrink, confirm y)",
-    "6 orr  ·  7 mcp  ·  8 sandbox  ·  p auto-refresh  ·  t passport  ·  O offline",
+    "6 orr (first_party)  ·  7 mcp  ·  8 sandbox  ·  p refresh  ·  t passport  ·  O offline",
+    "a/x decide needs JWT (sk_* refused)  ·  y confirms kill/shrink/invoke/wrap/decide",
   ];
   if (input.lastEval) {
     lines.push(

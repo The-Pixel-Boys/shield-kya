@@ -7,12 +7,12 @@
     "url": "https://github.com/The-Pixel-Boys/shield-kya",
     "source": "github"
   },
-  "version": "0.1.21",
+  "version": "0.1.22",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@shield-agent/kya",
-      "version": "0.1.21",
+      "version": "0.1.22",
       "transport": {
         "type": "stdio"
       },
