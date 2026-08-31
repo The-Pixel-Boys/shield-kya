@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import type { OrrCoverageGap, OrrFinding, OrrSeverity } from "../commands/orr.js";
+import { sanitizedScorecardEnv } from "./scorecard.js";
 
 export const AGENTSHIELD_PRODUCER_ID = "harness.agentshield";
 
@@ -262,7 +263,7 @@ function defaultAgentShieldSpawn(
     maxBuffer: options.maxBuffer,
     windowsHide: options.windowsHide,
     shell: false,
-    env: process.env,
+    env: sanitizedScorecardEnv(process.env),
   });
 }
 
