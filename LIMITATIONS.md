@@ -6,8 +6,8 @@
 - If a host never wraps tools, session shrink cannot stop it. Spawn without a control plane cannot be gated.
 - `wrap` evaluates (and may open a pending ticket). It never executes the side effect. Offline wrap does not call the approval API.
 - `invoke` authorizes on a live plane after Allow or APPROVED. It never runs the customer write in the CLI. There is no `--offline` invoke.
-- The TUI (`dash`) is observational. Keys `a` / `x` print the CLI decide hint; they do not APPROVE or REJECT.
-- Human decide is `kya approve --id` / `kya reject --id` against `POST /api/v1/kya/approvals/{id}/approve|reject` (`kya.approve` scope).
+- The TUI (`dash`) can `a`/`x` decide only after `y` confirm, and only with a JWT that has `kya.approve`. Machine `sk_*` keys are refused (print the CLI hint instead).
+- Human decide is also `kya approve --id` / `kya reject --id` against `POST /api/v1/kya/approvals/{id}/approve|reject` (`kya.approve` scope).
 - Shield KYA evaluate/approve is the only policy decision point (`ALLOW` / `DENY` / `REQUIRE_APPROVE`). Scanners, `--scorecard`, `harness.agentshield`, and the ORR CLI write evidence. They never ALLOW a side effect. AgentShield is opt-in (`--producer harness.agentshield` or `--agentshield-json`). The CLI never passes `--fix`, never starts MiniClaw, and never installs `ecc-agentshield`.
 - Dialog safety belongs in a guardrails product.
 - Multi-language in-process runtimes are out of scope.
