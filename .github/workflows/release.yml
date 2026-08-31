@@ -3,7 +3,8 @@ name: release-npm
 # npm for @shield-agent/kya is published from the monorepo via tag kya-v*
 # (The-Pixel-Boys/shield-agent). This public repo keeps the workflow for
 # workflow_dispatch dry-runs and optional publish when NPM_TOKEN is set.
-# Tag pushes without NPM_TOKEN must NOT fail main/tag status — skip publish.
+# Tag pushes without NPM_TOKEN must NOT fail status — skip publish in-shell.
+# (Do not use secrets.* in if: — that invalidates the workflow file.)
 
 on:
   push:
@@ -52,14 +53,16 @@ jobs:
           test "$ra" -eq 4
           grep -q REQUIRE_APPROVE /tmp/ra.txt
       - run: pnpm pack --pack-destination /tmp
-      - name: Publish to npm
-        if: ${{ (github.event_name == 'push' || inputs.dry_run == 'false') && secrets.NPM_TOKEN != '' }}
-        run: pnpm publish --no-git-checks --access public
+      - name: Publish to npm (or skip)
+        if: ${{ github.event_name == 'push' || inputs.dry_run == 'false' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: Skip npm (monorepo is source of truth)
-        if: ${{ (github.event_name == 'push' || inputs.dry_run == 'false') && secrets.NPM_TOKEN == '' }}
         run: |
-          echo "NPM_TOKEN is not set on The-Pixel-Boys/shield-kya."
-          echo "Publish @shield-agent/kya from monorepo tag kya-v* on The-Pixel-Boys/shield-agent."
-          echo "Skipping npm publish so this tag/main check stays green."
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "NPM_TOKEN is not set on The-Pixel-Boys/shield-kya."
+            echo "Publish @shield-agent/kya from monorepo tag kya-v* on The-Pixel-Boys/shield-agent."
+            echo "Skipping npm publish so this check stays green."
+            exit 0
+          fi
+          pnpm publish --no-git-checks --access public
