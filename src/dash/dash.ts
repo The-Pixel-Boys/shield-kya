@@ -19,8 +19,10 @@ import {
   orrBody,
   policyLiveBody,
   policyOfflineBody,
+  sandboxBody,
   sessionsLiveBody,
 } from "./screens/free.js";
+import { loadSandboxState } from "../sandbox/runtime.js";
 import {
   casesBody,
   dashboardBody,
@@ -46,6 +48,10 @@ export interface DashOptions {
   readonly fetchPlaneEntitlement?: () => Promise<{ plan?: string; features?: string[] }>;
   readonly cursor?: number;
   readonly orrSummary?: { overall?: string; disposition?: string; path?: string };
+  /** When set, live policy samples use this cache (avoids evaluate-on-every-paint). */
+  readonly policyCache?: import("./policy-cache.js").PolicySampleCache;
+  /** Force a fresh live policy sample (ignores TTL). */
+  readonly forcePolicyEval?: boolean;
 }
 
 export interface DashSnapshot {
@@ -69,7 +75,7 @@ export async function renderDash(
   const offline = options.offline || config.offline;
   const pane = options.pane;
   const hasKey = Boolean(config.apiKey && config.apiKey.trim());
-  const packed = await bodyFor(config, { ...options, offline }, ent, pane, hasKey);
+  const packed = await bodyFor(config, { ...options, offline }, ent, pane, hasKey, env);
 
   const status: StatusStrip = {
     plan: ent.plan === "enterprise" ? "ENTERPRISE" : "FREE",
@@ -117,6 +123,7 @@ async function bodyFor(
   ent: Entitlement,
   pane: DashPane,
   hasKey: boolean,
+  env: NodeJS.ProcessEnv,
 ): Promise<PackedBody> {
   if (!paneAllowed(ent, pane)) return pack(lockedPane(pane));
 
@@ -137,7 +144,17 @@ async function bodyFor(
     case "policy":
       if (options.offline) return pack(policyOfflineBody());
       if (!live) return pack(needsPlaneBody("policy"));
-      return pack(policyLiveBody(await sampleLiveEvals(options.client!)));
+      {
+        const force = Boolean(options.forcePolicyEval);
+        if (options.policyCache) {
+          const { evals, fromCache } = await options.policyCache.get(
+            options.client!,
+            force,
+          );
+          return pack(policyLiveBody(evals, fromCache));
+        }
+        return pack(policyLiveBody(await sampleLiveEvals(options.client!), false));
+      }
     case "agents": {
       if (!live) return pack(agentsOfflineBody(config.agentId));
       const agents = await loadAgents(options.client!);
@@ -160,6 +177,15 @@ async function bodyFor(
       return pack(orrBody(options.orrSummary));
     case "mcp":
       return pack(mcpBody({ host: config.host, hasApiKey: hasKey }));
+    case "sandbox": {
+      const backend = String(env.KYA_SANDBOX ?? "").trim();
+      const rows = loadSandboxState(config.cwd).map((r) => ({
+        sandboxId: r.sandboxId,
+        status: r.status,
+        backend: r.backend,
+      }));
+      return pack(sandboxBody({ backend, rows }));
+    }
     case "dashboard":
       if (!live) return pack(needsPlaneBody("dashboard"));
       return pack(dashboardBody(await loadDashboard(options.client!)));

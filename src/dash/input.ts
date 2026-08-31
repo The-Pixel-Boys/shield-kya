@@ -18,6 +18,11 @@ export interface KeyAction {
     | "orr-run"
     | "decide-approve"
     | "decide-reject"
+    | "force-policy-eval"
+    | "toggle-auto-refresh"
+    | "confirm-yes"
+    | "confirm-no"
+    | "passport"
     | "noop";
   readonly pane?: DashPane;
 }
@@ -30,6 +35,7 @@ const DIGIT: Record<string, DashPane> = {
   "5": "sessions",
   "6": "orr",
   "7": "mcp",
+  "8": "sandbox",
 };
 
 const LETTER: Record<string, DashPane> = {
@@ -53,6 +59,11 @@ export function mapKey(raw: string): KeyAction {
   if (raw === "R") return { type: "shrink-read" };
   if (raw === "a") return { type: "decide-approve" };
   if (raw === "x") return { type: "decide-reject" };
+  if (raw === "e") return { type: "force-policy-eval" };
+  if (raw === "p") return { type: "toggle-auto-refresh" };
+  if (raw === "t") return { type: "passport" };
+  if (raw === "y") return { type: "confirm-yes" };
+  if (raw === "N") return { type: "confirm-no" };
   if (raw === "?" || raw === "h") return { type: "help" };
   if (raw === "j" || raw === "down") return { type: "down" };
   if (raw === "up") return { type: "up" };
