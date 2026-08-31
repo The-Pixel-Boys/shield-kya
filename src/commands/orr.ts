@@ -24,6 +24,12 @@ import {
   type AgentShieldSpawnFn,
 } from "../orr/agentshield.js";
 import {
+  SCORECARD_PRODUCER_ID,
+  ingestScorecardJson,
+  tryRunScorecardCli,
+  type ScorecardSpawnFn,
+} from "../orr/scorecard.js";
+import {
   buildShowback,
   parseUsageRecords,
   type ShowbackReport,
@@ -108,6 +114,8 @@ export interface OrrRunOptions {
   readonly usagePath?: string;
   /** Test seam. Production uses spawnSync("agentshield", ...). Never --fix. */
   readonly agentshieldSpawn?: AgentShieldSpawnFn;
+  /** Test seam. Production uses spawnSync("scorecard", ...) or SCORECARD_BIN. */
+  readonly scorecardSpawn?: ScorecardSpawnFn;
 }
 
 const CATEGORY_META: readonly { id: string; label: string }[] = [
@@ -209,8 +217,8 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
   const findings = [...runSaFirstPartyProbes(absPath)];
   const coverageGaps: OrrCoverageGap[] = [];
   const producersRequested = [...options.producers];
-  if (options.scorecardPath && !producersRequested.includes("openssf.scorecard")) {
-    producersRequested.push("openssf.scorecard");
+  if (options.scorecardPath && !producersRequested.includes(SCORECARD_PRODUCER_ID)) {
+    producersRequested.push(SCORECARD_PRODUCER_ID);
   }
   if (
     options.agentshieldJsonPath &&
@@ -219,8 +227,17 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
     producersRequested.push(AGENTSHIELD_PRODUCER_ID);
   }
 
-  if (options.scorecardPath) {
-    findings.push(...readScorecardEvidence(options.scorecardPath));
+  const scorecardRequested =
+    producersRequested.includes(SCORECARD_PRODUCER_ID) ||
+    Boolean(options.scorecardPath);
+  if (scorecardRequested) {
+    if (options.scorecardPath) {
+      findings.push(...readScorecardEvidence(options.scorecardPath));
+    } else {
+      const scResult = tryRunScorecardCli(absPath, options.scorecardSpawn);
+      if ("findings" in scResult) findings.push(...scResult.findings);
+      else coverageGaps.push(scResult.gap);
+    }
   }
 
   const agentShieldRequested =
@@ -240,18 +257,11 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
     for (const p of producersRequested) {
       if (p === "sa.first_party") continue;
       if (p === AGENTSHIELD_PRODUCER_ID) continue;
-      if (p === "openssf.scorecard") {
-        if (options.scorecardPath) continue;
-        coverageGaps.push({
-          adapter_id: p,
-          reason: "binary_not_found_or_not_run_in_o1",
-        });
-      } else {
-        coverageGaps.push({
-          adapter_id: p,
-          reason: "adapter_not_implemented_o1",
-        });
-      }
+      if (p === SCORECARD_PRODUCER_ID) continue;
+      coverageGaps.push({
+        adapter_id: p,
+        reason: "adapter_not_implemented_o1",
+      });
     }
   }
 
@@ -352,39 +362,7 @@ export function readScorecardEvidence(scorecardPath: string): OrrFinding[] {
       },
     ];
   }
-  const obj = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
-  const score = typeof obj.score === "number" ? obj.score : undefined;
-  const checks = Array.isArray(obj.checks) ? obj.checks : [];
-  const findings: OrrFinding[] = [
-    {
-      id: "sa.scorecard.ingested",
-      category: "enterprise_readiness",
-      severity: "info",
-      title: "Scorecard ingested as evidence",
-      detail:
-        score === undefined
-          ? "Scorecard dump loaded. Does not ALLOW side effects."
-          : `Scorecard score=${score} (evidence only — not a PEP).`,
-      evidence: abs,
-      source_tool: "openssf.scorecard",
-    },
-  ];
-  for (const raw of checks.slice(0, 24)) {
-    if (!raw || typeof raw !== "object") continue;
-    const check = raw as Record<string, unknown>;
-    const name = typeof check.name === "string" ? check.name : "check";
-    const checkScore = check.score;
-    findings.push({
-      id: `sa.scorecard.check.${name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`,
-      category: "enterprise_readiness",
-      severity: "info",
-      title: `Scorecard ${name}`,
-      detail: `score=${String(checkScore ?? "n/a")} — evidence only`,
-      evidence: abs,
-      source_tool: "openssf.scorecard",
-    });
-  }
-  return findings;
+  return ingestScorecardJson(parsed, abs);
 }
 
 /** SA first-party probes: evidence only; scanners never ALLOW. */

@@ -272,6 +272,69 @@ describe("orr run", () => {
     expect(JSON.stringify(result.report)).not.toMatch(/"verdict":"ALLOW"/);
   });
 
+  it("spawns scorecard CLI when producer requested without --scorecard file", () => {
+    const root = tmp();
+    writeFileSync(join(root, "README.md"), "# x\n");
+    const result = runOrr({
+      path: root,
+      out: join(root, "out"),
+      rubric: "0",
+      disableCategories: [],
+      formats: ["json"],
+      producers: ["sa.first_party", "openssf.scorecard"],
+      skipOptionalProducers: false,
+      quiet: true,
+      jsonStdout: false,
+      scorecardSpawn: () => ({
+        status: 0,
+        stdout: JSON.stringify({
+          score: 6.5,
+          checks: [{ name: "CI-Tests", score: 10 }],
+        }),
+        stderr: "",
+      }),
+    });
+    expect(
+      result.report.findings.some((f) => f.id === "sa.scorecard.ingested"),
+    ).toBe(true);
+    expect(
+      result.report.findings.some((f) => f.id === "sa.scorecard.check.ci_tests"),
+    ).toBe(true);
+    expect(
+      result.report.coverage_gaps.some((g) => g.adapter_id === "openssf.scorecard"),
+    ).toBe(false);
+    expect(JSON.stringify(result.report)).not.toMatch(/"verdict":"ALLOW"/);
+  });
+
+  it("records binary_not_found when scorecard CLI is missing", () => {
+    const root = tmp();
+    writeFileSync(join(root, "README.md"), "# x\n");
+    const result = runOrr({
+      path: root,
+      out: join(root, "out"),
+      rubric: "0",
+      disableCategories: [],
+      formats: ["json"],
+      producers: ["sa.first_party", "openssf.scorecard"],
+      skipOptionalProducers: false,
+      quiet: true,
+      jsonStdout: false,
+      scorecardSpawn: () => ({
+        status: null,
+        stdout: "",
+        stderr: "",
+        error: Object.assign(new Error("spawn scorecard ENOENT"), { code: "ENOENT" }),
+      }),
+    });
+    expect(
+      result.report.coverage_gaps.some(
+        (g) =>
+          g.adapter_id === "openssf.scorecard" && g.reason === "binary_not_found",
+      ),
+    ).toBe(true);
+    expect(result.exitCode).toBe(0);
+  });
+
   it("scores green-ish control plane when wrap/evaluate present", () => {
     const root = tmp();
     writeFileSync(
