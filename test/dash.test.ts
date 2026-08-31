@@ -41,8 +41,23 @@ describe("kya dash --once", () => {
     expect(out).toContain("pane=home");
     expect(out).not.toMatch(/npm_[A-Za-z0-9]{8,}/);
     expect(out).not.toMatch(/sk_live_/);
-    expect(out).toContain("licensed");
+    expect(out).toMatch(/hidden on FREE|licensed/i);
   });
+
+  it("sandbox pane is free and shows KYA_SANDBOX hint", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "kya-dash-"));
+    dirs.push(cwd);
+    const { io, logs } = captureIo();
+    const code = await runCli(
+      ["dash", "--once", "--offline", "--pane", "sandbox"],
+      io,
+      {},
+      cwd,
+    );
+    expect(code).toBe(0);
+    expect(logs.join("\n")).toMatch(/KYA_SANDBOX|Sandbox/);
+  });
+
 
   it("policy offline shows DENY then REQUIRE_APPROVE", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "kya-dash-"));

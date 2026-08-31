@@ -24,4 +24,15 @@ describe("mapKey", () => {
     expect(mapKey("x").type).toBe("decide-reject");
     expect(mapKey("j").type).toBe("down");
   });
+
+  it("maps force-eval, auto-refresh, passport, sandbox digit, and confirm keys", () => {
+    expect(mapKey("e").type).toBe("force-policy-eval");
+    expect(mapKey("p").type).toBe("toggle-auto-refresh");
+    expect(mapKey("t").type).toBe("passport");
+    expect(mapKey("8")).toEqual({ type: "pane", pane: "sandbox" });
+    expect(mapKey("y").type).toBe("confirm-yes");
+    expect(mapKey("N").type).toBe("confirm-no");
+  });
 });
+
+

@@ -51,7 +51,8 @@ export function enterpriseNavLine(ent: Entitlement, active: DashPane): string {
         .join("  ")}`,
     );
   }
-  return clip("ent:  dashboard  cases  metrics  edge  settings  (licensed)");
+  // Personal FREE desk: collapse licensed chrome (still unlockable via env/license).
+  return clip("ent:  (hidden on FREE — set KYA_DASH_PLAN=enterprise to unlock)");
 }
 
 export function lockedPane(pane: DashPane): string[] {
@@ -75,7 +76,9 @@ export function frame(status: StatusStrip, ent: Entitlement, body: readonly stri
   ];
   const foot = [
     hline(),
-    clip("1-7 panes  j/k move  w wrap  i invoke  b shrink  o orr  O offline  q quit"),
+    clip(
+      "1-8 panes  j/k  e eval  p refresh  w wrap  i invoke  k/b confirm  o orr  t passport  O offline  q",
+    ),
   ];
   return [...head, ...body.map((l) => clip(l)), ...foot].join("\n");
 }
