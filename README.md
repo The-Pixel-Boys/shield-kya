@@ -180,10 +180,15 @@ pnpm build
 
 - [Install hub](https://shield-agent.com/install)
 - [How KYA works](https://shield-agent.com/how-kya-works)
+- [OTLP metrics (OSS + hosted)](docs/otlp.md)
 - See also `LIMITATIONS.md` in this repo
 
 ## OTLP (optional)
 
-Set `KYA_OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_ENDPOINT`) to export thin CLI evaluate latency metrics to your Collector. Tags are low-cardinality (`verdict`, `host`) only — no tool args or API keys.
+Opt-in. Default off.
 
-Hosted plane exports richer Micrometer gauges/timers when `KYA_OTLP_ENABLED=true`. See `docs/ops/kya-otlp-grafana.md` and `docs/ops/kya-otlp-datadog.md` in the monorepo.
+**OSS CLI:** set `KYA_OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_ENDPOINT`) to export thin evaluate latency (`kya.client.evaluate.latency`) with tags `verdict` and `host` only. No tool args or API keys.
+
+**Hosted plane:** richer Micrometer gauges and timers when `KYA_OTLP_ENABLED=true`.
+
+Full env, Grafana/Datadog notes, forbid list, and a Collector sample: [`docs/otlp.md`](docs/otlp.md).

@@ -1,0 +1,40 @@
+# Sample OpenTelemetry Collector config for Shield KYA (OSS CLI + hosted).
+# Credentials via env only. Never commit API keys.
+#
+# OSS CLI:  KYA_OTLP_ENDPOINT=http://collector:4318
+# Hosted:   KYA_OTLP_ENABLED=true
+#           OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://collector:4318/v1/metrics
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch: {}
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+exporters:
+  # Grafana Cloud OTLP (set GRAFANA_OTLP_ENDPOINT + GRAFANA_CLOUD_TOKEN)
+  otlphttp/grafana:
+    endpoint: ${env:GRAFANA_OTLP_ENDPOINT}
+    headers:
+      Authorization: "Basic ${env:GRAFANA_CLOUD_TOKEN}"
+
+  # Datadog (Collector exporter; set DD_API_KEY + DD_SITE)
+  datadog:
+    api:
+      key: ${env:DD_API_KEY}
+      site: ${env:DD_SITE}
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/grafana, datadog]

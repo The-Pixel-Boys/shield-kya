@@ -14,6 +14,7 @@
 - Use OPA if you need a general policy language.
 - Multi-tenant density, private registries, ORR board ops, pin, and support are separate from the solo `npx` path.
 - Growth counts are observe metrics (principals, evaluates, approvals).
+- OTLP metrics are opt-in and off by default. OSS CLI is thin (evaluate latency only). Hosted is richer Micrometer export. Neither path is a policy decision. See `docs/otlp.md`.
 
 - Showback USD is an estimate from a checked-in published rate table. Unknown models report tokens only. ORR / metrics never ALLOW, DENY, or kill on spend.
 - `--usage` must sit inside `--path`. Usage rows drop secret-shaped strings and labels over 64/128 chars. Hosted ingest is merchant-scoped and length-capped the same way.
