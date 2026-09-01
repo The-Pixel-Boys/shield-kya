@@ -82,7 +82,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.1.22", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.1.23", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -109,7 +109,7 @@ npx @shield-agent/kya reject --id <approval-id>
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.1.22 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.1.23 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -120,7 +120,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.1.22 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.1.23 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -181,3 +181,9 @@ pnpm build
 - [Install hub](https://shield-agent.com/install)
 - [How KYA works](https://shield-agent.com/how-kya-works)
 - See also `LIMITATIONS.md` in this repo
+
+## OTLP (optional)
+
+Set `KYA_OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_ENDPOINT`) to export thin CLI evaluate latency metrics to your Collector. Tags are low-cardinality (`verdict`, `host`) only — no tool args or API keys.
+
+Hosted plane exports richer Micrometer gauges/timers when `KYA_OTLP_ENABLED=true`. See `docs/ops/kya-otlp-grafana.md` and `docs/ops/kya-otlp-datadog.md` in the monorepo.
