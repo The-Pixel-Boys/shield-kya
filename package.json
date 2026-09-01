@@ -1,6 +1,6 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "description": "Know Your Agent light CLI + local MCP gate (provider-agnostic, zero vertical packs required).",
   "license": "MIT",
   "type": "module",
@@ -79,5 +79,11 @@
     "shield-agent",
     "cli",
     "mcp-server"
-  ]
+  ],
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.221.0",
+    "@opentelemetry/resources": "^2.10.0",
+    "@opentelemetry/sdk-metrics": "^2.10.0"
+  }
 }
