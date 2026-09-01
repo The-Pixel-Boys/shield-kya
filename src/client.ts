@@ -4,6 +4,7 @@ import { computeArgsHash } from "./hash.js";
 import { findSampleTool } from "./sample-tools.js";
 import { CLI_VERSION } from "./version.js";
 import { parseUsageRecords } from "./showback/cost-per-task.js";
+import { ensureOtlpMetrics, otlpEnabled, recordClientEvaluate } from "./otel.js";
 
 export type FetchLike = typeof fetch;
 
@@ -212,6 +213,8 @@ export class KyaHttpClient {
         agentId: this.agentId,
       },
     };
+    if (otlpEnabled()) ensureOtlpMetrics();
+    const started = Date.now();
     const response = await this.request<PolicyEvaluateResponse>(
       "/api/v1/kya/policy/evaluate",
       {
@@ -219,7 +222,13 @@ export class KyaHttpClient {
         body,
       },
     );
-    return requireVerdict(response);
+    const verified = requireVerdict(response);
+    recordClientEvaluate({
+      verdict: verified.verdict,
+      host: body.env?.host ?? this.host,
+      latencyMs: Date.now() - started,
+    });
+    return verified;
   }
 
   async ingestSession(req: SessionIngestRequest): Promise<SessionIngestResponse> {

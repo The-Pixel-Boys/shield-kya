@@ -9,7 +9,7 @@ describe("host connectors packaging", () => {
     const toml = readFileSync(join(root, "openai/codex.config.example.toml"), "utf8");
     expect(toml).toContain('command = "npx"');
     expect(toml).toContain("--no-install");
-    expect(toml).toContain("@shield-agent/kya@0.1.22");
+    expect(toml).toContain("@shield-agent/kya@0.1.23");
     expect(toml).not.toContain('"-y"');
     expect(toml).not.toMatch(/args = \[[^\]]*"-y"/);
     expect(toml).toContain("env_vars");
@@ -39,7 +39,7 @@ describe("host connectors packaging", () => {
     expect(local.mcpServers["shield-kya"].command).toBe("npx");
     expect(local.mcpServers["shield-kya"].args).toEqual([
       "--no-install",
-      "@shield-agent/kya@0.1.22",
+      "@shield-agent/kya@0.1.23",
       "serve-mcp",
       "--stdio",
     ]);
