@@ -84,6 +84,7 @@ Commands:
   serve-mcp         Local MCP gate (HTTP default; --stdio for hosts)
   orr run           Read-only ORR board (reporting only — not a second PEP)
                     Optional: --producer harness.agentshield [--agentshield-json <file>]
+                    Optional: --producer harness.agentseal [--agentseal-json <file>]
   dash              Terminal desk (FREE panes; actions on a TTY, --once for CI)
   sandbox           Opt-in Firecracker wrap (spawn|exec|kill|status). Not MCP.
                     Requires KYA_SANDBOX=mock|firecracker. MCP still never execs.
@@ -108,6 +109,7 @@ Examples:
   npx @shield-agent/kya serve-mcp --stdio
   npx @shield-agent/kya orr run --path . --out ./orr-report --skip-optional-producers
   npx @shield-agent/kya orr run --path . --producer harness.agentshield --agentshield-json ./agentshield-report.json
+  npx @shield-agent/kya orr run --path . --producer harness.agentseal --agentseal-json ./agentseal-report.json
   npx @shield-agent/kya wrap --offline --tool-id org.sample.data.write --irreversible
   npx @shield-agent/kya invoke --tool-id org.sample.data.write --args-hash <hash>
   npx @shield-agent/kya approve --id <approval-id>
