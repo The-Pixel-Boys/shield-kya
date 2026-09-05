@@ -1,66 +1,17 @@
 /**
- * Optional ORR producer for getagentseal/agentseal (CLI `agentseal`).
- * Evidence only — never a PEP. Never vendors AgentSeal (FSL-1.1); operator installs the binary.
- * Never ALLOW from trust score. Never spawn their `shield` watcher as our product surface.
+ * Optional ORR producer: ingest a guard / SARIF JSON report as evidence.
+ * Evidence only — never a PEP. No third-party product names on the CLI surface.
+ * Ingest only (no external binary spawn).
  */
 
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import type { OrrCoverageGap, OrrFinding, OrrSeverity } from "../commands/orr.js";
+import type { OrrFinding, OrrSeverity } from "../commands/orr.js";
 import { redactEvidence } from "./agentshield.js";
-import { sanitizedScorecardEnv } from "./scorecard.js";
 
-export const AGENTSEAL_PRODUCER_ID = "harness.agentseal";
+export const GUARD_REPORT_PRODUCER_ID = "harness.guard_report";
 
-export const FORBIDDEN_AGENTSEAL_SPAWN_TOKENS = [
-  "shield", // their desktop watcher — name collision; not our product
-  "--fix",
-  "npx",
-  "-y",
-  "scan-mcp", // operator runs scan-mcp themselves; ORR only ingests JSON/SARIF
-] as const;
-
-export interface AgentSealSpawnResult {
-  readonly status: number | null;
-  readonly stdout: string | Buffer;
-  readonly stderr: string | Buffer;
-  readonly error?: NodeJS.ErrnoException;
-}
-
-export type AgentSealSpawnFn = (
-  command: string,
-  args: readonly string[],
-  options: {
-    encoding: "utf8";
-    timeout: number;
-    maxBuffer: number;
-    windowsHide: boolean;
-  },
-) => AgentSealSpawnResult;
-
-/** Spawn only `agentseal guard`. scan-mcp is operator-run → `--agentseal-json`. */
-export function buildAgentSealArgv(absPath: string): {
-  command: "agentseal";
-  args: readonly string[];
-} {
-  return {
-    command: "agentseal",
-    args: ["guard", "--output", "json", "--path", absPath],
-  };
-}
-
-/** Reject argv that would invoke forbidden tokens (defense in depth). */
-export function assertSafeAgentSealArgv(args: readonly string[]): void {
-  const lower = args.map((a) => a.toLowerCase());
-  for (const tok of FORBIDDEN_AGENTSEAL_SPAWN_TOKENS) {
-    if (lower.includes(tok.toLowerCase())) {
-      throw new Error(`forbidden agentseal spawn token: ${tok}`);
-    }
-  }
-}
-
-export function mapAgentSealFinding(raw: unknown): OrrFinding | null {
+export function mapGuardReportFinding(raw: unknown): OrrFinding | null {
   if (!raw || typeof raw !== "object") return null;
   const rec = raw as Record<string, unknown>;
 
@@ -103,15 +54,15 @@ export function mapAgentSealFinding(raw: unknown): OrrFinding | null {
     title: redactEvidence(title),
     detail: redactEvidence(description || title),
     evidence: redactEvidence(
-      evidenceRaw || `${AGENTSEAL_PRODUCER_ID}:${idRaw || title}`,
+      evidenceRaw || `${GUARD_REPORT_PRODUCER_ID}:${idRaw || title}`,
     ),
-    source_tool: AGENTSEAL_PRODUCER_ID,
+    source_tool: GUARD_REPORT_PRODUCER_ID,
   };
 }
 
-export function ingestAgentSealReport(parsed: unknown): OrrFinding[] {
+export function ingestGuardReport(parsed: unknown): OrrFinding[] {
   const mapped = collectRawFindings(parsed)
-    .map(mapAgentSealFinding)
+    .map(mapGuardReportFinding)
     .filter((f): f is OrrFinding => f !== null);
 
   const trust =
@@ -126,30 +77,30 @@ export function ingestAgentSealReport(parsed: unknown): OrrFinding[] {
 
   return [
     {
-      id: "harness.agentseal.ingested",
+      id: "harness.guard_report.ingested",
       category: "engineering_craft",
       severity: "info",
-      title: "AgentSeal report ingested as evidence",
+      title: "Guard report ingested as evidence",
       detail: `${mapped.length} finding(s) mapped. Evidence only — not a PEP.${trustNote}`,
-      evidence: "harness.agentseal JSON/SARIF ingest",
-      source_tool: AGENTSEAL_PRODUCER_ID,
+      evidence: "harness.guard_report JSON/SARIF ingest",
+      source_tool: GUARD_REPORT_PRODUCER_ID,
     },
     ...mapped,
   ];
 }
 
-export function readAgentSealJson(path: string): OrrFinding[] {
+export function readGuardReportJson(path: string): OrrFinding[] {
   const abs = resolve(path);
   if (!existsSync(abs) || !statSync(abs).isFile()) {
     return [
       {
-        id: "harness.agentseal.missing",
+        id: "harness.guard_report.missing",
         category: "engineering_craft",
         severity: "info",
-        title: "AgentSeal JSON not found",
+        title: "Guard report JSON not found",
         detail: `${path} was requested as an optional producer. Evidence only — not a PEP.`,
         evidence: abs,
-        source_tool: AGENTSEAL_PRODUCER_ID,
+        source_tool: GUARD_REPORT_PRODUCER_ID,
       },
     ];
   }
@@ -159,78 +110,17 @@ export function readAgentSealJson(path: string): OrrFinding[] {
   } catch {
     return [
       {
-        id: "harness.agentseal.unreadable",
+        id: "harness.guard_report.unreadable",
         category: "engineering_craft",
         severity: "low",
-        title: "AgentSeal JSON unreadable",
-        detail: "Could not parse --agentseal-json file. ORR stays observational.",
+        title: "Guard report JSON unreadable",
+        detail: "Could not parse --guard-json file. ORR stays observational.",
         evidence: abs,
-        source_tool: AGENTSEAL_PRODUCER_ID,
+        source_tool: GUARD_REPORT_PRODUCER_ID,
       },
     ];
   }
-  return ingestAgentSealReport(parsed);
-}
-
-export function tryRunAgentSealCli(
-  targetPath: string,
-  spawn?: AgentSealSpawnFn,
-): { findings: OrrFinding[] } | { gap: OrrCoverageGap } {
-  const run = spawn ?? defaultAgentSealSpawn;
-  const abs = resolve(targetPath);
-  const { command, args } = buildAgentSealArgv(abs);
-  try {
-    assertSafeAgentSealArgv(args);
-  } catch {
-    return { gap: { adapter_id: AGENTSEAL_PRODUCER_ID, reason: "error_non_fatal" } };
-  }
-  let result: AgentSealSpawnResult;
-  try {
-    result = run(command, args, {
-      encoding: "utf8",
-      timeout: 120_000,
-      maxBuffer: 8 * 1024 * 1024,
-      windowsHide: true,
-    });
-  } catch (err) {
-    const code =
-      err && typeof err === "object" && "code" in err
-        ? String((err as { code?: unknown }).code)
-        : "";
-    if (code === "ENOENT") {
-      return { gap: { adapter_id: AGENTSEAL_PRODUCER_ID, reason: "binary_not_found" } };
-    }
-    return { gap: { adapter_id: AGENTSEAL_PRODUCER_ID, reason: "error_non_fatal" } };
-  }
-  if (result.error?.code === "ENOENT") {
-    return { gap: { adapter_id: AGENTSEAL_PRODUCER_ID, reason: "binary_not_found" } };
-  }
-  const stdout = bufferToString(result.stdout);
-  const parsed = tryParseJson(stdout);
-  if (parsed === undefined) {
-    return { gap: { adapter_id: AGENTSEAL_PRODUCER_ID, reason: "error_non_fatal" } };
-  }
-  return { findings: ingestAgentSealReport(parsed) };
-}
-
-function defaultAgentSealSpawn(
-  command: string,
-  args: readonly string[],
-  options: {
-    encoding: "utf8";
-    timeout: number;
-    maxBuffer: number;
-    windowsHide: boolean;
-  },
-): AgentSealSpawnResult {
-  return spawnSync(command, [...args], {
-    encoding: options.encoding,
-    timeout: options.timeout,
-    maxBuffer: options.maxBuffer,
-    windowsHide: options.windowsHide,
-    shell: false,
-    env: sanitizedScorecardEnv(process.env),
-  });
+  return ingestGuardReport(parsed);
 }
 
 function collectRawFindings(parsed: unknown): unknown[] {
@@ -241,7 +131,6 @@ function collectRawFindings(parsed: unknown): unknown[] {
   if (Array.isArray(obj.issues)) return obj.issues;
   if (Array.isArray(obj.results)) return obj.results;
 
-  // SARIF 2.1
   if (Array.isArray(obj.runs)) {
     const out: unknown[] = [];
     for (const run of obj.runs) {
@@ -297,7 +186,6 @@ function mapOrrSeverity(severityRaw: string, categoryRaw: string): OrrSeverity {
   switch (severityRaw.toLowerCase()) {
     case "critical":
     case "error":
-      return "high";
     case "high":
       return "high";
     case "medium":
@@ -320,21 +208,6 @@ function stableFindingId(base: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  if (slug.startsWith("harness.agentseal.")) return slug;
-  return `${AGENTSEAL_PRODUCER_ID}.${slug || "finding"}`;
-}
-
-function bufferToString(value: string | Buffer): string {
-  if (typeof value === "string") return value;
-  return Buffer.isBuffer(value) ? value.toString("utf8") : "";
-}
-
-function tryParseJson(text: string): unknown | undefined {
-  const trimmed = text.trim();
-  if (!trimmed) return undefined;
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return undefined;
-  }
+  if (slug.startsWith("harness.guard_report.")) return slug;
+  return `${GUARD_REPORT_PRODUCER_ID}.${slug || "finding"}`;
 }
