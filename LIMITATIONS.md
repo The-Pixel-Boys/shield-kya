@@ -9,6 +9,7 @@
 - The TUI (`dash`) can `a`/`x` decide only after `y` confirm, and only with a JWT that has `kya.approve`. Machine `sk_*` keys are refused (print the CLI hint instead).
 - Human decide is also `kya approve --id` / `kya reject --id` against `POST /api/v1/kya/approvals/{id}/approve|reject` (`kya.approve` scope).
 - Shield KYA evaluate/approve is the only policy decision point (`ALLOW` / `DENY` / `REQUIRE_APPROVE`). Scanners, `--scorecard`, `harness.agentshield`, and the ORR CLI write evidence. They never ALLOW a side effect. AgentShield is opt-in (`--producer harness.agentshield` or `--agentshield-json`). Trust scores never authorize writes. The CLI never passes `--fix`, never starts MiniClaw, and never installs `ecc-agentshield`.
+- OWASP MCP Governance / MCP Top 10 alignment is documented in `docs/owasp-mcp-governance.md`. That guide is not a certificate. Org MCP inventory, Tier UI, and auto risk score are hosted roadmap (not in this CLI).
 - Dialog safety belongs in a guardrails product.
 - Multi-language in-process runtimes are out of scope.
 - Use OPA if you need a general policy language.
