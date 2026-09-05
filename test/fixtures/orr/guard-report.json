@@ -1,5 +1,5 @@
 {
-  "tool": "agentseal",
+  "tool": "guard",
   "command": "guard",
   "trust_score": 62,
   "findings": [
