@@ -76,11 +76,11 @@ Copy of OWASP rollout, mapped to Shield:
 
 ## Hosted inventory (shipping)
 
-Hosted console: `/app/kya/mcp-assets` — tenant MCP asset list, OWASP-style eight-factor auto score, suggested Tier 0–4. Hard gates: no owner / no logging block production status. This is inventory, not a second PEP.
+Hosted console: `/app/kya/mcp-assets` - tenant MCP asset list, OWASP-style eight-factor auto score, suggested Tier 0-4. Hard gates: no owner / no logging block production status. This is **inventory and classification**, not a second PEP. Writes still need evaluate / Hold.
 
 Sync roadmap (ToolHive + official MCP Registry): hosted `docs/dev/kya-mcp-registry-roadmap.md`.
 
-Still deferred: network discovery of shadow MCP; vendor intake questionnaires.
+Still deferred: network discovery of shadow MCP; vendor intake questionnaires; native Splunk/Sentinel apps (see trail SIEM recipe).
 
 ## Non-claims
 
