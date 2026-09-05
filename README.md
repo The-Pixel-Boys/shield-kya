@@ -183,6 +183,7 @@ pnpm build
 - [Install hub](https://shield-agent.com/install)
 - [How KYA works](https://shield-agent.com/how-kya-works)
 - [OTLP metrics (OSS + hosted)](docs/otlp.md)
+- [OWASP MCP governance map](docs/owasp-mcp-governance.md)
 - See also `LIMITATIONS.md` in this repo
 
 ## OTLP (optional)
