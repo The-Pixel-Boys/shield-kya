@@ -8,7 +8,7 @@
 - `invoke` authorizes on a live plane after Allow or APPROVED. It never runs the customer write in the CLI. There is no `--offline` invoke.
 - The TUI (`dash`) can `a`/`x` decide only after `y` confirm, and only with a JWT that has `kya.approve`. Machine `sk_*` keys are refused (print the CLI hint instead).
 - Human decide is also `kya approve --id` / `kya reject --id` against `POST /api/v1/kya/approvals/{id}/approve|reject` (`kya.approve` scope).
-- Shield KYA evaluate/approve is the only policy decision point (`ALLOW` / `DENY` / `REQUIRE_APPROVE`). Scanners, `--scorecard`, `harness.agentshield`, and the ORR CLI write evidence. They never ALLOW a side effect. AgentShield is opt-in (`--producer harness.agentshield` or `--agentshield-json`). The CLI never passes `--fix`, never starts MiniClaw, and never installs `ecc-agentshield`.
+- Shield KYA evaluate/approve is the only policy decision point (`ALLOW` / `DENY` / `REQUIRE_APPROVE`). Scanners, `--scorecard`, `harness.agentshield`, `harness.agentseal`, and the ORR CLI write evidence. They never ALLOW a side effect. AgentShield is opt-in (`--producer harness.agentshield` or `--agentshield-json`). AgentSeal is opt-in (`--producer harness.agentseal` or `--agentseal-json`); install AgentSeal yourself (FSL-1.1). Trust scores never authorize writes. The CLI never passes `--fix`, never starts MiniClaw, never installs `ecc-agentshield`, and never spawns AgentSeal's `shield` watcher.
 - Dialog safety belongs in a guardrails product.
 - Multi-language in-process runtimes are out of scope.
 - Use OPA if you need a general policy language.
