@@ -10,6 +10,8 @@ Walkthrough: [how you use it](https://shield-agent.com/how-kya-works#using).
 npx @shield-agent/kya@latest --help
 ```
 
+Requires **Node.js 24+** (`engines.node: >=24`).
+
 It works with any host that speaks MCP or OpenAPI. Vertical packs are optional. Shield is the only policy decision point: this gate never auto-approves an irreversible side effect.
 
 If `KYA_API_KEY` is empty against an authenticated plane, network commands exit non-zero. `eval-tool`, `wrap`, and `invoke` exit `0` on ALLOW, `4` on REQUIRE_APPROVE, and `1` on DENY or unknown, so a line like `eval-tool && write` cannot skip the gate.
