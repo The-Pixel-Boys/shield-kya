@@ -1,4 +1,6 @@
-# AgentSeal beside Shield KYA (optional)
+# Optional scanner ingest (AgentSeal)
+
+Power-user / CI only. Not listed in `kya --help`. The public command surface stays `kya` (evaluate, wrap, orr, dash, MCP).
 
 [AgentSeal](https://github.com/getagentseal/agentseal) is a separate security scanner for prompts, MCP configs, and skill files. Shield can **ingest** its JSON or SARIF as ORR evidence. AgentSeal never becomes the policy engine.
 
