@@ -24,10 +24,6 @@ import {
   type AgentShieldSpawnFn,
 } from "../orr/agentshield.js";
 import {
-  GUARD_REPORT_PRODUCER_ID,
-  readGuardReportJson,
-} from "../orr/guard-report.js";
-import {
   SCORECARD_PRODUCER_ID,
   ingestScorecardJson,
   tryRunScorecardCli,
@@ -114,8 +110,6 @@ export interface OrrRunOptions {
   readonly scorecardPath?: string;
   /** Optional AgentShield SecurityReport JSON dump. Evidence only — not a PEP. */
   readonly agentshieldJsonPath?: string;
-  /** Optional guard / SARIF JSON report. Evidence only — not a PEP. */
-  readonly guardJsonPath?: string;
   /** Optional usage JSON (array). Observe-only showback. */
   readonly usagePath?: string;
   /** Test seam. Production uses spawnSync("agentshield", ...). Never --fix. */
@@ -179,7 +173,6 @@ export function orrRunOptionsFromArgs(parsed: ParsedArgs): OrrRunOptions {
     jsonStdout: flagBool(parsed.flags, "json-stdout"),
     scorecardPath: flagString(parsed.flags, "scorecard"),
     agentshieldJsonPath: flagString(parsed.flags, "agentshield-json"),
-    guardJsonPath: flagString(parsed.flags, "guard-json"),
     usagePath: flagString(parsed.flags, "usage"),
   };
 }
@@ -233,12 +226,6 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
   ) {
     producersRequested.push(AGENTSHIELD_PRODUCER_ID);
   }
-  if (
-    options.guardJsonPath &&
-    !producersRequested.includes(GUARD_REPORT_PRODUCER_ID)
-  ) {
-    producersRequested.push(GUARD_REPORT_PRODUCER_ID);
-  }
 
   const scorecardRequested =
     producersRequested.includes(SCORECARD_PRODUCER_ID) ||
@@ -266,25 +253,11 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
     }
   }
 
-  const guardReportRequested =
-    producersRequested.includes(GUARD_REPORT_PRODUCER_ID) ||
-    Boolean(options.guardJsonPath);
-  if (guardReportRequested) {
-    if (options.guardJsonPath) {
-      findings.push(...readGuardReportJson(options.guardJsonPath));
-    } else {
-      coverageGaps.push({
-        adapter_id: GUARD_REPORT_PRODUCER_ID,
-        reason: "adapter_not_implemented_o1",
-      });
-    }
-  }
 
   if (!options.skipOptionalProducers) {
     for (const p of producersRequested) {
       if (p === "sa.first_party") continue;
       if (p === AGENTSHIELD_PRODUCER_ID) continue;
-      if (p === GUARD_REPORT_PRODUCER_ID) continue;
       if (p === SCORECARD_PRODUCER_ID) continue;
       coverageGaps.push({
         adapter_id: p,
