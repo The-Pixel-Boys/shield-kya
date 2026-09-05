@@ -24,11 +24,9 @@ import {
   type AgentShieldSpawnFn,
 } from "../orr/agentshield.js";
 import {
-  AGENTSEAL_PRODUCER_ID,
-  readAgentSealJson,
-  tryRunAgentSealCli,
-  type AgentSealSpawnFn,
-} from "../orr/agentseal.js";
+  GUARD_REPORT_PRODUCER_ID,
+  readGuardReportJson,
+} from "../orr/guard-report.js";
 import {
   SCORECARD_PRODUCER_ID,
   ingestScorecardJson,
@@ -116,14 +114,12 @@ export interface OrrRunOptions {
   readonly scorecardPath?: string;
   /** Optional AgentShield SecurityReport JSON dump. Evidence only — not a PEP. */
   readonly agentshieldJsonPath?: string;
-  /** Optional AgentSeal guard/scan-mcp JSON or SARIF. Evidence only — not a PEP. */
-  readonly agentsealJsonPath?: string;
+  /** Optional guard / SARIF JSON report. Evidence only — not a PEP. */
+  readonly guardJsonPath?: string;
   /** Optional usage JSON (array). Observe-only showback. */
   readonly usagePath?: string;
   /** Test seam. Production uses spawnSync("agentshield", ...). Never --fix. */
   readonly agentshieldSpawn?: AgentShieldSpawnFn;
-  /** Test seam. Production uses spawnSync("agentseal", ...). Guard only; never their shield watcher. */
-  readonly agentsealSpawn?: AgentSealSpawnFn;
   /** Test seam. Production uses spawnSync("scorecard", ...) or SCORECARD_BIN. */
   readonly scorecardSpawn?: ScorecardSpawnFn;
 }
@@ -183,7 +179,7 @@ export function orrRunOptionsFromArgs(parsed: ParsedArgs): OrrRunOptions {
     jsonStdout: flagBool(parsed.flags, "json-stdout"),
     scorecardPath: flagString(parsed.flags, "scorecard"),
     agentshieldJsonPath: flagString(parsed.flags, "agentshield-json"),
-    agentsealJsonPath: flagString(parsed.flags, "agentseal-json"),
+    guardJsonPath: flagString(parsed.flags, "guard-json"),
     usagePath: flagString(parsed.flags, "usage"),
   };
 }
@@ -238,10 +234,10 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
     producersRequested.push(AGENTSHIELD_PRODUCER_ID);
   }
   if (
-    options.agentsealJsonPath &&
-    !producersRequested.includes(AGENTSEAL_PRODUCER_ID)
+    options.guardJsonPath &&
+    !producersRequested.includes(GUARD_REPORT_PRODUCER_ID)
   ) {
-    producersRequested.push(AGENTSEAL_PRODUCER_ID);
+    producersRequested.push(GUARD_REPORT_PRODUCER_ID);
   }
 
   const scorecardRequested =
@@ -270,16 +266,17 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
     }
   }
 
-  const agentSealRequested =
-    producersRequested.includes(AGENTSEAL_PRODUCER_ID) ||
-    Boolean(options.agentsealJsonPath);
-  if (agentSealRequested) {
-    if (options.agentsealJsonPath) {
-      findings.push(...readAgentSealJson(options.agentsealJsonPath));
+  const guardReportRequested =
+    producersRequested.includes(GUARD_REPORT_PRODUCER_ID) ||
+    Boolean(options.guardJsonPath);
+  if (guardReportRequested) {
+    if (options.guardJsonPath) {
+      findings.push(...readGuardReportJson(options.guardJsonPath));
     } else {
-      const sealResult = tryRunAgentSealCli(absPath, options.agentsealSpawn);
-      if ("findings" in sealResult) findings.push(...sealResult.findings);
-      else coverageGaps.push(sealResult.gap);
+      coverageGaps.push({
+        adapter_id: GUARD_REPORT_PRODUCER_ID,
+        reason: "adapter_not_implemented_o1",
+      });
     }
   }
 
@@ -287,7 +284,7 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
     for (const p of producersRequested) {
       if (p === "sa.first_party") continue;
       if (p === AGENTSHIELD_PRODUCER_ID) continue;
-      if (p === AGENTSEAL_PRODUCER_ID) continue;
+      if (p === GUARD_REPORT_PRODUCER_ID) continue;
       if (p === SCORECARD_PRODUCER_ID) continue;
       coverageGaps.push({
         adapter_id: p,

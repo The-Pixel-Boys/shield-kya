@@ -5,13 +5,13 @@
     {
       "tool": {
         "driver": {
-          "name": "agentseal",
-          "informationUri": "https://agentseal.org"
+          "name": "guard",
+          "informationUri": "https://guard.org"
         }
       },
       "results": [
         {
-          "ruleId": "agentseal.mcp.poisoning",
+          "ruleId": "guard.mcp.poisoning",
           "level": "error",
           "message": {
             "text": "Tool description poisoning detected on kya.policy_evaluate mirror"
@@ -27,7 +27,7 @@
           ]
         },
         {
-          "ruleId": "agentseal.guard.info",
+          "ruleId": "guard.guard.info",
           "level": "note",
           "message": {
             "text": "Baseline created for MCP config"
