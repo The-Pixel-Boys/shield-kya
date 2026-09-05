@@ -24,6 +24,12 @@ import {
   type AgentShieldSpawnFn,
 } from "../orr/agentshield.js";
 import {
+  AGENTSEAL_PRODUCER_ID,
+  readAgentSealJson,
+  tryRunAgentSealCli,
+  type AgentSealSpawnFn,
+} from "../orr/agentseal.js";
+import {
   SCORECARD_PRODUCER_ID,
   ingestScorecardJson,
   tryRunScorecardCli,
@@ -110,10 +116,14 @@ export interface OrrRunOptions {
   readonly scorecardPath?: string;
   /** Optional AgentShield SecurityReport JSON dump. Evidence only — not a PEP. */
   readonly agentshieldJsonPath?: string;
+  /** Optional AgentSeal guard/scan-mcp JSON or SARIF. Evidence only — not a PEP. */
+  readonly agentsealJsonPath?: string;
   /** Optional usage JSON (array). Observe-only showback. */
   readonly usagePath?: string;
   /** Test seam. Production uses spawnSync("agentshield", ...). Never --fix. */
   readonly agentshieldSpawn?: AgentShieldSpawnFn;
+  /** Test seam. Production uses spawnSync("agentseal", ...). Guard only; never their shield watcher. */
+  readonly agentsealSpawn?: AgentSealSpawnFn;
   /** Test seam. Production uses spawnSync("scorecard", ...) or SCORECARD_BIN. */
   readonly scorecardSpawn?: ScorecardSpawnFn;
 }
@@ -173,6 +183,7 @@ export function orrRunOptionsFromArgs(parsed: ParsedArgs): OrrRunOptions {
     jsonStdout: flagBool(parsed.flags, "json-stdout"),
     scorecardPath: flagString(parsed.flags, "scorecard"),
     agentshieldJsonPath: flagString(parsed.flags, "agentshield-json"),
+    agentsealJsonPath: flagString(parsed.flags, "agentseal-json"),
     usagePath: flagString(parsed.flags, "usage"),
   };
 }
@@ -226,6 +237,12 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
   ) {
     producersRequested.push(AGENTSHIELD_PRODUCER_ID);
   }
+  if (
+    options.agentsealJsonPath &&
+    !producersRequested.includes(AGENTSEAL_PRODUCER_ID)
+  ) {
+    producersRequested.push(AGENTSEAL_PRODUCER_ID);
+  }
 
   const scorecardRequested =
     producersRequested.includes(SCORECARD_PRODUCER_ID) ||
@@ -253,10 +270,24 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
     }
   }
 
+  const agentSealRequested =
+    producersRequested.includes(AGENTSEAL_PRODUCER_ID) ||
+    Boolean(options.agentsealJsonPath);
+  if (agentSealRequested) {
+    if (options.agentsealJsonPath) {
+      findings.push(...readAgentSealJson(options.agentsealJsonPath));
+    } else {
+      const sealResult = tryRunAgentSealCli(absPath, options.agentsealSpawn);
+      if ("findings" in sealResult) findings.push(...sealResult.findings);
+      else coverageGaps.push(sealResult.gap);
+    }
+  }
+
   if (!options.skipOptionalProducers) {
     for (const p of producersRequested) {
       if (p === "sa.first_party") continue;
       if (p === AGENTSHIELD_PRODUCER_ID) continue;
+      if (p === AGENTSEAL_PRODUCER_ID) continue;
       if (p === SCORECARD_PRODUCER_ID) continue;
       coverageGaps.push({
         adapter_id: p,
