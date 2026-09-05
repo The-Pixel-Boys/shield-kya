@@ -200,12 +200,11 @@ export function orrBody(summary?: {
 }): string[] {
   return [
     "ORR board (reporting only — not a second PEP).",
-    "Scanners are evidence (AgentShield / AgentSeal). Sole PEP remains Shield KYA.",
+    "Scanners are evidence. Sole PEP remains Shield KYA.",
     "",
     summary
       ? `last run     ${summary.overall ?? "?"} / ${summary.disposition ?? "?"}  ${summary.path ?? ""}`
       : "o runs orr in ./orr-report. Or: kya orr run --path . --out ./orr-report",
-    "Optional: --producer harness.agentseal --agentseal-json <file>",
   ];
 }
 
