@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "shield-kya",
   "display_name": "Shield KYA",
-  "version": "0.1.24",
+  "version": "0.1.25",
   "description": "Know Your Agent MCP gate: ALLOW / DENY / REQUIRE_APPROVE. Sole PEP is Shield.",
   "long_description": "Local Claude Desktop extension that runs the packaged `dist/cli.js serve-mcp --stdio` against your Shield control plane (local or https://shield-agent.com). Tools evaluate policy, ingest session risk, and open Hold tickets. They never execute irreversible side effects.",
   "author": {
