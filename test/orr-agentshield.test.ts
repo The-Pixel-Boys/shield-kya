@@ -772,6 +772,8 @@ describe("e2e: kya orr run CLI + AgentShield JSON", () => {
     expect(code).toBe(0);
     expect(logs.join("\n")).toContain("harness.agentshield");
     expect(logs.join("\n")).toContain("--agentshield-json");
+    expect(logs.join("\n")).toContain("harness.agentseal");
+    expect(logs.join("\n")).toContain("--agentseal-json");
   });
 });
 

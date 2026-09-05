@@ -1,0 +1,8 @@
+$ npx @shield-agent/kya orr run --path . --producer harness.agentseal --agentseal-json ./agentseal-report.json
+
+overall=amber disposition=conditional
+
+info    harness.agentseal.ingested  AgentSeal report ingested as evidence
+high    harness.agentseal.mcp-tool-poison-hidden-instruction  MCP tool description embeds hidden exfil instruction
+medium  harness.agentseal.skill-toxic-flow  Skill file opens toxic data flow
+low     harness.agentseal.supply-chain-config-delta  MCP config changed since baseline
