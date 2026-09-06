@@ -184,6 +184,7 @@ pnpm build
 - [How KYA works](https://shield-agent.com/how-kya-works)
 - [OTLP metrics (OSS + hosted)](docs/otlp.md)
 - [OWASP MCP governance map](docs/owasp-mcp-governance.md)
+- [Hosted operator SSO / SCIM (not in OSS CLI)](docs/hosted-operator-sso.md)
 - See also `LIMITATIONS.md` in this repo
 
 ## OTLP (optional)
