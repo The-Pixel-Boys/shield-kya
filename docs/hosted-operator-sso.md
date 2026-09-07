@@ -14,6 +14,10 @@ Humans are created via invite or SCIM on hosted. SSO login links existing accoun
 - Scale support / response targets: https://shield-agent.com/support
 - Source of truth for the operator plane lives in the Shield Agent product repo (ADR 0009, SAML/SCIM/RBAC guides). This OSS tree intentionally does **not** ship SCIM or SAML SP code.
 
+## Verification (hosted CI)
+
+Hosted SSO/SCIM is exercised against local Keycloak in the Shield Agent product CI job `sso-scim-e2e` (inside workflow `ci`). A red run blocks auto-deploy. That harness is not part of this npm package.
+
 ## OSS stays
 
 `register-agent`, `wrap`, `evaluate`, trail, MCP gate.
