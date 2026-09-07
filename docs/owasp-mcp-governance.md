@@ -87,3 +87,8 @@ Still deferred: network discovery of shadow MCP; vendor intake questionnaires; n
 - We do not sell “OWASP compliant” as a certificate.  
 - We do not scan your office LAN for shadow MCP.  
 - Complements (ORR scanners) never ALLOW a write.
+
+
+## Hosted PEP raise (Tier 3–4)
+
+On Shield hosted, inventory Tier **3–4** (and `blocked` assets) raise evaluate/invoke from ALLOW to **Hold** (`MCP_TIER_*`). Tier never Allows. Missing inventory is a no-op.
