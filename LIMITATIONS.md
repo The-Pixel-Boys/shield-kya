@@ -10,10 +10,10 @@
 - Human decide is also `kya approve --id` / `kya reject --id` against `POST /api/v1/kya/approvals/{id}/approve|reject` (`kya.approve` scope).
 - Shield KYA evaluate/approve is the only policy decision point (`ALLOW` / `DENY` / `REQUIRE_APPROVE`). Scanners, `--scorecard`, `harness.agentshield`, and the ORR CLI write evidence. They never ALLOW a side effect. AgentShield is opt-in (`--producer harness.agentshield` or `--agentshield-json`). Trust scores never authorize writes. The CLI never passes `--fix`, never starts MiniClaw, and never installs `ecc-agentshield`.
 - OWASP MCP Governance / MCP Top 10 alignment is documented in `docs/owasp-mcp-governance.md`. That guide is not a certificate. Org MCP inventory, Tier UI, and auto risk score are hosted roadmap (not in this CLI).
-- Operator SSO (OIDC/SAML), SCIM 2.0, and IdP-group → role maps are hosted Scale only. See `docs/hosted-operator-sso.md`. They never ALLOW a tool write from this CLI.
+- Operator SSO (OIDC/SAML), SCIM 2.0, IdP-group → role maps, and IdP group→tool maps (raise/deny) are hosted Scale only. See `docs/hosted-operator-sso.md`. They never ALLOW a tool write from this CLI.
 - Dialog safety belongs in a guardrails product.
 - Multi-language in-process runtimes are out of scope.
-- Use OPA if you need a general policy language. On hosted, OPA is an optional PDP (Rego allowlists under `infra/podman/opa/packs/`) that may only further DENY on evaluate and invoke; Shield stays the PEP. Fail-closed when enabled and unreachable. Per-merchant package path + packId map ship; IdP group→tool maps and policy verdict webhooks are hosted. Default-on Scale GitOps still partial. Not inside this npm package.
+- Use OPA if you need a general policy language. On hosted, OPA is an optional PDP (Rego allowlists under `infra/podman/opa/packs/`) that may only further DENY on evaluate and invoke; Shield stays the PEP. Fail-closed when enabled and unreachable. Per-merchant package path + packId map ship; hosted IdP group→tool maps fail-closed without verified groups; `kya.policy.evaluated` SIEM webhook on evaluate. Agent OIDC assertion is a fail-closed stub until JWKS. Not inside this npm package.
 - Multi-tenant density, private registries, ORR board ops, pin, and support are separate from the solo `npx` path.
 - Growth counts are observe metrics (principals, evaluates, approvals).
 - OTLP metrics are opt-in and off by default. OSS CLI is thin (evaluate latency only). Hosted is richer Micrometer export. Neither path is a policy decision. See `docs/otlp.md`.
