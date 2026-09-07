@@ -13,7 +13,7 @@
 - Operator SSO (OIDC/SAML), SCIM 2.0, and IdP-group → role maps are hosted Scale only. See `docs/hosted-operator-sso.md`. They never ALLOW a tool write from this CLI.
 - Dialog safety belongs in a guardrails product.
 - Multi-language in-process runtimes are out of scope.
-- Use OPA if you need a general policy language. On hosted, OPA is an optional PDP (Rego allowlists under `infra/podman/opa/packs/`) that may only further DENY on evaluate and invoke; Shield stays the PEP. Fail-closed when enabled and unreachable. Per-merchant package path + packId map ship; default-on Scale console GitOps is still partial. Not inside this npm package.
+- Use OPA if you need a general policy language. On hosted, OPA is an optional PDP (Rego allowlists under `infra/podman/opa/packs/`) that may only further DENY on evaluate and invoke; Shield stays the PEP. Fail-closed when enabled and unreachable. Per-merchant package path + packId map ship; IdP group→tool maps and policy verdict webhooks are hosted. Default-on Scale GitOps still partial. Not inside this npm package.
 - Multi-tenant density, private registries, ORR board ops, pin, and support are separate from the solo `npx` path.
 - Growth counts are observe metrics (principals, evaluates, approvals).
 - OTLP metrics are opt-in and off by default. OSS CLI is thin (evaluate latency only). Hosted is richer Micrometer export. Neither path is a policy decision. See `docs/otlp.md`.
