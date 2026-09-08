@@ -10,6 +10,8 @@ Walkthrough: [how you use it](https://shield-agent.com/how-kya-works#using).
 npx @shield-agent/kya@latest --help
 ```
 
+![KYA activity receipt — agent tool trail with Allow / Deny / Hold](./assets/activity-receipt.png)
+
 Requires **Node.js 24+** (`engines.node: >=24`).
 
 It works with any host that speaks MCP or OpenAPI. Vertical packs are optional. Shield is the only policy decision point: this gate never auto-approves an irreversible side effect.
