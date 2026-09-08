@@ -5,6 +5,7 @@
 [![npm downloads](https://img.shields.io/npm/dt/@shield-agent/kya.svg?logo=npm&label=total%20downloads)](https://www.npmjs.com/package/@shield-agent/kya)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Install](https://img.shields.io/badge/install-shield--agent.com%2Finstall-0A0A0A)](https://shield-agent.com/install)
+[![X](https://img.shields.io/badge/X-%40coscosmico-000000?logo=x&logoColor=white)](https://x.com/coscosmico)
 
 
 CLI and local MCP gate for Shield’s Know Your Agent path.
