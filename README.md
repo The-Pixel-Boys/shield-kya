@@ -1,5 +1,12 @@
 # `@shield-agent/kya`
 
+[![npm](https://img.shields.io/npm/v/@shield-agent/kya.svg?logo=npm&label=npm)](https://www.npmjs.com/package/@shield-agent/kya)
+[![npm downloads/week](https://img.shields.io/npm/dw/@shield-agent/kya.svg?logo=npm&label=downloads%2Fweek)](https://www.npmjs.com/package/@shield-agent/kya)
+[![npm downloads](https://img.shields.io/npm/dt/@shield-agent/kya.svg?logo=npm&label=total%20downloads)](https://www.npmjs.com/package/@shield-agent/kya)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Install](https://img.shields.io/badge/install-shield--agent.com%2Finstall-0A0A0A)](https://shield-agent.com/install)
+
+
 CLI and local MCP gate for Shield’s Know Your Agent path.
 
 If an agent can change a real system, it has to ask Shield first. You register the agent, wrap the tool, and get Allow, Hold, or Deny. Hold waits for a person. This package does not scan your network. Agents that never call evaluate stay invisible on purpose.
