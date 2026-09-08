@@ -10,7 +10,7 @@ Walkthrough: [how you use it](https://shield-agent.com/how-kya-works#using).
 npx @shield-agent/kya@latest --help
 ```
 
-![KYA activity receipt — agent tool trail with Allow / Deny / Hold](./assets/activity-receipt.png)
+![KYA activity receipt — agent tool trail with Allow / Deny / Hold](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/activity-receipt.png)
 
 Requires **Node.js 24+** (`engines.node: >=24`).
 
