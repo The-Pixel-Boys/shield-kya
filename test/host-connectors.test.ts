@@ -3,13 +3,15 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = join(import.meta.dirname, "..");
+const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string };
+const pin = `@shield-agent/kya@${pkg.version}`;
 
 describe("host connectors packaging", () => {
   it("Codex example uses --no-install, inherits API key, no inline secret", () => {
     const toml = readFileSync(join(root, "openai/codex.config.example.toml"), "utf8");
     expect(toml).toContain('command = "npx"');
     expect(toml).toContain("--no-install");
-    expect(toml).toContain("@shield-agent/kya@0.1.23");
+    expect(toml).toContain(pin);
     expect(toml).not.toContain('"-y"');
     expect(toml).not.toMatch(/args = \[[^\]]*"-y"/);
     expect(toml).toContain("env_vars");
@@ -39,7 +41,7 @@ describe("host connectors packaging", () => {
     expect(local.mcpServers["shield-kya"].command).toBe("npx");
     expect(local.mcpServers["shield-kya"].args).toEqual([
       "--no-install",
-      "@shield-agent/kya@0.1.23",
+      pin,
       "serve-mcp",
       "--stdio",
     ]);

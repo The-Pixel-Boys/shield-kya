@@ -84,6 +84,7 @@ describe("kya dash --once", () => {
       env: {},
       requireApiKey: false,
       offline: true,
+  holdEnabled: false,
     });
     for (const pane of ["dashboard", "cases", "metrics", "edge", "settings"] as const) {
       const snap = await renderDash(
@@ -104,6 +105,7 @@ describe("kya dash --once", () => {
       env: { KYA_DASH_PLAN: "enterprise" },
       requireApiKey: false,
       offline: true,
+  holdEnabled: false,
     });
     const snap = await renderDash(
       config,

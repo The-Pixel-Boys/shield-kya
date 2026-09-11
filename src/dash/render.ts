@@ -104,6 +104,7 @@ export function assertNoSecrets(text: string, extra?: string): void {
   const pats = [
     /npm_[A-Za-z0-9]{8,}/,
     /Bearer\s+\S{8,}/i,
+    /Basic\s+[A-Za-z0-9+/=_-]{8,}/i,
     /sk_live_[A-Za-z0-9]+/,
     /sk_test_[A-Za-z0-9]+/,
     /sk_[A-Za-z0-9]{16,}/,
@@ -113,6 +114,13 @@ export function assertNoSecrets(text: string, extra?: string): void {
     /sk-ant-[A-Za-z0-9\-]+/,
     /AKIA[A-Z0-9]{12,}/,
     /eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}/,
+    /[?&#](?:access_token|api[_-]?key|token|secret|password|auth)=[^&\s#"']+/i,
+    /Cookie:\s*\S+/i,
+    /\bsession=[^\s;&"']{8,}/i,
+    /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/i,
+    /-----END [A-Z0-9 ]*PRIVATE KEY-----/i,
+    /\b(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*(?!\[redacted\])[^\s#"']{4,}/i,
+    /\bxox[baprs]-[A-Za-z0-9-]{10,}/i,
   ];
   for (const p of pats) {
     if (p.test(hay)) throw new Error("dashboard frame leaked a secret");
