@@ -7,7 +7,6 @@
 [![Install](https://img.shields.io/badge/install-shield--agent.com%2Finstall-0A0A0A)](https://shield-agent.com/install)
 [![X](https://img.shields.io/badge/X-%40coscosmico-000000?logo=x&logoColor=white)](https://x.com/coscosmico)
 
-
 CLI and local MCP gate for Shield’s Know Your Agent path.
 
 If an agent can change a real system, it has to ask Shield first. You register the agent, wrap the tool, and get Allow, Hold, or Deny. Hold waits for a person. This package does not scan your network. Agents that never call evaluate stay invisible on purpose.
@@ -18,8 +17,6 @@ Walkthrough: [how you use it](https://shield-agent.com/how-kya-works#using).
 npx @shield-agent/kya@latest --help
 ```
 
-![KYA activity receipt — agent tool trail with Allow / Deny / Hold](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/activity-receipt.png)
-
 Requires **Node.js 24+** (`engines.node: >=24`).
 
 It works with any host that speaks MCP or OpenAPI. Vertical packs are optional. Shield is the only policy decision point: this gate never auto-approves an irreversible side effect.
@@ -28,28 +25,38 @@ If `KYA_API_KEY` is empty against an authenticated plane, network commands exit 
 
 `--offline` runs sample evaluate without a paid cloud (useful for DENY and REQUIRE_APPROVE demos). Creating an agent is itself a tool: offline, `kya.agent.register` comes back REQUIRE_APPROVE. Allow, break-glass, and approve mint modes live on the control plane.
 
-## 15-minute path
+## One liner
 
 ```bash
-# Offline demo (no account, no monorepo)
-npx @shield-agent/kya eval-tool --offline --tool-id org.sample.never.event --irreversible
-# → verdict: DENY
-npx @shield-agent/kya eval-tool --offline --tool-id org.sample.data.write --irreversible
-# → verdict: REQUIRE_APPROVE
-
-# Scaffold + local plane
-npx @shield-agent/kya init
-npx @shield-agent/kya eval-tool --offline --tool-id kya.agent.register --irreversible
-# → verdict: REQUIRE_APPROVE
-npx @shield-agent/kya register-agent --name solo-builder --version-hash dev-local
-npx @shield-agent/kya eval-tool --tool-id org.sample.never.event --irreversible
-npx @shield-agent/kya serve-mcp --stdio
-
-# Terminal desk (FREE personal panes; --offline works without a key)
-npx @shield-agent/kya dash --once --offline
-# Interactive TTY: 1-8 panes, e force-eval, p auto-refresh, y confirms kill/shrink/decide
-npx @shield-agent/kya dash
+# After: npm i -g @shield-agent/kya   (or ./scripts/install-local.sh from this repo)
+cd your-project
+kya start
 ```
+
+That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/mcp.json` → `kya serve-mcp --stdio`), and **opens** the live activity report. Restart your agent host once so MCP loads. Ctrl+C stops the report server.
+
+![KYA activity receipt — agent tool trail with Allow / Deny / Hold](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/activity-receipt.png)
+
+<!-- Local path kept in package for offline viewers: assets/activity-receipt.png -->
+
+```bash
+kya start --no-open   # wire only
+kya start --force     # rewrite MCP blocks
+# Receipt change previews (clipped + redacted): on by default for writes
+# KYA_DIFF_PREVIEW=0 to disable
+```
+
+## Longer path (optional)
+
+```bash
+# Offline sample evaluate
+kya eval-tool --offline --tool-id org.sample.never.event --irreversible
+kya wrap --offline --tool-id Write --irreversible --args '{"path":"src/x.ts","content":"hi"}'
+kya receipt --open
+# Org Hold: KYA_HOLD=1 kya wrap …
+kya dash --once --offline
+```
+
 
 
 Install hub: [https://shield-agent.com/install](https://shield-agent.com/install)
@@ -78,6 +85,8 @@ Tag sessions with `KYA_HOST=ide` or `KYA_HOST=runtime`. Same policy path either 
 | `KYA_MCP_PORT` | No (default `3920`) | HTTP MCP listen port |
 | `KYA_OFFLINE` | No | `1`/`true` for sample evaluate |
 | `KYA_DASH_PLAN` | No | `enterprise` unlocks licensed TUI panes |
+| `KYA_DIFF_PREVIEW` | No | `0` disables clipped change previews on the receipt |
+| `KYA_RECEIPT_AUTO` | No | `0` disables auto-open receipt after wrap; `1` forces |
 
 ## MCP tools
 
@@ -94,7 +103,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.1.23", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.1.34", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -121,7 +130,7 @@ npx @shield-agent/kya reject --id <approval-id>
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.1.23 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.1.34 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -132,7 +141,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.1.23 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.1.34 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 

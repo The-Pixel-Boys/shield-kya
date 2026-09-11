@@ -53,6 +53,13 @@ import {
   wrapExitCode,
   wrapInputFromArgs,
 } from "./commands/wrap.js";
+import {
+  formatReceiptHuman,
+  receiptInputFromArgs,
+  runReceipt,
+} from "./commands/receipt.js";
+import { formatStartHuman, runStart } from "./commands/start.js";
+import { appendTrail, defaultSessionId } from "./trail.js";
 import { decideIdFromArgs, runDecide } from "./commands/decide.js";
 import {
   formatInvokeHuman,
@@ -67,10 +74,13 @@ Usage:
   kya <command> [options]
 
 Commands:
+  start             ONE LINER: init + wire local MCP + open live activity report
   init              Scaffold .kya/ config + sample tools + .env.example
   register-agent    POST /api/v1/kya/agents (human mint; server applies allow/break-glass/approve)
   eval-tool         Policy evaluate (HTTP plane or --offline sample)
-  wrap              Evaluate then (on REQUIRE_APPROVE) open a ticket. Never executes.
+  wrap              Evaluate + record trail. Never executes.
+                    Default observe: no Hold ticket (no second approve). --hold / KYA_HOLD=1 for org Hold.
+  receipt           Activity report HTML/JSON/MD (default: last 3 days, all tools; --open)
   invoke            Authorize on the plane after Allow or APPROVED. Never runs the write here.
   approve           Human APPROVE an approval id (kya.approve scope)
   reject            Human REJECT an approval id (kya.approve scope)
@@ -93,12 +103,17 @@ Options (shared):
   --api-key <key>   API key (or KYA_API_KEY) — required for network commands
   --host <ide|runtime>  Dual-plane host (or KYA_HOST, default ide)
   --offline         Sample evaluate / dash without network
+  --hold            wrap: open Hold ticket on REQUIRE_APPROVE (org path; default off)
+  --open            receipt: open HTML in the browser
+  --days <n>        receipt: history window (default 3)
+  --session <id>    receipt: single session only (optional)
   --once            dash: print one frame and exit (CI / pipes)
   --pane <name>     dash pane (home|policy|agents|approvals|sessions|orr|mcp|dashboard|…)
   --json            Machine-readable output
   --help, -h        Show help
 
 Examples:
+  kya start
   npx @shield-agent/kya init --base-url http://127.0.0.1:8090 --host ide
   npx @shield-agent/kya eval-tool --offline --tool-id org.sample.never.event --irreversible
   npx @shield-agent/kya eval-tool --offline --tool-id org.sample.data.write --irreversible
@@ -154,6 +169,31 @@ export async function runCli(
 
   try {
     switch (parsed.command) {
+      case "start": {
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          allowMissingApiKey: true,
+          requireApiKey: false,
+          offline: true,
+        });
+        const force =
+          parsed.flags["force"] === true || parsed.flags["force"] === "true";
+        const noOpen =
+          parsed.flags["no-open"] === true || parsed.flags["no-open"] === "true";
+        const result = await runStart(config, { force, open: !noOpen });
+        if (config.json) {
+          io.log(JSON.stringify({ ...result, keepAlive: undefined }, null, 2));
+        } else {
+          io.log(formatStartHuman(result));
+        }
+        if (result.keepAlive) {
+          await result.keepAlive;
+        }
+        return 0;
+      }
+
       case "init": {
         const result = initFromArgs(parsed, cwd);
         if (parsed.flags["json"] === true || parsed.flags["json"] === "true") {
@@ -162,12 +202,7 @@ export async function runCli(
           io.log("KYA light scaffold ready (zero vertical packs required)");
           for (const p of result.created) io.log(`  created: ${p}`);
           for (const p of result.skipped) io.log(`  exists:  ${p}`);
-          io.log(
-            "Next: offline demo → npx @shield-agent/kya eval-tool --offline --tool-id org.sample.never.event --irreversible",
-          );
-          io.log(
-            "Or: cp .env.example .env && set KYA_API_KEY, then register-agent",
-          );
+          io.log("Next: kya start");
         }
         return 0;
       }
@@ -201,6 +236,17 @@ export async function runCli(
           offline: input.offline,
         });
         const result = await runEvalTool(config, input);
+        appendTrail(config.cwd, {
+          ts: new Date().toISOString(),
+          sessionId: defaultSessionId(env),
+          host: config.host,
+          toolId: result.response.toolId ?? input.toolId,
+          verdict: result.response.verdict,
+          reasonCode: result.response.reasonCode ?? "",
+          mode: result.offline ? "offline" : config.holdEnabled ? "hold" : "observe",
+          neverEvent: result.response.reasonCode === "NEVER_EVENT",
+          argsHash: result.argsHash,
+        });
         if (config.json) {
           io.log(
             JSON.stringify(
@@ -213,6 +259,28 @@ export async function runCli(
           io.log(formatEvalHuman(result));
         }
         return verdictExitCode(result.response.verdict);
+      }
+
+      case "receipt": {
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          allowMissingApiKey: true,
+          requireApiKey: false,
+          offline: true,
+        });
+        const input = receiptInputFromArgs(parsed);
+        const result = await runReceipt(config, input);
+        if (config.json) {
+          io.log(JSON.stringify({ ...result, keepAlive: undefined }, null, 2));
+        } else {
+          io.log(formatReceiptHuman(result));
+        }
+        if (result.keepAlive) {
+          await result.keepAlive;
+        }
+        return 0;
       }
 
       case "wrap": {
@@ -229,6 +297,17 @@ export async function runCli(
           io.log(JSON.stringify(result, null, 2));
         } else {
           io.log(formatWrapHuman(result));
+        }
+        // Surface the flight-recorder so observe mode is not invisible.
+        try {
+          const { autoOpenReceiptAfterWrap } = await import("./receipt/auto-open.js");
+          const force =
+            result.eval.response.verdict.toUpperCase() === "DENY" ||
+            result.eval.response.reasonCode === "NEVER_EVENT";
+          const auto = await autoOpenReceiptAfterWrap(config, { force, env });
+          if (!config.json && auto.hint) io.log(auto.hint);
+        } catch {
+          /* receipt open is best-effort */
         }
         return wrapExitCode(result);
       }

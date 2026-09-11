@@ -23,10 +23,13 @@ const base: ResolvedConfig = {
   json: false,
   allowMissingApiKey: false,
   offline: false,
+  holdEnabled: false,
 };
 
+const holdBase: ResolvedConfig = { ...base, holdEnabled: true };
+
 describe("wrap", () => {
-  it("offline REQUIRE_APPROVE never requests approval or executes", async () => {
+  it("offline REQUIRE_APPROVE observes by default (no Hold ticket)", async () => {
     const result = await runWrap(base, {
       toolId: "org.sample.data.write",
       irreversible: true,
@@ -35,7 +38,9 @@ describe("wrap", () => {
     expect(result.eval.response.verdict).toBe("REQUIRE_APPROVE");
     expect(result.sideEffect).toBe("blocked");
     expect(result.approval).toBeUndefined();
-    expect(result.next).toMatch(/live plane/i);
+    expect(result.observed).toBe(true);
+    expect(result.next).toMatch(/observed/i);
+    expect(wrapExitCode(result)).toBe(0);
   });
 
   it("offline DENY stays blocked with no approval", async () => {
@@ -97,7 +102,7 @@ describe("wrap", () => {
       fetch: fetchImpl,
     });
     const result = await runWrap(
-      base,
+      holdBase,
       {
         toolId: "org.sample.data.write",
         irreversible: true,
@@ -140,7 +145,7 @@ describe("wrap", () => {
       fetch: fetchImpl,
     });
     const result = await runWrap(
-      base,
+      holdBase,
       { toolId: "org.sample.data.write", irreversible: true },
       client,
     );
@@ -170,7 +175,7 @@ describe("wrap", () => {
     });
     await expect(
       runWrap(
-        { ...base, agentId: undefined },
+        { ...holdBase, agentId: undefined },
         { toolId: "org.sample.data.write", irreversible: true },
         client,
       ),

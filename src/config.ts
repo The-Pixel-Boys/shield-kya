@@ -25,6 +25,11 @@ export interface ResolvedConfig {
   readonly allowMissingApiKey: boolean;
   /** Offline sample evaluate (demo / CT) — no network, no paid cloud. */
   readonly offline: boolean;
+  /**
+   * When false (default), REQUIRE_APPROVE is recorded only — no Hold ticket /
+   * second human prompt. Set KYA_HOLD=1 or --hold for org Hold path.
+   */
+  readonly holdEnabled: boolean;
 }
 
 export interface ResolveOptions {
@@ -128,6 +133,12 @@ export function resolveConfig(options: ResolveOptions = {}): ResolvedConfig {
     env.KYA_OFFLINE === "1" ||
     env.KYA_OFFLINE === "true";
 
+  const holdEnabled =
+    flags["hold"] === true ||
+    flags["hold"] === "true" ||
+    env.KYA_HOLD === "1" ||
+    env.KYA_HOLD === "true";
+
   // Offline sample evaluate never hits the control plane — no API key required.
   const requireApiKey =
     offline
@@ -155,6 +166,7 @@ export function resolveConfig(options: ResolveOptions = {}): ResolvedConfig {
     json,
     allowMissingApiKey: !requireApiKey,
     offline,
+    holdEnabled,
   };
 }
 

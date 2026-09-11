@@ -24,6 +24,7 @@ const baseConfig: ResolvedConfig = {
   json: false,
   allowMissingApiKey: false,
   offline: false,
+  holdEnabled: false,
 };
 
 function mockClient(): KyaHttpClient {

@@ -4,7 +4,11 @@
 - Offline `eval-tool --offline` and `dash --once --offline` use a sample policy surface for demos. Production needs a real control plane (local free or hosted).
 - Unsigned v1 passport JSON is observational. Signed v2 claims (`shield-kya-agent-passport-v2`, `shield-kya-session-claim-v1`) need the hosted control-plane key.
 - If a host never wraps tools, session shrink cannot stop it. Spawn without a control plane cannot be gated.
-- `wrap` evaluates (and may open a pending ticket). It never executes the side effect. Offline wrap does not call the approval API.
+- `wrap` evaluates and records a local trail. **Default is observe:** REQUIRE_APPROVE does **not** open a Hold ticket (no second approve). Use `--hold` / `KYA_HOLD=1` for the org Hold path. Never-events still DENY with no prompt. Wrap never executes the side effect.
+- `kya start` is the OSS one-liner: init + write local MCP configs + open the live receipt. Hosts still must reload MCP once; KYA cannot inject into Cursor/Claude without that.
+- After wrap on an interactive TTY, KYA writes the receipt HTML and opens it in the browser once per project (always on DENY). Set `KYA_RECEIPT_AUTO=0` to disable, `KYA_RECEIPT_AUTO=1` to force. `receipt --open` is the live-updating loopback server.
+- Write/edit wraps may store a **clipped redacted `diffPreview`** (≤8 lines / ≤480 chars body; PEM collapsed to `[redacted-pem]`) on the trail for the receipt. Never full patches. Shell/exec never get a preview. Disable with `KYA_DIFF_PREVIEW=0`.
+- `receipt` builds a browser HTML/JSON/MD flight recorder from `.kya/trail.jsonl` (`--open`). That is the developer report — not `dash`.
 - `invoke` authorizes on a live plane after Allow or APPROVED. It never runs the customer write in the CLI. There is no `--offline` invoke.
 - The TUI (`dash`) can `a`/`x` decide only after `y` confirm, and only with a JWT that has `kya.approve`. Machine `sk_*` keys are refused (print the CLI hint instead).
 - Human decide is also `kya approve --id` / `kya reject --id` against `POST /api/v1/kya/approvals/{id}/approve|reject` (`kya.approve` scope).

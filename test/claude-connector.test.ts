@@ -10,6 +10,7 @@ function readJson(rel: string): Record<string, unknown> {
 
 describe("Claude connector packaging", () => {
   it("mcp.json and Claude examples use npx stdio with placeholders only", () => {
+    const pkg = readJson("package.json") as { version: string };
     for (const path of [
       "mcp.json",
       ".mcp.json",
@@ -24,7 +25,7 @@ describe("Claude connector packaging", () => {
       expect(server.command).toBe("npx");
       expect(server.args).toContain("--no-install");
       expect(server.args).not.toContain("-y");
-      expect(server.args).toContain("@shield-agent/kya@0.1.23");
+      expect(server.args).toContain(`@shield-agent/kya@${pkg.version}`);
       expect(server.args).toContain("serve-mcp");
       expect(server.args).toContain("--stdio");
       expect(server.env.KYA_BASE_URL).toBeTruthy();

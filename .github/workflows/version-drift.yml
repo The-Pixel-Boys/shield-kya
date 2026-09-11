@@ -1,0 +1,29 @@
+name: version-drift
+
+# Fails when this repo's package.json version trails the latest npm publish.
+# npm releases are tagged from the monorepo (kya-v*); this public repo must be
+# synced in the same release window. A red run here = sync is overdue, not
+# that code is broken.
+
+on:
+  schedule:
+    - cron: '43 5 * * *' # daily, off-peak
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: package.json version must match npm latest
+        run: |
+          repo=$(node -p 'require("./package.json").version')
+          npm_latest=$(npm view @shield-agent/kya version)
+          echo "repo: $repo  npm: $npm_latest"
+          if [ "$repo" != "$npm_latest" ]; then
+            echo "::error::public repo trails npm ($repo < $npm_latest). Sync sdks/kya from the monorepo release and bump via: pnpm sync:version"
+            exit 1
+          fi
