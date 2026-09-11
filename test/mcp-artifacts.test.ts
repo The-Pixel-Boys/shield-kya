@@ -24,6 +24,12 @@ describe("MCP registry artifacts", () => {
   });
 
 
+  it("manifest.json version matches package.json", () => {
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
+    expect(manifest.version).toBe(pkg.version);
+  });
+
   it("server.json description fits MCP Registry 100-char limit", () => {
     const server = JSON.parse(readFileSync(join(root, "server.json"), "utf8"));
     expect(server.description.length).toBeLessThanOrEqual(100);

@@ -13,7 +13,7 @@ Install hub: https://shield-agent.com/install
 
 ## Re-publish
 
-1. Bump `version` in `package.json` (+ `server.json` version fields).
+1. Bump `version` in `package.json`, then run `pnpm sync:version` (mirrors it into `server.json` + `manifest.json`; CI fails on drift).
 2. **npm:** bump + tag `kya-vX.Y.Z` on monorepo `The-Pixel-Boys/shield-agent` (`sdks/kya`). That repo owns `NPM_TOKEN`.
 3. **This public repo:** tag `vX.Y.Z` for MCP Registry only. `release-npm` skips publish when `NPM_TOKEN` is unset (expected).
 4. Verify `npx @shield-agent/kya@latest --help`.
