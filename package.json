@@ -54,19 +54,14 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "pack:check": "pnpm run build && pnpm pack --pack-destination /tmp && node dist/cli.js --help",
+    "sync:version": "node scripts/sync-version.mjs",
     "prepublishOnly": "pnpm run build && pnpm test"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "@vitest/coverage-v8": "^3.2.6",
+    "@vitest/coverage-v8": "^4.1.11",
     "typescript": "^5.7.2",
     "vitest": "^4.1.11"
-  },
-  "pnpm": {
-    "overrides": {
-      "vite": "6.4.3",
-      "esbuild": "0.25.12"
-    }
   },
   "publishConfig": {
     "access": "public"
