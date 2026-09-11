@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = join(import.meta.dirname, "..");
+const pin = `@shield-agent/kya@${(JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string }).version}`;
 
 function readJson(rel: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(root, rel), "utf8")) as Record<string, unknown>;
@@ -10,7 +11,6 @@ function readJson(rel: string): Record<string, unknown> {
 
 describe("Claude connector packaging", () => {
   it("mcp.json and Claude examples use npx stdio with placeholders only", () => {
-    const pkg = readJson("package.json") as { version: string };
     for (const path of [
       "mcp.json",
       ".mcp.json",
@@ -25,7 +25,7 @@ describe("Claude connector packaging", () => {
       expect(server.command).toBe("npx");
       expect(server.args).toContain("--no-install");
       expect(server.args).not.toContain("-y");
-      expect(server.args).toContain(`@shield-agent/kya@${pkg.version}`);
+      expect(server.args).toContain(pin);
       expect(server.args).toContain("serve-mcp");
       expect(server.args).toContain("--stdio");
       expect(server.env.KYA_BASE_URL).toBeTruthy();

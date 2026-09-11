@@ -59,6 +59,11 @@ import {
   runReceipt,
 } from "./commands/receipt.js";
 import { formatStartHuman, runStart } from "./commands/start.js";
+import {
+  connectableHosts,
+  formatConnectHuman,
+  runConnect,
+} from "./commands/connect.js";
 import { appendTrail, defaultSessionId } from "./trail.js";
 import { decideIdFromArgs, runDecide } from "./commands/decide.js";
 import {
@@ -75,6 +80,8 @@ Usage:
 
 Commands:
   start             ONE LINER: init + wire local MCP + open live activity report
+  connect <host>    Wire KYA MCP into a coding host config
+                    (${connectableHosts().join("|")}; --project for project scope, --force to overwrite)
   init              Scaffold .kya/ config + sample tools + .env.example
   register-agent    POST /api/v1/kya/agents (human mint; server applies allow/break-glass/approve)
   eval-tool         Policy evaluate (HTTP plane or --offline sample)
@@ -114,6 +121,8 @@ Options (shared):
 
 Examples:
   kya start
+  kya connect qwen
+  kya connect opencode --project
   npx @shield-agent/kya init --base-url http://127.0.0.1:8090 --host ide
   npx @shield-agent/kya eval-tool --offline --tool-id org.sample.never.event --irreversible
   npx @shield-agent/kya eval-tool --offline --tool-id org.sample.data.write --irreversible
@@ -190,6 +199,37 @@ export async function runCli(
         }
         if (result.keepAlive) {
           await result.keepAlive;
+        }
+        return 0;
+      }
+
+      case "connect": {
+        const host = parsed.positionals[0];
+        if (!host) {
+          io.error(
+            `Usage: kya connect <host>  (${connectableHosts().join("|")})`,
+          );
+          return 2;
+        }
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          allowMissingApiKey: true,
+          requireApiKey: false,
+          offline: true,
+        });
+        const force =
+          parsed.flags["force"] === true || parsed.flags["force"] === "true";
+        const scope =
+          parsed.flags["project"] === true || parsed.flags["project"] === "true"
+            ? ("project" as const)
+            : ("global" as const);
+        const result = await runConnect(config, { host, scope, force }, env);
+        if (config.json) {
+          io.log(JSON.stringify(result, null, 2));
+        } else {
+          io.log(formatConnectHuman(result));
         }
         return 0;
       }
