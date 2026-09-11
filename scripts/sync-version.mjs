@@ -20,4 +20,23 @@ const manifest = read("manifest.json");
 manifest.version = version;
 write("manifest.json", manifest);
 
-console.log(`synced server.json + manifest.json to ${version}`);
+// Connector examples + README pin the npm package by exact version.
+// Text-level replace (no reformat) so examples never drift from package.json.
+const pinFiles = [
+  ".mcp.json",
+  "mcp.json",
+  "claude/claude_desktop_config.example.json",
+  "gemini/settings.example.json",
+  "openai/codex.config.example.toml",
+  "grok/README.md",
+  "README.md",
+];
+const pinRe = /@shield-agent\/kya@\d+\.\d+\.\d+/g;
+for (const f of pinFiles) {
+  const path = join(root, f);
+  const before = readFileSync(path, "utf8");
+  const after = before.replace(pinRe, `@shield-agent/kya@${version}`);
+  if (after !== before) writeFileSync(path, after);
+}
+
+console.log(`synced server.json + manifest.json + ${pinFiles.length} pin files to ${version}`);

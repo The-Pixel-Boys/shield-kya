@@ -2,7 +2,7 @@
 
 Know Your Agent OSS (`@shield-agent/kya`) is the runtime gate (Allow / Deny / Hold) and agent API keys.
 
-**Operator SSO (OIDC/SAML), SCIM 2.0, and IdP-group → role maps** ship on **Shield hosted** (**Scale**). They authenticate humans who approve Holds and manage agents. They never ALLOW a tool write.
+**Operator SSO (OIDC/SAML), SCIM 2.0, and IdP-group → role maps** ship on **Shield hosted** (**Scale**). They authenticate humans who approve Holds and manage agents. Hosted also applies merchant **IdP group → tool** maps (`REQUIRE_HOLD` / `DENY` only) on evaluate/invoke. They never ALLOW a tool write.
 
 Console roles on hosted: `OWNER` / `ADMIN` / `OPERATOR` / `READ_ONLY`. SSO manage is OWNER-only. Hold approve / kill needs operator capability (`OPERATOR` yes, `READ_ONLY` no).
 
@@ -20,7 +20,7 @@ Hosted SSO/SCIM is exercised against local Keycloak in the Shield Agent product 
 
 ## Policy enforcement vs SSO
 
-Operator SSO/SCIM is the **human** plane (who may approve Holds). Runtime policy enforcement (Allow / Hold / Deny before tool writes) is a separate PEP on the control plane. Optional hosted OPA packs may further DENY only. Neither SSO nor OPA replaces Shield `APPROVED`.
+Operator SSO/SCIM is the **human** plane (who may approve Holds). Runtime policy enforcement (Allow / Hold / Deny before tool writes) is a separate PEP on the control plane. Optional hosted OPA packs and IdP group→tool maps may further DENY or raise to Hold only. Neither SSO, maps, nor OPA replaces Shield `APPROVED`.
 
 ## OSS stays
 

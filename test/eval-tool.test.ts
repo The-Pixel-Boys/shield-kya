@@ -21,6 +21,7 @@ const baseConfig: ResolvedConfig = {
   json: false,
   allowMissingApiKey: false,
   offline: false,
+  holdEnabled: false,
 };
 
 describe("eval-tool", () => {
@@ -130,6 +131,7 @@ describe("eval-tool", () => {
         toolId: "org.sample.never.event",
         irreversible: true,
         offline: true,
+  holdEnabled: false,
       },
     );
     expect(result.offline).toBe(true);
@@ -144,6 +146,7 @@ describe("eval-tool", () => {
         toolId: "org.sample.data.write",
         irreversible: true,
         offline: true,
+  holdEnabled: false,
       },
     );
     expect(result.offline).toBe(true);

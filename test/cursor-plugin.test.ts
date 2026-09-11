@@ -19,12 +19,13 @@ describe("Cursor marketplace plugin", () => {
   });
 
   it("mcp.json uses npx gate and variable placeholders only", () => {
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string };
     const mcp = JSON.parse(readFileSync(join(root, "mcp.json"), "utf8"));
     const server = mcp.mcpServers["shield-kya"];
     expect(server.command).toBe("npx");
     expect(server.args).toEqual([
       "--no-install",
-      "@shield-agent/kya@0.1.23",
+      `@shield-agent/kya@${pkg.version}`,
       "serve-mcp",
       "--stdio",
     ]);
