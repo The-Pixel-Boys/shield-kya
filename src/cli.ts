@@ -72,6 +72,9 @@ import {
   runInvoke,
 } from "./commands/invoke.js";
 import { runSandboxCommand } from "./commands/sandbox.js";
+import { formatStopHuman, runStop } from "./commands/stop.js";
+import { runReceiptServe } from "./commands/receipt-serve.js";
+import { ensureSupportedNode } from "./node-upgrade.js";
 
 const HELP = `Shield KYA light CLI — Know Your Agent (provider-agnostic)
 
@@ -79,7 +82,9 @@ Usage:
   kya <command> [options]
 
 Commands:
-  start             ONE LINER: init + wire local MCP + open live activity report
+  start             ONE LINER: init + wire local MCP + open live report
+                    (report runs in the background — returns your terminal)
+  stop              Stop the background report server started by kya start
   connect <host>    Wire KYA MCP into a coding host config
                     (${connectableHosts().join("|")}; --project for project scope, --force to overwrite)
   init              Scaffold .kya/ config + sample tools + .env.example
@@ -149,6 +154,9 @@ export interface CliIo {
   readonly log: (msg: string) => void;
   readonly error: (msg: string) => void;
   readonly exit: (code: number) => void;
+  /** TTY detection + confirm are injectable for tests (node-upgrade gate). */
+  readonly isTty?: boolean;
+  readonly confirm?: (question: string) => Promise<boolean>;
 }
 
 const defaultIo: CliIo = {
@@ -177,6 +185,9 @@ export async function runCli(
   }
 
   try {
+    const nodeHandoff = await ensureSupportedNode(io, env, argv, parsed.command);
+    if (nodeHandoff !== undefined) return nodeHandoff;
+
     switch (parsed.command) {
       case "start": {
         const config = resolveConfig({
@@ -193,13 +204,38 @@ export async function runCli(
           parsed.flags["no-open"] === true || parsed.flags["no-open"] === "true";
         const result = await runStart(config, { force, open: !noOpen });
         if (config.json) {
-          io.log(JSON.stringify({ ...result, keepAlive: undefined }, null, 2));
+          io.log(JSON.stringify(result, null, 2));
         } else {
           io.log(formatStartHuman(result));
         }
-        if (result.keepAlive) {
-          await result.keepAlive;
+        return 0;
+      }
+
+      case "stop": {
+        const result = await runStop(cwd);
+        if (parsed.flags["json"] === true || parsed.flags["json"] === "true") {
+          io.log(JSON.stringify(result, null, 2));
+        } else {
+          io.log(formatStopHuman(result));
         }
+        return 0;
+      }
+
+      case "receipt-serve": {
+        // Internal: detached child of `kya start` / `kya receipt --open`.
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          allowMissingApiKey: true,
+          requireApiKey: false,
+          offline: true,
+        });
+        const input = receiptInputFromArgs(parsed);
+        await runReceiptServe(config, {
+          days: input.days ?? 3,
+          sessionId: input.sessionId,
+        });
         return 0;
       }
 
@@ -313,12 +349,9 @@ export async function runCli(
         const input = receiptInputFromArgs(parsed);
         const result = await runReceipt(config, input);
         if (config.json) {
-          io.log(JSON.stringify({ ...result, keepAlive: undefined }, null, 2));
+          io.log(JSON.stringify(result, null, 2));
         } else {
           io.log(formatReceiptHuman(result));
-        }
-        if (result.keepAlive) {
-          await result.keepAlive;
         }
         return 0;
       }
