@@ -30,6 +30,17 @@ const pinFiles = [
   "openai/codex.config.example.toml",
   "grok/README.md",
   "README.md",
+  "opencode/opencode.example.json",
+  "kilo/kilo.example.json",
+  "kiro/mcp.example.json",
+  "qwen/settings.example.json",
+  "kimi/mcp.example.json",
+  "mastracode/mcp.example.json",
+  "amp/settings.example.json",
+  "copilot/mcp-config.example.json",
+  "cline/cline_mcp_settings.example.json",
+  "droid/mcp.example.json",
+  "droid/README.md",
 ];
 const pinRe = /@shield-agent\/kya@\d+\.\d+\.\d+/g;
 for (const f of pinFiles) {

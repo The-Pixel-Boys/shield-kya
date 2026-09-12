@@ -46,6 +46,22 @@ kya start --force     # rewrite MCP blocks
 # KYA_DIFF_PREVIEW=0 to disable
 ```
 
+## One command per host
+
+`kya start` covers Claude Code, Cursor, and any host that reads `.mcp.json`. For the rest, `kya connect` writes the host's own config dialect directly:
+
+```bash
+kya connect opencode            # ~/.config/opencode/opencode.json
+kya connect qwen                # ~/.qwen/settings.json
+kya connect amp                 # ~/.config/amp/settings.json
+kya connect qwen --project      # project scope instead of global
+kya connect kiro --force        # overwrite an existing shield-kya entry
+```
+
+Connect merges — it never rewrites a host config it can't parse, and it keeps your other servers and keys. Supported hosts: `opencode`, `kilo`, `kiro`, `qwen`, `kimi`, `mastracode`, `amp`, `copilot`, `cursor`. Each wires `serve-mcp --stdio` with `KYA_OFFLINE=1` so the gate starts keyless; set `KYA_API_KEY` in the host env when you point at an authenticated plane.
+
+Hosts without a `connect` target still work: `kya wrap --offline -- <agent command>` puts the same evaluate gate in front of any CLI. Per-host recipes with verify steps and troubleshooting live in [docs/hosts/](docs/hosts/).
+
 ## Longer path (optional)
 
 ```bash
@@ -103,7 +119,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.1.34", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.1.35", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -130,7 +146,7 @@ npx @shield-agent/kya reject --id <approval-id>
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.1.34 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.1.35 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -141,7 +157,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.1.34 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.1.35 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -154,6 +170,24 @@ Merge `gemini/settings.example.json` (stdio) or `gemini/settings.hosted.example.
 ## Grok
 
 Hosted custom connector: `https://shield-agent.com/mcp` (see `grok/README.md`). Grok rejects localhost. Prefer a Bearer machine key when the UI offers a request header. For a local agent host, use the same stdio launch as Claude/Codex/Gemini.
+
+## More hosts
+
+Each ships a copy-paste example in its own directory; `kya connect <host>` writes the same thing for the starred ones. Full recipes (verify, uninstall, troubleshooting): [docs/hosts/](docs/hosts/).
+
+| Host | Setup | Example |
+|------|-------|---------|
+| OpenCode | `kya connect opencode` | `opencode/opencode.example.json` |
+| Kilo Code | `kya connect kilo` | `kilo/kilo.example.json` |
+| Kiro | `kya connect kiro` | `kiro/mcp.example.json` |
+| Qwen Code | `kya connect qwen` | `qwen/settings.example.json` (+ `settings.hosted.example.json`) |
+| Kimi Code | `kya connect kimi` | `kimi/mcp.example.json` |
+| MastraCode | `kya connect mastracode` | `mastracode/mcp.example.json` |
+| Amp | `kya connect amp` | `amp/settings.example.json` |
+| GitHub Copilot CLI | `kya connect copilot` | `copilot/mcp-config.example.json` |
+| Cline | copy into VS Code globalStorage | `cline/cline_mcp_settings.example.json` |
+| Droid | `droid mcp add` (schema unverified) | `droid/mcp.example.json` |
+| Pi · OMP · Devin · Hermes · Qoder · Maki · Muse · Antigravity | `kya wrap --offline -- <cmd>` | [docs/hosts/](docs/hosts/) |
 
 ## Cursor plugin
 
@@ -201,6 +235,7 @@ pnpm build
 
 - [Install hub](https://shield-agent.com/install)
 - [How KYA works](https://shield-agent.com/how-kya-works)
+- [Per-host recipes (23 hosts)](docs/hosts/)
 - [OTLP metrics (OSS + hosted)](docs/otlp.md)
 - [OWASP MCP governance map](docs/owasp-mcp-governance.md)
 - [Hosted operator SSO / SCIM (not in OSS CLI)](docs/hosted-operator-sso.md)

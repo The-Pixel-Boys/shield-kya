@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = join(import.meta.dirname, "..");
+const pin = `@shield-agent/kya@${(JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string }).version}`;
 
 describe("Cursor marketplace plugin", () => {
   it("manifest name is kebab-case and points at public repo", () => {
@@ -19,13 +20,12 @@ describe("Cursor marketplace plugin", () => {
   });
 
   it("mcp.json uses npx gate and variable placeholders only", () => {
-    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string };
     const mcp = JSON.parse(readFileSync(join(root, "mcp.json"), "utf8"));
     const server = mcp.mcpServers["shield-kya"];
     expect(server.command).toBe("npx");
     expect(server.args).toEqual([
       "--no-install",
-      `@shield-agent/kya@${pkg.version}`,
+      pin,
       "serve-mcp",
       "--stdio",
     ]);

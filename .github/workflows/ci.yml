@@ -25,8 +25,8 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install
-      - run: pnpm test
       - run: pnpm build
+      - run: pnpm test
       - name: Offline DENY then REQUIRE_APPROVE
         run: |
           set +e

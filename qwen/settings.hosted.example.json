@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "shield-kya": {
+      "httpUrl": "https://shield-agent.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${KYA_API_KEY}"
+      }
+    }
+  }
+}
