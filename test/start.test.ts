@@ -27,7 +27,8 @@ describe("kya start", () => {
         expect(raw.mcpServers["shield-kya"].args).toContain("serve-mcp");
       }
       expect(existsSync(join(cwd, ".kya", "trail.jsonl"))).toBe(true);
-      expect(r.keepAlive).toBeUndefined();
+      expect(r.reportPid).toBeUndefined();
+      expect(r.next).toContain("kya stop");
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

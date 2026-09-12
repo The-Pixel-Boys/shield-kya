@@ -9,7 +9,7 @@ cd your-project
 kya start
 ```
 
-`kya start` inits `.kya/`, wires `shield-kya` into `.mcp.json` (and `mcp.json`, `.cursor/mcp.json` when present), and opens the live activity report. Restart Claude Code once so MCP loads. `kya start --no-open` wires without the report; `--force` rewrites existing blocks.
+`kya start` inits `.kya/`, wires `shield-kya` into `.mcp.json` (and `mcp.json`, `.cursor/mcp.json` when present), and opens the live activity report — it runs in the background, so your terminal returns immediately (`kya stop` stops it). Restart Claude Code once so MCP loads. `kya start --no-open` wires without the report; `--force` rewrites existing blocks.
 
 ## Setup — Claude Desktop
 

@@ -6,7 +6,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ResolvedConfig } from "../config.js";
 import { runInit } from "./init.js";
-import { runReceipt } from "./receipt.js";
+import { openPath, runReceipt } from "./receipt.js";
+import { ensureReceiptDaemon } from "../receipt/daemon.js";
 import { appendTrail, defaultSessionId } from "../trail.js";
 
 export interface StartResult {
@@ -14,7 +15,8 @@ export interface StartResult {
   readonly wired: readonly string[];
   readonly skipped: readonly string[];
   readonly liveUrl?: string;
-  readonly keepAlive?: Promise<void>;
+  readonly reportPid?: number;
+  readonly reportReused?: boolean;
   readonly next: string;
 }
 
@@ -109,11 +111,17 @@ export async function runStart(
   seedTrailIfEmpty(config.cwd);
 
   let liveUrl: string | undefined;
-  let keepAlive: Promise<void> | undefined;
+  let reportPid: number | undefined;
+  let reportReused: boolean | undefined;
   if (open) {
-    const receipt = await runReceipt(config, { open: true, days: 3 });
-    liveUrl = receipt.liveUrl;
-    keepAlive = receipt.keepAlive;
+    // Static artifacts first, then the live report as a detached background
+    // server so the user gets their terminal back.
+    await runReceipt(config, { open: false, days: 3 });
+    const daemon = await ensureReceiptDaemon(config, { days: 3 });
+    liveUrl = daemon.url;
+    reportPid = daemon.pid;
+    reportReused = daemon.reused;
+    openPath(daemon.url);
   }
 
   return {
@@ -121,11 +129,12 @@ export async function runStart(
     wired,
     skipped,
     liveUrl,
-    keepAlive,
+    reportPid,
+    reportReused,
     next:
       "Restart Cursor / Claude Code / Codex so shield-kya MCP loads. " +
-      "Then use wrap/evaluate tools — this report updates live. " +
-      "Ctrl+C stops the report server.",
+      "The report runs in the background — reopen with `kya receipt --open`, " +
+      "stop with `kya stop`.",
   };
 }
 
