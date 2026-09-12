@@ -28,10 +28,10 @@ If `KYA_API_KEY` is empty against an authenticated plane, network commands exit 
 ## One liner
 
 ```bash
-# After: npm i -g @shield-agent/kya   (or ./scripts/install-local.sh from this repo)
-cd your-project
-kya start
+npm i -g @shield-agent/kya@latest && kya start
 ```
+
+Run it in your project directory. (From a clone of this repo, `./scripts/install-local.sh` replaces the npm install.)
 
 That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/mcp.json` → `kya serve-mcp --stdio`), and **opens** the live activity report. Restart your agent host once so MCP loads. Ctrl+C stops the report server.
 
@@ -119,7 +119,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.1.35", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.1.36", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -146,7 +146,7 @@ npx @shield-agent/kya reject --id <approval-id>
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.1.35 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.1.36 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -157,7 +157,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.1.35 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.1.36 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
