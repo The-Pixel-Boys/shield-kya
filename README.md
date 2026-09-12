@@ -7,6 +7,16 @@
 [![Install](https://img.shields.io/badge/install-shield--agent.com%2Finstall-0A0A0A)](https://shield-agent.com/install)
 [![X](https://img.shields.io/badge/X-%40coscosmico-000000?logo=x&logoColor=white)](https://x.com/coscosmico)
 
+
+Gate agent tool calls (Allow / Deny / Hold) before they write or deploy. Local activity receipt included. Free forever under MIT.
+
+```bash
+npm i -g @shield-agent/kya@latest && kya start
+```
+
+Requires **Node.js 24+**. Restart Cursor / Claude Code / Codex once so MCP loads. Hosted desk: [shield-agent.com](https://shield-agent.com/install).
+
+
 CLI and local MCP gate for Shield’s Know Your Agent path.
 
 If an agent can change a real system, it has to ask Shield first. You register the agent, wrap the tool, and get Allow, Hold, or Deny. Hold waits for a person. This package does not scan your network. Agents that never call evaluate stay invisible on purpose.
@@ -19,19 +29,15 @@ npx @shield-agent/kya@latest --help
 
 Requires **Node.js 24+** (`engines.node: >=24`). On an older Node the CLI offers to install 24 for you (via volta / fnm / nvm / brew), reinstall itself, and finish the command — declining just prints a warning and continues.
 
-It works with any host that speaks MCP or OpenAPI. Vertical packs are optional. Shield is the only policy decision point: this gate never auto-approves an irreversible side effect.
+Works with hosts that speak MCP (Claude Code, Cursor, Codex, Gemini, Grok). Vertical packs are optional. The gate never auto-approves an irreversible side effect.
 
-If `KYA_API_KEY` is empty against an authenticated plane, network commands exit non-zero. `eval-tool`, `wrap`, and `invoke` exit `0` on ALLOW, `4` on REQUIRE_APPROVE, and `1` on DENY or unknown, so a line like `eval-tool && write` cannot skip the gate.
+Default wrap is **observe** (records the trail, exit `0`, no Hold ticket). Org Hold: `KYA_HOLD=1` (exit `4` on REQUIRE_APPROVE). DENY is exit `1`. Never-events DENY with no second prompt.
 
 `--offline` runs sample evaluate without a paid cloud (useful for DENY and REQUIRE_APPROVE demos). Creating an agent is itself a tool: offline, `kya.agent.register` comes back REQUIRE_APPROVE. Allow, break-glass, and approve mint modes live on the control plane.
 
-## One liner
+## From a git clone
 
-```bash
-npm i -g @shield-agent/kya@latest && kya start
-```
-
-Run it in your project directory. (From a clone of this repo, `./scripts/install-local.sh` replaces the npm install.)
+`./scripts/install-local.sh` builds and installs this checkout on PATH.
 
 That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/mcp.json` → `kya serve-mcp --stdio`), and **opens** the live activity report. The report runs in the background — you get your terminal back; `kya stop` stops it, `kya receipt --open` reopens it. Restart your agent host once so MCP loads.
 
