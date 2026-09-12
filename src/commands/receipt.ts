@@ -10,7 +10,7 @@ import {
   renderReceiptHtml,
   renderReceiptMarkdown,
 } from "../receipt/render-receipt.js";
-import { startLiveReceiptServer } from "../receipt/live-server.js";
+import { ensureReceiptDaemon } from "../receipt/daemon.js";
 import { receiptsDir } from "../trail.js";
 
 export const DEFAULT_RECEIPT_DAYS = 3;
@@ -29,13 +29,15 @@ export interface ReceiptArtifacts {
 /** Static write-only result (no live server). */
 export type StaticReceiptResult = ReceiptArtifacts & {
   readonly liveUrl?: undefined;
-  readonly keepAlive?: undefined;
+  readonly daemonPid?: undefined;
+  readonly daemonReused?: undefined;
 };
 
-/** Live result: URL and waiter are both required. */
+/** Live result: background daemon URL + pid are both required. */
 export type LiveReceiptResult = ReceiptArtifacts & {
   readonly liveUrl: string;
-  readonly keepAlive: Promise<void>;
+  readonly daemonPid: number;
+  readonly daemonReused: boolean;
 };
 
 export type ReceiptResult = StaticReceiptResult | LiveReceiptResult;
@@ -88,17 +90,14 @@ export async function runReceipt(
     return base;
   }
 
-  const live = await startLiveReceiptServer({
-    config,
-    sessionId,
-    days,
-  });
-  openPath(live.url);
+  const daemon = await ensureReceiptDaemon(config, { days, sessionId });
+  openPath(daemon.url);
 
   return {
     ...base,
-    liveUrl: live.url,
-    keepAlive: live.waitUntilClosed,
+    liveUrl: daemon.url,
+    daemonPid: daemon.pid,
+    daemonReused: daemon.reused,
   };
 }
 
@@ -123,12 +122,13 @@ export function formatReceiptHuman(r: ReceiptResult): string {
   ];
   if (r.liveUrl) {
     lines.push(`live: ${r.liveUrl}`);
-    lines.push("watching trail - Ctrl+C to stop");
+    lines.push("report runs in the background - kya stop to stop");
   }
   return lines.join("\n");
 }
 
-function openPath(target: string): void {
+export function openPath(target: string): void {
+  if (process.env.KYA_NO_BROWSER === "1") return;
   const platform = process.platform;
   const cmd = platform === "darwin" ? "open" : platform === "win32" ? "start" : "xdg-open";
   const child = spawn(cmd, [target], { detached: true, stdio: "ignore" });
