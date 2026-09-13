@@ -13,7 +13,7 @@ droid mcp add shield-kya "npx --no-install @shield-agent/kya@0.1.34 serve-mcp --
   --env KYA_HOST=ide
 ```
 
-This needs the package installed (`npm i -g @shield-agent/kya`); `--no-install` means no registry fetch at startup. Restart Droid afterwards.
+This needs the package installed (`npm i -g @shield-agent/kya`); `--no-install` means no registry fetch at startup. No restart — Droid reloads automatically when its MCP config changes.
 
 ## Setup — by hand (unverified)
 
@@ -41,11 +41,11 @@ Three tools: `kya.policy_evaluate` (Allow / Deny / Hold), `kya.session_ingest`, 
 
 ## Uninstall
 
-`droid mcp remove shield-kya` (or delete the block from the config file) and restart.
+`droid mcp remove shield-kya` (or delete the block from the config file). Droid reloads on its own.
 
 ## Troubleshooting
 
-- **`/mcp` doesn't list shield-kya.** Restart Droid. Then check the config file Droid actually reads — if `droid mcp add` wrote a different path than `~/.factory/mcp.json`, that's the schema drift the warning above is about.
+- **`/mcp` doesn't list shield-kya.** Droid auto-reloads `mcp.json`, so check which file `droid mcp add` wrote (user level) versus the one you edited — if they differ, that's the schema drift the warning above is about.
 - **Server fails to start.** Install the package globally so `npx --no-install` resolves without a fetch.
 - **`KYA_API_KEY` empty inside Droid.** The `--env KYA_API_KEY=$KYA_API_KEY` flag copies the value at add time — re-run the add command if the key rotated.
 - **Empty trail despite a listed server.** Only MCP-routed calls reach KYA; see the honesty note.

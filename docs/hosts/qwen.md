@@ -14,7 +14,7 @@ That writes a `shield-kya` entry into `~/.qwen/settings.json` under `mcpServers`
 kya connect qwen --project   # writes ./.qwen/settings.json
 ```
 
-Restart Qwen Code after connecting — MCP servers load at startup.
+No restart needed — Qwen Code watches `settings.json` and starts new MCP servers live.
 
 Prefer editing by hand? Copy [`qwen/settings.example.json`](../../qwen/settings.example.json) (stdio) into place and merge the `mcpServers` section yourself.
 
@@ -35,8 +35,8 @@ Connect merges. Your other MCP servers and settings stay as they were. If the ex
 
 ## Verify
 
-1. Restart Qwen Code.
-2. Ask the agent to list its MCP tools — `kya.policy_evaluate`, `kya.session_ingest`, `kya.request_approval` should appear.
+1. Ask the running session to list its MCP tools — `shield-kya` appears without a restart.
+2. Confirm `kya.policy_evaluate`, `kya.session_ingest`, `kya.request_approval` are listed.
 3. Offline smoke, no cloud needed:
 
    ```bash
@@ -51,7 +51,7 @@ Edit `~/.qwen/settings.json` and delete the `shield-kya` entry under `mcpServers
 
 ## Troubleshooting
 
-- **Server not listed in Qwen.** Restart Qwen Code. MCP servers load at startup, not hot.
+- **Server not listed in Qwen.** Live reload landed mid-2026 — on older builds, restart the CLI. Confirm the entry is under `mcpServers` in `~/.qwen/settings.json`.
 - **`command not found` errors.** Connect wires `node …/cli.js serve-mcp --stdio` from the install you ran it from. If you connected via a temp `npx` cache and later cleared it, rerun `kya connect qwen --force` from a real install (`npm i -g @shield-agent/kya`).
 - **Double verdicts on one action.** You enabled both the stdio and hosted entries. Remove one.
 - **Verdicts require a key.** The wired env sets `KYA_OFFLINE=1`, so the server starts keyless and sample-evaluates. Against an authenticated control plane, set `KYA_API_KEY` in the entry's `env` block (stdio) or use the hosted variant's Bearer header.

@@ -14,7 +14,7 @@ That writes a `shield-kya` entry into `~/.kimi-code/mcp.json` under `mcpServers`
 kya connect kimi --project   # writes ./.kimi-code/mcp.json
 ```
 
-Restart Kimi Code after connecting — MCP servers load at startup.
+No app restart — open a new session to load `shield-kya`. Kimi Code registers MCP servers at session start.
 
 Prefer editing by hand? Copy [`kimi/mcp.example.json`](../../kimi/mcp.example.json) into place and merge the `mcpServers` section yourself.
 
@@ -33,7 +33,7 @@ Connect merges. Your other MCP servers and settings stay as they were. If the ex
 
 ## Verify
 
-1. Restart Kimi Code.
+1. Open a new Kimi Code session.
 2. Ask the agent to list its MCP tools — `kya.policy_evaluate`, `kya.session_ingest`, `kya.request_approval` should appear.
 3. Offline smoke, no cloud needed:
 
@@ -49,7 +49,7 @@ Edit `~/.kimi-code/mcp.json` and delete the `shield-kya` entry under `mcpServers
 
 ## Troubleshooting
 
-- **Server not listed in Kimi.** Restart Kimi Code. MCP servers load at startup, not hot.
+- **Server not listed in Kimi.** MCP servers register at session start. If you added it mid-session, existing sessions never see it — open a new session.
 - **`command not found` errors.** Connect wires `node …/cli.js serve-mcp --stdio` from the install you ran it from. If you connected via a temp `npx` cache and later cleared it, rerun `kya connect kimi --force` from a real install (`npm i -g @shield-agent/kya`).
 - **Tools silently bypass the gate.** KYA only sees calls that go through MCP. A tool Kimi runs natively without MCP never reaches evaluate — see the honesty note below.
 - **Verdicts require a key.** The wired env sets `KYA_OFFLINE=1`, so the server starts keyless and sample-evaluates. Against an authenticated control plane, set `KYA_API_KEY` in the entry's `env` block.
