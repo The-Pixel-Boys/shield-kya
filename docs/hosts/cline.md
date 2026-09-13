@@ -16,7 +16,7 @@ There's no `kya connect cline` — Cline's config lives inside VS Code's globalS
    | Windows | `%APPDATA%\Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json` |
 
    Using VS Code Insiders, VSCodium, or a fork? The `Code` path segment changes (`Code - Insiders`, `VSCodium`, …) — the rest is the same.
-3. Fully quit and reopen VS Code. Cline reads MCP settings at extension startup.
+3. Save the file. Cline's MCP hub watches `cline_mcp_settings.json` and connects new servers on save — no VS Code restart.
 
 The example leaves `"autoApprove": []` empty on purpose. Auto-approving MCP calls would skip exactly the human checkpoint KYA exists to provide.
 
@@ -42,13 +42,13 @@ You write one file by hand: the `cline_mcp_settings.json` for your VS Code varia
 
 ## Uninstall
 
-Remove the `shield-kya` block from `cline_mcp_settings.json` and restart VS Code.
+Remove the `shield-kya` block from `cline_mcp_settings.json` and save — the watcher disconnects it. No VS Code restart.
 
 ## Troubleshooting
 
 - **Server shows red / fails to start.** The example uses `npx --no-install @shield-agent/kya@…` — it needs the package already installed (`npm i -g @shield-agent/kya`) or on PATH. `--no-install` is deliberate: no silent registry fetch at editor startup.
 - **Connected but no trail rows.** Check which tools Cline actually routes through MCP; native file edits may not go through the MCP path — see the honesty note.
-- **Edits after setup not picked up.** Cline caches MCP config per VS Code window. Reload the window (`Cmd/Ctrl+Shift+P → Reload Window`) or restart VS Code.
+- **Edits after setup not picked up.** Cline watches the settings file and connects on save. If a connection looks stuck, use the per-server restart button in the MCP tab.
 - **globalStorage path not found.** The extension creates the directory on first run. Install Cline, open it once, then look again.
 
 ## Honesty note

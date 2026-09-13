@@ -29,17 +29,21 @@ npx @shield-agent/kya@latest --help
 
 Requires **Node.js 24+** (`engines.node: >=24`). On an older Node the CLI offers to install 24 for you (via volta / fnm / nvm / brew), reinstall itself, and finish the command — declining just prints a warning and continues.
 
-Works with hosts that speak MCP (Claude Code, Cursor, Codex, Gemini, Grok). Vertical packs are optional. The gate never auto-approves an irreversible side effect.
+It works with any host that speaks MCP or OpenAPI. Vertical packs are optional. Shield is the only policy decision point: this gate never auto-approves an irreversible side effect.
 
-Default wrap is **observe** (records the trail, exit `0`, no Hold ticket). Org Hold: `KYA_HOLD=1` (exit `4` on REQUIRE_APPROVE). DENY is exit `1`. Never-events DENY with no second prompt.
+If `KYA_API_KEY` is empty against an authenticated plane, network commands exit non-zero. `eval-tool`, `wrap`, and `invoke` exit `0` on ALLOW, `4` on REQUIRE_APPROVE, and `1` on DENY or unknown, so a line like `eval-tool && write` cannot skip the gate.
 
 `--offline` runs sample evaluate without a paid cloud (useful for DENY and REQUIRE_APPROVE demos). Creating an agent is itself a tool: offline, `kya.agent.register` comes back REQUIRE_APPROVE. Allow, break-glass, and approve mint modes live on the control plane.
 
-## From a git clone
+## One liner
 
-`./scripts/install-local.sh` builds and installs this checkout on PATH.
+```bash
+npm i -g @shield-agent/kya@latest && kya start
+```
 
-That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/mcp.json` → `kya serve-mcp --stdio`), and **opens** the live activity report. The report runs in the background — you get your terminal back; `kya stop` stops it, `kya receipt --open` reopens it. Restart your agent host once so MCP loads.
+Run it in your project directory. (From a clone of this repo, `./scripts/install-local.sh` replaces the npm install.)
+
+That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/mcp.json` → `kya serve-mcp --stdio`), and **opens** the live activity report. The report runs in the background — you get your terminal back; `kya stop` stops it, `kya receipt --open` reopens it. Cursor, Kiro, Qwen, Amp, Droid, Cline, and Grok pick the server up live with no restart (Kimi: just a new session); Claude Code, Codex, OpenCode, Gemini, Copilot CLI, and Kilo CLI load it on next launch — `claude --resume` keeps your conversation.
 
 ![KYA activity receipt — agent tool trail with Allow / Deny / Hold](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/activity-receipt.png)
 
@@ -125,7 +129,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.1.37", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.1.38", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -152,7 +156,7 @@ npx @shield-agent/kya reject --id <approval-id>
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.1.37 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.1.38 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -163,7 +167,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.1.37 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.1.38 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 

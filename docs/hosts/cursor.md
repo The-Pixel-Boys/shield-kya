@@ -17,7 +17,7 @@ For a per-project setup instead of global:
 kya connect cursor --project   # writes ./.cursor/mcp.json
 ```
 
-Restart Cursor after connecting — MCP servers load at startup.
+No restart — Cursor watches `mcp.json` and starts new stdio servers automatically. That holds whether you wired with `kya connect cursor` or `kya start`.
 
 Two other paths, if you prefer them: merge the repo-root [`.mcp.json`](../../.mcp.json) by hand, or install the shipped [`.cursor-plugin/`](../../.cursor-plugin/) (`plugin.json` + a wrap skill) for a plugin-managed setup.
 
@@ -36,7 +36,7 @@ Connect merges. Your other MCP servers and settings stay as they were. If the ex
 
 ## Verify
 
-1. Restart Cursor.
+1. Watch Settings → MCP — `shield-kya` turns green on its own.
 2. Open Settings → MCP and confirm `shield-kya` is connected with three tools: `kya.policy_evaluate`, `kya.session_ingest`, `kya.request_approval`.
 3. Offline smoke, no cloud needed:
 
@@ -52,7 +52,7 @@ Edit `~/.cursor/mcp.json` and delete the `shield-kya` entry under `mcpServers`. 
 
 ## Troubleshooting
 
-- **Server shows red in Settings → MCP.** Restart Cursor. MCP servers load at startup, not hot.
+- **Server shows red in Settings → MCP.** Cursor hot-reloads stdio servers — give it a few seconds after saving. Remote/HTTP servers can stick; toggle the server off/on in the panel.
 - **`command not found` errors.** Connect wires `node …/cli.js serve-mcp --stdio` from the install you ran it from. If you connected via a temp `npx` cache and later cleared it, rerun `kya connect cursor --force` from a real install (`npm i -g @shield-agent/kya`).
 - **Wired but the agent ignores it.** Check Cursor's tool-approval settings — if the agent is set to run tools without MCP, those calls never reach evaluate. See the honesty note.
 - **Verdicts require a key.** The wired env sets `KYA_OFFLINE=1`, so the server starts keyless and sample-evaluates. Against an authenticated control plane, set `KYA_API_KEY` in the entry's `env` block.

@@ -4,6 +4,6 @@ Auto-wire: `kya connect amp` (global `~/.config/amp/settings.json`; `%APPDATA%\a
 
 Manual: merge `settings.example.json` into your settings — note Amp's prefixed root key `amp.mcpServers`, not bare `mcpServers`.
 
-Restart Amp and ask it to list MCP tools — the three `kya.*` tools should appear.
+Amp applies the settings change live — ask it to list MCP tools and the three `kya.*` tools should appear, no restart.
 
 Full recipe: [docs/hosts/amp.md](../docs/hosts/amp.md)

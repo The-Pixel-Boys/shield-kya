@@ -14,7 +14,7 @@ That writes a `shield-kya` entry into `~/.kiro/settings/mcp.json` under `mcpServ
 kya connect kiro --project   # writes ./.kiro/settings/mcp.json
 ```
 
-Restart Kiro after connecting — MCP servers load at startup.
+No restart — Kiro hot-reloads `mcp.json` on save, and only the new server starts. The MCP tab in the Kiro panel shows it.
 
 Prefer editing by hand? Copy [`kiro/mcp.example.json`](../../kiro/mcp.example.json) into place and merge the `mcpServers` section yourself.
 
@@ -33,7 +33,7 @@ Connect merges. Your other MCP servers and settings stay as they were. If the ex
 
 ## Verify
 
-1. Restart Kiro.
+1. Save the file — servers reconnect automatically. Check the MCP tab in the Kiro panel.
 2. Ask the agent to list its MCP tools — `kya.policy_evaluate`, `kya.session_ingest`, `kya.request_approval` should appear.
 3. Offline smoke, no cloud needed:
 
@@ -49,7 +49,7 @@ Edit `~/.kiro/settings/mcp.json` and delete the `shield-kya` entry under `mcpSer
 
 ## Troubleshooting
 
-- **Server not listed in Kiro.** Restart Kiro. MCP servers load at startup, not hot.
+- **Server not listed in Kiro.** Kiro hot-reloads `mcp.json` on save — confirm the file saved and the entry is under `mcpServers`. If the panel shows connected but the agent can't call tools, click Reconnect once (known Kiro bug).
 - **`command not found` errors.** Connect wires `node …/cli.js serve-mcp --stdio` from the install you ran it from. If you connected via a temp `npx` cache and later cleared it, rerun `kya connect kiro --force` from a real install (`npm i -g @shield-agent/kya`).
 - **Tools silently bypass the gate.** KYA only sees calls that go through MCP. A tool Kiro runs natively without MCP never reaches evaluate — see the honesty note below.
 - **Verdicts require a key.** The wired env sets `KYA_OFFLINE=1`, so the server starts keyless and sample-evaluates. Against an authenticated control plane, set `KYA_API_KEY` in the entry's `env` block.

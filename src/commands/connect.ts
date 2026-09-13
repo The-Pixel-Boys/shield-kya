@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ResolvedConfig } from "../config.js";
 import { UsageError } from "../errors.js";
+import { hostReload, hostRunning, listProcessNames, reloadMessage } from "../host-reload.js";
 
 export type ConnectScope = "global" | "project";
 export type ConnectStatus = "created" | "wired" | "skipped";
@@ -155,6 +156,8 @@ export interface ConnectInput {
   readonly host: string;
   readonly scope?: ConnectScope;
   readonly force?: boolean;
+  /** Test hook: running process basenames instead of a live ps scan. */
+  readonly procs?: ReadonlySet<string>;
 }
 
 function serverBlock(spec: HostSpec): Record<string, unknown> {
@@ -227,13 +230,19 @@ export async function runConnect(
     );
   }
   const status = mergeHostConfig(path, spec, Boolean(input.force));
+  const verify =
+    "Verify: ask the agent to list its MCP tools — kya.policy_evaluate, kya.session_ingest, kya.request_approval should appear.";
+  const reload = hostReload(key);
+  const next = reload
+    ? `${reloadMessage(reload, spec.label, hostRunning(reload, input.procs ?? listProcessNames()))} ${verify}`
+    : `Restart ${spec.label} so the shield-kya MCP server loads. ${verify}`;
   return {
     host: key,
     label: spec.label,
     path,
     status,
     scope,
-    next: `Restart ${spec.label} so the shield-kya MCP server loads. Verify: ask the agent to list its MCP tools — kya.policy_evaluate, kya.session_ingest, kya.request_approval should appear.`,
+    next,
   };
 }
 
