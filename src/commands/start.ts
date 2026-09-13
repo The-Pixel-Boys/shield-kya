@@ -9,6 +9,7 @@ import { runInit } from "./init.js";
 import { openPath, runReceipt } from "./receipt.js";
 import { ensureReceiptDaemon } from "../receipt/daemon.js";
 import { appendTrail, defaultSessionId } from "../trail.js";
+import { hostReload, hostRunning, listProcessNames, reloadMessage } from "../host-reload.js";
 
 export interface StartResult {
   readonly initCreated: readonly string[];
@@ -88,7 +89,7 @@ function seedTrailIfEmpty(cwd: string): void {
 
 export async function runStart(
   config: ResolvedConfig,
-  input: { force?: boolean; open?: boolean } = {},
+  input: { force?: boolean; open?: boolean; procs?: ReadonlySet<string> } = {},
 ): Promise<StartResult> {
   const force = Boolean(input.force);
   const open = input.open !== false;
@@ -124,6 +125,18 @@ export async function runStart(
     openPath(daemon.url);
   }
 
+  // start wires the configs Claude Code (.mcp.json / mcp.json) and Cursor
+  // (.cursor/mcp.json) read — the reload note is per-host, not a blanket
+  // "restart everything".
+  const procs = input.procs ?? listProcessNames();
+  const hostNotes = (["cursor", "claude"] as const)
+    .map((id) => hostReload(id))
+    .filter((info): info is NonNullable<typeof info> => Boolean(info))
+    .map((info) =>
+      reloadMessage(info, info.id === "claude" ? "Claude Code" : "Cursor", hostRunning(info, procs)),
+    )
+    .join(" ");
+
   return {
     initCreated: init.created,
     wired,
@@ -132,7 +145,7 @@ export async function runStart(
     reportPid,
     reportReused,
     next:
-      "Restart Cursor / Claude Code / Codex so shield-kya MCP loads. " +
+      `${hostNotes} ` +
       "The report runs in the background — reopen with `kya receipt --open`, " +
       "stop with `kya stop`.",
   };

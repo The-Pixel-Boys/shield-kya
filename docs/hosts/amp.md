@@ -12,7 +12,7 @@ That writes a `shield-kya` entry into `~/.config/amp/settings.json` — under `a
 
 Amp has no project-scope config in the registry, so `kya connect amp --project` exits with a usage error. Global scope is the only option today.
 
-Restart Amp after connecting — MCP servers load at startup.
+No restart — Amp applies `settings.json` changes live.
 
 Prefer editing by hand? Copy [`amp/settings.example.json`](../../amp/settings.example.json) into place and merge the `amp.mcpServers` section yourself.
 
@@ -30,8 +30,8 @@ Connect merges. Your other Amp settings stay as they were. If the existing file 
 
 ## Verify
 
-1. Restart Amp.
-2. Ask the agent to list its MCP tools — `kya.policy_evaluate`, `kya.session_ingest`, `kya.request_approval` should appear.
+1. Ask Amp to list its MCP tools — `shield-kya` shows up live, no restart.
+2. Confirm `kya.policy_evaluate`, `kya.session_ingest`, `kya.request_approval` are listed.
 3. Offline smoke, no cloud needed:
 
    ```bash
@@ -46,7 +46,7 @@ Edit `~/.config/amp/settings.json` and delete the `shield-kya` entry under `amp.
 
 ## Troubleshooting
 
-- **Server not listed in Amp.** Restart Amp. MCP servers load at startup, not hot. Also check the entry landed under `amp.mcpServers` — a hand-added `mcpServers` block is ignored by Amp.
+- **Server not listed in Amp.** Check the entry landed under `amp.mcpServers` — a hand-added `mcpServers` block is ignored by Amp. Workspace-scoped entries need one approval: `amp mcp approve shield-kya`.
 - **`command not found` errors.** Connect wires `node …/cli.js serve-mcp --stdio` from the install you ran it from. If you connected via a temp `npx` cache and later cleared it, rerun `kya connect amp --force` from a real install (`npm i -g @shield-agent/kya`).
 - **`--project` fails.** Expected — Amp has no project-scope config wired. Use the global file.
 - **Verdicts require a key.** The wired env sets `KYA_OFFLINE=1`, so the server starts keyless and sample-evaluates. Against an authenticated control plane, set `KYA_API_KEY` in the entry's `env` block.
