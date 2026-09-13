@@ -2,7 +2,7 @@
   "amp.mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.1.38", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.1.39", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "https://shield-agent.com",
         "KYA_API_KEY": "${KYA_API_KEY}",

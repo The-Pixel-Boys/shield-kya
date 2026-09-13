@@ -9,9 +9,10 @@
  * set by the upgrade re-exec and by the receipt daemon child so the check
  * never loops.
  */
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
 
 export const REQUIRED_NODE_MAJOR = 24;
@@ -23,7 +24,10 @@ export interface NodeGateDeps {
   readonly platform?: NodeJS.Platform;
   readonly hasCmd?: (cmd: string) => boolean;
   readonly hasFile?: (path: string) => boolean;
-  readonly run?: (shell: string, args: readonly string[]) => Promise<number>;
+  readonly run?: (cmd: string, args: readonly string[], env: NodeJS.ProcessEnv) => Promise<number>;
+  readonly readdir?: (dir: string) => readonly string[];
+  readonly firstNodeOnPath?: () => string | undefined;
+  readonly cliJs?: string;
 }
 
 export function currentNodeMajor(version: string = process.version): number {
@@ -64,6 +68,128 @@ export function detectNodeManager(
   if (platform !== "win32" && hasFile(nvmScriptPath(env))) return "nvm";
   if (platform !== "win32" && hasCmd("brew")) return "brew";
   return undefined;
+}
+
+function safeReaddir(dir: string): readonly string[] {
+  try {
+    return readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
+function bestSatisfying(entries: readonly string[]): string | undefined {
+  let best: string | undefined;
+  let bestMajor = -1;
+  let bestMinor = -1;
+  let bestPatch = -1;
+  for (const entry of entries) {
+    const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(entry);
+    if (!match) continue;
+    const [major, minor, patch] = [Number(match[1]), Number(match[2]), Number(match[3])];
+    if (major < REQUIRED_NODE_MAJOR) continue;
+    if (
+      major > bestMajor ||
+      (major === bestMajor && minor > bestMinor) ||
+      (major === bestMajor && minor === bestMinor && patch > bestPatch)
+    ) {
+      best = `v${major}.${minor}.${patch}`;
+      bestMajor = major;
+      bestMinor = minor;
+      bestPatch = patch;
+    }
+  }
+  return best;
+}
+
+function managerVersionsDir(manager: NodeManager, env: NodeJS.ProcessEnv): string | undefined {
+  const home = env.HOME ?? "";
+  switch (manager) {
+    case "nvm":
+      return join(env.NVM_DIR ?? join(home, ".nvm"), "versions", "node");
+    case "volta":
+      return join(home, ".volta", "tools", "image", "node");
+    case "fnm":
+      return join(env.FNM_DIR ?? join(home, ".local", "share", "fnm"), "node-versions");
+    case "brew":
+      return undefined; // cellar layout varies; rely on the prompt path
+  }
+}
+
+/**
+ * Newest already-installed Node that satisfies the requirement, per the
+ * manager's own versions dir. The gate uses this to never re-offer an install
+ * that already succeeded — a repeat prompt means the shell is shadowing the
+ * manager's node, not that the upgrade is missing.
+ */
+export function findInstalledNode(
+  manager: NodeManager,
+  env: NodeJS.ProcessEnv,
+  deps: NodeGateDeps = {},
+): string | undefined {
+  const dir = managerVersionsDir(manager, env);
+  if (!dir) return undefined;
+  const readdir = deps.readdir ?? safeReaddir;
+  return bestSatisfying(readdir(dir));
+}
+
+function defaultFirstNodeOnPath(): string | undefined {
+  const pathEnv = process.env.PATH ?? "";
+  for (const dir of pathEnv.split(process.platform === "win32" ? ";" : ":")) {
+    if (!dir) continue;
+    const candidate = join(dir, process.platform === "win32" ? "node.exe" : "node");
+    if (existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+/**
+ * cli.js sits next to this module when compiled (dist/), one level down in
+ * dist/ when running from source (tests). Resolve whichever exists.
+ */
+function defaultCliJs(): string {
+  const compiled = fileURLToPath(new URL("./cli.js", import.meta.url));
+  if (existsSync(compiled)) return compiled;
+  return fileURLToPath(new URL("../dist/cli.js", import.meta.url));
+}
+
+function switchHint(manager: NodeManager, installed: string): string {  switch (manager) {
+    case "nvm":
+      return `nvm use ${installed}`;
+    case "fnm":
+      return `fnm use ${installed}`;
+    case "volta":
+      return `volta install node@${installed.replace(/^v/, "")}`;
+    case "brew":
+      return "check PATH order";
+  }
+}
+
+/**
+ * Absolute path to the node binary for an installed version, per manager
+ * layout. Lets the gate re-exec the current command under the compliant
+ * runtime directly — no shell sourcing, immune to the user's PATH order.
+ */
+export function installedNodeBin(
+  manager: NodeManager,
+  installed: string,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform,
+): string | undefined {
+  const dir = managerVersionsDir(manager, env);
+  if (!dir) return undefined;
+  const bare = installed.replace(/^v/, "");
+  const exe = platform === "win32" ? "node.exe" : "node";
+  switch (manager) {
+    case "nvm":
+      return join(dir, `v${bare}`, "bin", exe);
+    case "volta":
+      return join(dir, bare, "bin", exe);
+    case "fnm":
+      return join(dir, `v${bare}`, "installation", "bin", exe);
+    case "brew":
+      return undefined;
+  }
 }
 
 function rerunTail(argv: readonly string[]): string {
@@ -110,9 +236,13 @@ export function buildUpgradeScript(
   return { shell: "bash", args: ["-c", lines.join("\n")] };
 }
 
-async function defaultRun(shell: string, args: readonly string[]): Promise<number> {
+async function defaultRun(
+  cmd: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+): Promise<number> {
   return new Promise((resolve, reject) => {
-    const child = spawn(shell, [...args], { stdio: "inherit" });
+    const child = spawn(cmd, [...args], { stdio: "inherit", env });
     child.on("error", reject);
     child.on("close", (code) => resolve(code ?? 1));
   });
@@ -154,6 +284,44 @@ export async function ensureSupportedNode(
   if (nodeSatisfied(version)) return undefined;
 
   const warn = `KYA needs Node.js ${REQUIRED_NODE_MAJOR}+ (you have ${version}).`;
+  const manager = detectNodeManager(env, deps);
+
+  // Upgrade already done once? Don't re-offer the install — re-exec this
+  // command under the installed runtime directly (immune to PATH order).
+  // Only the shadow case (binary missing on disk) falls back to a message.
+  const installed = manager ? findInstalledNode(manager, env, deps) : undefined;
+  if (manager && installed) {
+    const bin =
+      (deps.platform ?? process.platform) === "win32"
+        ? undefined
+        : installedNodeBin(manager, installed, env, deps.platform ?? process.platform);
+    const hasFile = deps.hasFile ?? existsSync;
+    if (bin && hasFile(bin) && env.KYA_NODE_REEXEC !== "1") {
+      const cliJs = deps.cliJs ?? defaultCliJs();
+      const run = deps.run ?? defaultRun;
+      io.error(
+        `Running under Node ${installed} (already installed via ${manager}; this shell defaults to ${version} — ${switchHint(manager, installed)} makes it permanent).`,
+      );
+      return run(bin, [cliJs, ...argv], {
+        ...env,
+        KYA_NODE_CHECKED: "1",
+        KYA_NODE_REEXEC: "1",
+      });
+    }
+    const firstNode = (deps.firstNodeOnPath ?? defaultFirstNodeOnPath)();
+    const versionsDir = managerVersionsDir(manager, env);
+    const shadow =
+      firstNode && versionsDir && !firstNode.startsWith(versionsDir)
+        ? ` from ${firstNode}`
+        : "";
+    io.error(
+      `Node ${installed} is already installed via ${manager}, but this shell runs ${version}${shadow}. ` +
+        `Run \`${switchHint(manager, installed)}\` or open a new terminal — then this warning stops. ` +
+        `Continuing on ${version}.`,
+    );
+    return undefined;
+  }
+
   const isTty = io.isTty ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const confirm = io.confirm ?? defaultConfirm;
   if (!isTty) {
@@ -161,7 +329,6 @@ export async function ensureSupportedNode(
     return undefined;
   }
 
-  const manager = detectNodeManager(env, deps);
   const question = manager
     ? `${warn} Upgrade to Node 24 via ${manager} now and continue? [Y/n]`
     : `${warn} No version manager found (nodejs.org/en/download). Continue anyway? [Y/n]`;
@@ -174,5 +341,12 @@ export async function ensureSupportedNode(
 
   const script = buildUpgradeScript(manager, env, argv);
   const run = deps.run ?? defaultRun;
-  return run(script.shell, script.args);
+  const code = await run(script.shell, script.args, env);
+  if (code === 0) {
+    io.error(
+      `Node 24 installed and set as default. This terminal still runs ${version} — ` +
+        "open a new terminal next time (your command above already finished on Node 24).",
+    );
+  }
+  return code;
 }

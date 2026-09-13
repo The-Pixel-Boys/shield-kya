@@ -7,6 +7,7 @@ import {
   currentNodeMajor,
   detectNodeManager,
   ensureSupportedNode,
+  findInstalledNode,
   nodeSatisfied,
   REQUIRED_NODE_MAJOR,
 } from "../src/node-upgrade.js";
@@ -171,5 +172,103 @@ describe("node version gate", () => {
       hasFile: () => false,
     });
     expect(out).toBeUndefined();
+  });
+
+  it("findInstalledNode picks the newest satisfying version", () => {
+    const env = { HOME: "/home/x" } as NodeJS.ProcessEnv;
+    const readdir = () => ["v18.20.0", "v22.22.2", "v24.9.0", "v24.21.0", "not-a-version"];
+    expect(findInstalledNode("nvm", env, { readdir })).toBe("v24.21.0");
+    // volta layout has no v prefix
+    expect(findInstalledNode("volta", env, { readdir: () => ["22.22.2", "24.1.0"] })).toBe(
+      "v24.1.0",
+    );
+    expect(findInstalledNode("nvm", env, { readdir: () => ["v22.22.2"] })).toBeUndefined();
+    expect(findInstalledNode("brew", env, { readdir })).toBeUndefined();
+  });
+
+  it("already-installed node: re-execs the command under the compliant runtime", async () => {
+    let asked = 0;
+    const ran: { cmd: string; args: readonly string[]; env: NodeJS.ProcessEnv }[] = [];
+    const { io, errors } = fakeIo({
+      isTty: true,
+      confirm: async () => {
+        asked += 1;
+        return true;
+      },
+    });
+    const out = await ensureSupportedNode(io, { HOME: "/home/x" }, ["start"], "start", {
+      version: "v22.22.2",
+      hasCmd: (c) => c === "volta",
+      hasFile: () => true, // installed binary exists on disk
+      readdir: () => ["24.21.0"],
+      cliJs: "/pkg/dist/cli.js",
+      run: async (cmd, args, env) => {
+        ran.push({ cmd, args, env });
+        return 0;
+      },
+    });
+    expect(out).toBe(0);
+    expect(asked).toBe(0);
+    expect(ran[0]!.cmd).toBe("/home/x/.volta/tools/image/node/24.21.0/bin/node");
+    expect(ran[0]!.args).toEqual(["/pkg/dist/cli.js", "start"]);
+    expect(ran[0]!.env.KYA_NODE_CHECKED).toBe("1");
+    expect(ran[0]!.env.KYA_NODE_REEXEC).toBe("1");
+    expect(errors.join("\n")).toContain("Running under Node v24.21.0");
+  });
+
+  it("re-exec is loop-safe via KYA_NODE_REEXEC", async () => {
+    const { io } = fakeIo({ isTty: true });
+    const out = await ensureSupportedNode(
+      io,
+      { HOME: "/home/x", KYA_NODE_REEXEC: "1" },
+      ["start"],
+      "start",
+      {
+        version: "v22.22.2",
+        hasCmd: (c) => c === "volta",
+        hasFile: () => true,
+        readdir: () => ["24.21.0"],
+        run: async () => 99,
+      },
+    );
+    // Loop guard: falls through to the shadow message, never re-execs.
+    expect(out).toBeUndefined();
+  });
+
+  it("already-installed but binary missing: explains the PATH shadow instead", async () => {
+    let asked = 0;
+    const { io, errors } = fakeIo({
+      isTty: true,
+      confirm: async () => {
+        asked += 1;
+        return true;
+      },
+    });
+    const out = await ensureSupportedNode(io, { HOME: "/home/x" }, ["start"], "start", {
+      version: "v22.22.2",
+      hasCmd: (c) => c === "volta",
+      hasFile: () => false,
+      readdir: () => ["24.21.0"],
+      firstNodeOnPath: () => "/opt/homebrew/bin/node",
+    });
+    expect(out).toBeUndefined();
+    expect(asked).toBe(0);
+    const msg = errors.join("\n");
+    expect(msg).toContain("v24.21.0 is already installed via volta");
+    expect(msg).toContain("/opt/homebrew/bin/node");
+    expect(msg).toContain("volta install node@24.21.0");
+  });
+
+  it("successful upgrade ends with a new-terminal note", async () => {
+    const { io, errors } = fakeIo({ isTty: true, confirm: async () => true });
+    const out = await ensureSupportedNode(io, {}, ["start"], "start", {
+      version: "v22.22.2",
+      hasCmd: (c) => c === "volta",
+      hasFile: () => false,
+      readdir: () => [],
+      run: async () => 0,
+    });
+    expect(out).toBe(0);
+    expect(errors.join("\n")).toContain("open a new terminal");
   });
 });
