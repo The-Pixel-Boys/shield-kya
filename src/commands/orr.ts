@@ -31,9 +31,12 @@ import {
 } from "../orr/scorecard.js";
 import {
   buildShowback,
-  parseUsageRecords,
   type ShowbackReport,
 } from "../showback/cost-per-task.js";
+import {
+  MAX_USAGE_FILE_BYTES,
+  parseUsageFilePayload,
+} from "../showback/usage-file.js";
 
 export type OrrRating = "green" | "amber" | "red";
 export type OrrDisposition = "go" | "conditional" | "no_go";
@@ -722,8 +725,6 @@ ${showbackMd}
 }
 
 
-const MAX_USAGE_FILE_BYTES = 256 * 1024;
-
 function isInsideRoot(file: string, root: string): boolean {
   const a = resolve(file);
   const b = resolve(root);
@@ -769,9 +770,7 @@ function loadShowback(
       return undefined;
     }
     const raw = JSON.parse(readFileSync(confined, "utf8")) as unknown;
-    const records = parseUsageRecords(
-      Array.isArray(raw) ? raw : (raw as { usage?: unknown }).usage,
-    );
+    const records = parseUsageFilePayload(raw);
     if (records.length === 0) return undefined;
     return buildShowback(records);
   } catch (err) {
