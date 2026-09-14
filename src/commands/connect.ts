@@ -15,7 +15,7 @@ import { hostReload, hostRunning, listProcessNames, reloadMessage } from "../hos
 export type ConnectScope = "global" | "project";
 export type ConnectStatus = "created" | "wired" | "skipped";
 
-interface HostSpec {
+export interface HostSpec {
   /** Display name for humans. */
   readonly label: string;
   /** Config file under the home dir. */
@@ -58,7 +58,7 @@ function opencodeBlock(): Record<string, unknown> {
   };
 }
 
-const REGISTRY: Readonly<Record<string, HostSpec>> = {
+export const CONNECT_REGISTRY: Readonly<Record<string, HostSpec>> = {
   opencode: {
     label: "OpenCode",
     globalPath: (h) => join(h, ".config", "opencode", "opencode.json"),
@@ -136,11 +136,11 @@ const REGISTRY: Readonly<Record<string, HostSpec>> = {
 };
 
 export function connectableHosts(): readonly string[] {
-  return Object.keys(REGISTRY).filter((k) => !REGISTRY[k]!.recipeOnly);
+  return Object.keys(CONNECT_REGISTRY).filter((k) => !CONNECT_REGISTRY[k]!.recipeOnly);
 }
 
 export function knownHosts(): readonly string[] {
-  return Object.keys(REGISTRY);
+  return Object.keys(CONNECT_REGISTRY);
 }
 
 export interface ConnectResult {
@@ -207,7 +207,7 @@ export async function runConnect(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<ConnectResult> {
   const key = input.host.trim().toLowerCase();
-  const spec = REGISTRY[key];
+  const spec = CONNECT_REGISTRY[key];
   if (!spec) {
     throw new UsageError(
       `unknown host "${input.host}" — supported: ${knownHosts().join(", ")}`,
