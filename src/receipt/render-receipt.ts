@@ -753,7 +753,6 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     text-transform: uppercase; color: var(--day);
     background: color-mix(in srgb, var(--bg) 55%, var(--card));
     border-bottom: 1px solid var(--line);
-    position: sticky; top: 4.2rem; z-index: 1;
   }
   .ev {
     display: grid; grid-template-columns: 1.1rem 1fr; gap: 0;
