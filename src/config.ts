@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { AuthRequiredError, UsageError } from "./errors.js";
 
@@ -49,6 +50,16 @@ const DEFAULT_MCP_PORT = 3920;
 
 export function configDir(cwd: string): string {
   return join(cwd, ".kya");
+}
+
+/** User-level home for KYA state; KYA_HOME overrides (tests, sandboxes). */
+export function kyaHome(env: NodeJS.ProcessEnv = process.env): string {
+  return env.KYA_HOME?.trim() || homedir();
+}
+
+/** Global KYA state dir: <KYA_HOME|home>/.kya — home of the global trail. */
+export function globalConfigDir(env: NodeJS.ProcessEnv = process.env): string {
+  return join(kyaHome(env), ".kya");
 }
 
 export function configFilePath(cwd: string): string {

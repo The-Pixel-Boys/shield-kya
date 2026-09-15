@@ -1,8 +1,10 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runCli, type CliIo } from "../src/cli.js";
+import { globalTrailPath, readTrail } from "../src/trail.js";
+import { freshTestHome } from "./setup.js";
 
 const dirs: string[] = [];
 
@@ -74,6 +76,9 @@ describe("runCli", () => {
   it("eval-tool --offline DENY then REQUIRE_APPROVE without API key", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "kya-cli-"));
     dirs.push(cwd);
+    // eval-tool threads this env into appendTrail — without KYA_HOME the
+    // trail write would land in the developer's real ~/.kya.
+    const env = { KYA_HOME: freshTestHome() };
     const { io, logs } = captureIo();
     const deny = await runCli(
       [
@@ -84,7 +89,7 @@ describe("runCli", () => {
         "--irreversible",
       ],
       io,
-      {},
+      env,
       cwd,
     );
     expect(deny).toBe(1);
@@ -109,11 +114,18 @@ describe("runCli", () => {
         "--irreversible",
       ],
       io2,
-      {},
+      env,
       cwd,
     );
     expect(ra).toBe(4);
     expect(logs2.join("\n")).toMatch(/REQUIRE_APPROVE/);
+
+    // Both trail rows land in the env-specified home, not process.env's.
+    expect(existsSync(globalTrailPath(env))).toBe(true);
+    expect(readTrail(cwd, env).map((e) => e.toolId)).toEqual([
+      "org.sample.never.event",
+      "org.sample.data.write",
+    ]);
   });
 
   it("invoke --offline fails closed", async () => {

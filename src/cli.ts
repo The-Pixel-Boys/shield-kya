@@ -322,7 +322,7 @@ export async function runCli(
           mode: result.offline ? "offline" : config.holdEnabled ? "hold" : "observe",
           neverEvent: result.response.reasonCode === "NEVER_EVENT",
           argsHash: result.argsHash,
-        });
+        }, env);
         if (config.json) {
           io.log(
             JSON.stringify(

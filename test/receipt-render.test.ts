@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   aggregateEvents,
+  buildReceiptModel,
   buildWindowReceiptModel,
   loadReceiptModel,
   renderReceiptHtml,
@@ -494,5 +495,87 @@ describe("renderReceiptMarkdown sections", () => {
     expect(md).not.toContain("## Sandboxes");
     expect(md).not.toContain("## Operational readiness");
     expect(md).not.toContain("## Showback");
+  });
+});
+
+describe("Projects rollup", () => {
+  it("counts projects sorted desc by count then label", () => {
+    const agg = aggregateEvents([
+      ev({ ts: iso(0), sessionId: "a", project: "beta" }),
+      ev({ ts: iso(1), sessionId: "a", project: "alpha" }),
+      ev({ ts: iso(2), sessionId: "a" }),
+      ev({ ts: iso(3), sessionId: "b", project: "beta" }),
+    ]);
+    expect(agg.projects).toEqual([
+      { label: "beta", count: 2 },
+      { label: "alpha", count: 1 },
+    ]);
+  });
+
+  it("renders a Projects panel when two or more distinct projects exist", () => {
+    const events = [
+      ev({ ts: iso(0), sessionId: "s", project: "alpha", toolId: "A" }),
+      ev({ ts: iso(1), sessionId: "s", project: "beta", toolId: "B" }),
+    ];
+    const model = buildReceiptModel("s", events, {});
+    const html = renderReceiptHtml(model);
+    expect(html).toContain("Projects");
+    expect(html).toContain("alpha");
+    expect(html).toContain("beta");
+    const md = renderReceiptMarkdown(model);
+    expect(md).toContain("## Projects");
+  });
+
+  it("omits the Projects panel for a single project", () => {
+    const model = buildReceiptModel(
+      "s",
+      [
+        ev({ ts: iso(0), sessionId: "s", project: "alpha" }),
+        ev({ ts: iso(1), sessionId: "s", project: "alpha" }),
+      ],
+      {},
+    );
+    expect(renderReceiptHtml(model)).not.toContain("Projects");
+    expect(renderReceiptMarkdown(model)).not.toContain("## Projects");
+  });
+
+  it("shows the project in feed meta even for a single project", () => {
+    const model = buildReceiptModel(
+      "s",
+      [ev({ ts: iso(0), sessionId: "s", project: "alpha" })],
+      {},
+    );
+    const html = renderReceiptHtml(model);
+    expect(html).toContain('<span class="project">alpha</span>');
+  });
+
+  it("escapes attacker-controlled project strings in the report", () => {
+    const xss = `<img src=x onerror=alert(1)>`;
+    const events = [
+      ev({ ts: iso(0), sessionId: "s", project: xss, toolId: "A" }),
+      ev({ ts: iso(1), sessionId: "s", project: "beta", toolId: "B" }),
+    ];
+    const html = renderReceiptHtml(buildReceiptModel("s", events, {}));
+    expect(html).not.toContain(xss);
+    expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
+  });
+
+  it("pins the localeCompare tie-break: equal counts sort label-ascending", () => {
+    const agg = aggregateEvents([
+      ev({ ts: iso(0), sessionId: "a", project: "beta" }),
+      ev({ ts: iso(1), sessionId: "a", project: "alpha" }),
+    ]);
+    expect(agg.projects).toEqual([
+      { label: "alpha", count: 1 },
+      { label: "beta", count: 1 },
+    ]);
+  });
+
+  it("caps the projects rollup at 8", () => {
+    const events: TrailEvent[] = [];
+    for (let i = 0; i < 10; i++) {
+      events.push(ev({ ts: iso(i), sessionId: "s", project: `p${i}` }));
+    }
+    expect(aggregateEvents(events).projects).toHaveLength(8);
   });
 });

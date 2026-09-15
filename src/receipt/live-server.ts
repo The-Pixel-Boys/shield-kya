@@ -6,7 +6,7 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, watch, type FSWatcher } from "node:fs";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { dirname } from "node:path";
-import { configDir, type ResolvedConfig } from "../config.js";
+import type { ResolvedConfig } from "../config.js";
 import { loadReceiptModel, renderReceiptHtml } from "./render-receipt.js";
 import { trailPath } from "../trail.js";
 
@@ -191,7 +191,7 @@ export function startLiveReceiptServer(
       const url = `http://${LOOPBACK}:${port}/?t=${token}`;
 
       try {
-        mkdirSync(configDir(cwd), { recursive: true });
+        mkdirSync(dirname(path), { recursive: true });
         watcher = watch(dirname(path), { persistent: true }, (_event, filename) => {
           if (!filename || String(filename).endsWith("trail.jsonl")) {
             scheduleBroadcast();
