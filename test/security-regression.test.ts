@@ -18,7 +18,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { configDir, resolveConfig, type ResolvedConfig } from "../src/config.js";
 import {
@@ -308,7 +308,7 @@ describe("F4 — malformed trail lines are dropped, not fatal", () => {
       JSON.stringify({ ...good, sessionId: "s-bad", product: "not-a-product" }),
       "{not json",
     ];
-    mkdirSync(configDir(dir), { recursive: true });
+    mkdirSync(dirname(trailPath(dir)), { recursive: true });
     writeFileSync(trailPath(dir), `${lines.join("\n")}\n`, "utf8");
 
     const events = readTrail(dir);
@@ -345,7 +345,7 @@ describe("F4 — malformed trail lines are dropped, not fatal", () => {
     let body = `${mk("old-marker")}\n`;
     while (body.length < 1_500_000) body += pad;
     body += `${mk("recent-marker")}\n`;
-    mkdirSync(configDir(dir), { recursive: true });
+    mkdirSync(dirname(trailPath(dir)), { recursive: true });
     writeFileSync(trailPath(dir), body, "utf8");
 
     const events = readTrail(dir);

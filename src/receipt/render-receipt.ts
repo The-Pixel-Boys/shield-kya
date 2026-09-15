@@ -173,6 +173,8 @@ export interface EventAggregates {
   readonly reasons: readonly CountRow[];
   /** Counts by productLabel, sorted desc. */
   readonly products: readonly CountRow[];
+  /** Top 8 projects by count, sorted desc then label asc. */
+  readonly projects: readonly CountRow[];
 }
 
 /** Pure rollup of trail events for the report's stat chips and sections. */
@@ -181,6 +183,7 @@ export function aggregateEvents(events: readonly TrailEvent[]): EventAggregates 
   const planes = { ide: 0, runtime: 0 };
   const reasonCounts = new Map<string, number>();
   const productCounts = new Map<string, number>();
+  const projectCounts = new Map<string, number>();
   const bySession = new Map<
     string,
     { events: number; deny: number; hold: number; never: number; lastTs: string }
@@ -195,6 +198,8 @@ export function aggregateEvents(events: readonly TrailEvent[]): EventAggregates 
     reasonCounts.set(e.reasonCode, (reasonCounts.get(e.reasonCode) ?? 0) + 1);
     const pl = productLabel(e.product);
     productCounts.set(pl, (productCounts.get(pl) ?? 0) + 1);
+    const project = e.project?.trim();
+    if (project) projectCounts.set(project, (projectCounts.get(project) ?? 0) + 1);
 
     const sid = e.sessionId || "unknown";
     let s = bySession.get(sid);
@@ -234,7 +239,12 @@ export function aggregateEvents(events: readonly TrailEvent[]): EventAggregates 
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 
-  return { modes, planes, sessions, reasons, products };
+  const projects: CountRow[] = [...projectCounts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .slice(0, 8);
+
+  return { modes, planes, sessions, reasons, products, projects };
 }
 
 export function buildReceiptModel(
@@ -321,6 +331,15 @@ function modeBadge(mode: TrailEvent["mode"] | undefined): string {
   return `<span class="modeb" title="${letter === "O" ? "observe" : letter === "H" ? "hold" : "offline"} mode">${letter}</span>`;
 }
 
+// project is attacker-controllable (trail files are user-editable) — always escaped.
+function projectMeta(project: string | undefined): string {
+  const p = project?.trim();
+  if (!p) return "";
+  return `
+      <span class="dot">-</span>
+      <span class="project">${esc(clip(p, 40))}</span>`;
+}
+
 function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean): string {
   if (events.length === 0) {
     const hint = live
@@ -360,7 +379,7 @@ function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean
     <div class="meta">
       <span class="product">${esc(productLabel(e.product))}</span>
       <span class="dot">-</span>
-      <span class="reason">${esc(e.reasonCode)}</span>
+      <span class="reason">${esc(e.reasonCode)}</span>${projectMeta(e.project)}
     </div>
   </div>
 </article>`);
@@ -382,21 +401,28 @@ function identityLine(identity: KyaFileConfig | undefined): string {
   return `<div class="identity">${esc(clip(bits.join(" · "), 160))}</div>`;
 }
 
-function statChips(agg: EventAggregates): { modes: string; planes: string; products: string } {
+function statChips(agg: EventAggregates): {
+  modes: string;
+  planes: string;
+  products: string;
+  projects: string;
+} {
   const chip = (label: string, n: number, cls = ""): string =>
     n > 0 ? `<span class="stat${cls ? ` ${cls}` : ""}">${label}<b>${n}</b></span>` : "";
+  const countRowChips = (rows: readonly CountRow[], ariaLabel: string): string =>
+    rows.length >= 2
+      ? `<div class="stats" aria-label="${ariaLabel}">${rows
+          .map((r) => `<span class="stat">${esc(clip(r.label, 40))}<b>${r.count}</b></span>`)
+          .join("")}</div>`
+      : "";
   return {
     modes:
       chip("Mode: observe", agg.modes.observe) +
       chip("Mode: hold", agg.modes.hold, "warn") +
       chip("Mode: offline", agg.modes.offline),
     planes: chip("IDE", agg.planes.ide) + chip("Runtime", agg.planes.runtime),
-    products:
-      agg.products.length >= 2
-        ? `<div class="stats" aria-label="Products">${agg.products
-            .map((p) => `<span class="stat">${esc(clip(p.label, 40))}<b>${p.count}</b></span>`)
-            .join("")}</div>`
-        : "",
+    products: countRowChips(agg.products, "Products"),
+    projects: countRowChips(agg.projects, "Projects"),
   };
 }
 
@@ -910,6 +936,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       ${chips.modes}${chips.planes}
     </div>
     ${chips.products}
+    ${chips.projects}
   </header>
   ${blockedBanner}
   <section class="feed" id="feed" aria-label="Activity feed">
@@ -976,6 +1003,14 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     lines.push(
       "## Products",
       ...agg.products.map((p) => `- ${mdText(p.label)} × ${p.count}`),
+      "",
+    );
+  }
+
+  if (agg.projects.length >= 2) {
+    lines.push(
+      "## Projects",
+      ...agg.projects.map((p) => `- ${mdText(p.label)} × ${p.count}`),
       "",
     );
   }
