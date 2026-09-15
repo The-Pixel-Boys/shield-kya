@@ -1,7 +1,7 @@
 /**
  * Activity feed HTML/MD for local trail events.
  */
-import { assertNoSecrets, clip } from "../dash/render.js";
+import { assertNoSecrets, clip, stripEscapes } from "../dash/render.js";
 import { clipMultiline, DIFF_MAX_TOTAL_CHARS } from "../diff-preview.js";
 import { productLabel, readTrail, readTrailSince, type TrailEvent } from "../trail.js";
 import type { KyaFileConfig } from "../config.js";
@@ -32,6 +32,8 @@ export interface ReceiptModel {
   readonly mcpSeen?: readonly { readonly server?: string; readonly toolId: string }[];
   /** When true, page connects to /events SSE for live refresh. */
   readonly live?: boolean;
+  /** Loopback SSE token — set only by the live server, never in static renders. */
+  readonly liveToken?: string;
   /** Local identity from .kya/config.json (inert text; never a link). */
   readonly identity?: KyaFileConfig;
   /** Sandbox state + configured KYA_SANDBOX backend. */
@@ -45,11 +47,40 @@ export interface ReceiptModel {
 }
 
 function esc(s: string): string {
-  return s
+  return stripEscapes(s)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/**
+ * Sanitize untrusted text for the Markdown artifact: strip ANSI/control and
+ * bidi/zero-width chars (stripEscapes), then escape the MD/HTML-significant
+ * characters so values cannot break formatting or inject raw HTML/links.
+ */
+function mdText(s: string): string {
+  return stripEscapes(s)
+    .replace(/`/g, "\\`")
+    .replace(/([[\]<>])/g, "\\$1");
+}
+
+/** Fence one tilde longer than the longest run in content (min 4). */
+function mdFence(content: string): string {
+  let longest = 0;
+  for (const m of content.matchAll(/~+/g)) {
+    longest = Math.max(longest, m[0].length);
+  }
+  return "~".repeat(Math.max(4, longest + 1));
+}
+
+/**
+ * Sanitize a value for an inline `code span`: backslash-escapes are literal
+ * inside code spans, so backticks are replaced outright (they would still
+ * terminate the span); brackets/angles need no escaping inside a span.
+ */
+function mdInline(s: string): string {
+  return stripEscapes(s).replace(/`/g, "'");
 }
 
 function countVerdicts(events: readonly TrailEvent[]) {
@@ -220,6 +251,7 @@ export function buildReceiptModel(
     spend: extras?.spend,
     mcpSeen: extras?.mcpSeen,
     live: extras?.live,
+    liveToken: extras?.liveToken,
     identity: extras?.identity,
     sandboxes: extras?.sandboxes,
     wiredHosts: extras?.wiredHosts,
@@ -242,6 +274,7 @@ export function buildWindowReceiptModel(
     spend: extras?.spend,
     mcpSeen: extras?.mcpSeen,
     live: extras?.live,
+    liveToken: extras?.liveToken,
     identity: extras?.identity,
     sandboxes: extras?.sandboxes,
     wiredHosts: extras?.wiredHosts,
@@ -256,11 +289,13 @@ export function loadReceiptModel(input: {
   readonly sessionId?: string;
   readonly days: number;
   readonly live?: boolean;
+  readonly liveToken?: string;
 }): ReceiptModel {
   const days = input.days > 0 ? Math.floor(input.days) : 3;
   const showback = loadShowbackCard(input.cwd);
   const extras = {
     live: input.live,
+    liveToken: input.liveToken,
     identity: loadIdentity(input.cwd),
     sandboxes: loadSandboxes(input.cwd),
     wiredHosts: loadWiredHosts(input.cwd),
@@ -544,11 +579,14 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   ${tools.map((t) => `<code>${esc(t)}</code>`).join("")}
 </footer>`;
 
+  // liveToken is minted base64url by the live server — safe in a JS string
+  // literal; static renders omit it. No post-hoc html.replace (spoofable).
+  const eventsUrl = model.liveToken ? `/events?t=${model.liveToken}` : "/events";
   const liveScript = model.live
     ? `<script>
 (function(){
   var pill = document.querySelector('.live');
-  var es = new EventSource('/events');
+  var es = new EventSource('${eventsUrl}');
   es.onmessage = function(){ location.reload(); };
   es.onerror = function(){
     if (pill) { pill.textContent = 'Offline'; pill.classList.add('off'); }
@@ -899,9 +937,9 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
   const agg = aggregateEvents(model.events);
   const nowMs = Date.now();
   const lines: string[] = [
-    `# ${model.title}`,
+    `# ${mdText(model.title)}`,
     "",
-    model.rangeLabel,
+    mdText(model.rangeLabel),
     "",
     `Allow ${c.allow} | Deny ${c.deny} | Hold ${c.require} | Never ${c.never}`,
     "",
@@ -917,7 +955,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
       (b): b is string => typeof b === "string" && b.trim().length > 0,
     );
     if (bits.length > 0) {
-      lines.push(bits.join(" · "), "");
+      lines.push(mdText(bits.join(" · ")), "");
     }
   }
 
@@ -937,7 +975,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
   if (agg.products.length >= 2) {
     lines.push(
       "## Products",
-      ...agg.products.map((p) => `- ${p.label} × ${p.count}`),
+      ...agg.products.map((p) => `- ${mdText(p.label)} × ${p.count}`),
       "",
     );
   }
@@ -947,10 +985,15 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     ...[...model.events]
       .sort((a, b) => b.ts.localeCompare(a.ts))
       .flatMap((e) => {
-        const sum = e.summary?.trim() ? ` - ${e.summary.trim()}` : "";
-        const head = `- **${verdictWord(e.verdict)}** \`${e.toolId}\`${sum} - ${productLabel(e.product)} - ${e.reasonCode}`;
+        const sum = e.summary?.trim() ? ` - ${mdText(e.summary.trim())}` : "";
+        const head = `- **${mdText(verdictWord(e.verdict))}** \`${mdInline(e.toolId)}\`${sum} - ${productLabel(e.product)} - ${mdText(e.reasonCode)}`;
         if (!e.diffPreview?.trim()) return [head];
-        return [head, "", "```", e.diffPreview.trim(), "```", ""];
+        // Fenced content is verbatim (stripEscapes only — backslash escapes
+        // are literal in code fences); the dynamically sized tilde fence
+        // prevents breakout and backticks cannot close a tilde fence.
+        const diff = stripEscapes(e.diffPreview.trim());
+        const fence = mdFence(diff);
+        return [head, "", fence, diff, fence, ""];
       }),
     "",
   );
@@ -960,7 +1003,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
       "## Sessions",
       ...agg.sessions.map(
         (s) =>
-          `- \`${s.sessionId}\` — ${s.events} event${s.events === 1 ? "" : "s"}, worst: ${s.worst}, last ${relativeTime(s.lastTs, nowMs)}`,
+          `- \`${mdInline(s.sessionId)}\` — ${s.events} event${s.events === 1 ? "" : "s"}, worst: ${s.worst}, last ${relativeTime(s.lastTs, nowMs)}`,
       ),
       "",
     );
@@ -969,7 +1012,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
   if (agg.reasons.length > 0) {
     lines.push(
       "## Reasons",
-      ...agg.reasons.map((r) => `- ${r.label} × ${r.count}`),
+      ...agg.reasons.map((r) => `- ${mdText(r.label)} × ${r.count}`),
       "",
     );
   }
@@ -979,13 +1022,13 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     lines.push("## Wired hosts");
     for (const h of hosts) {
       if (h.recipeOnly) {
-        lines.push(`- ${h.label} — manual setup (docs recipe)`);
+        lines.push(`- ${mdText(h.label)} — manual setup (docs recipe)`);
       } else if (h.wired === "none") {
-        lines.push(`- ${h.label} — not wired`);
+        lines.push(`- ${mdText(h.label)} — not wired`);
       } else {
-        const reload = h.reload ? ` · ${h.reload.reload}` : "";
+        const reload = h.reload ? ` · ${mdText(h.reload.reload)}` : "";
         lines.push(
-          `- ${h.label} — wired (${h.wired})${reload} · ${h.running ? "running" : "not running"}`,
+          `- ${mdText(h.label)} — wired (${h.wired})${reload} · ${h.running ? "running" : "not running"}`,
         );
       }
     }
@@ -995,10 +1038,10 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
   if (model.sandboxes && (model.sandboxes.sandboxes.length > 0 || model.sandboxes.backend)) {
     const sb = model.sandboxes;
     lines.push("## Sandboxes");
-    if (sb.backend) lines.push(`Configured backend: ${sb.backend}`);
+    if (sb.backend) lines.push(`Configured backend: ${mdText(sb.backend)}`);
     for (const s of sb.sandboxes) {
       lines.push(
-        `- \`${s.sandboxId}\` — ${s.backend} · ${s.status} · created ${relativeTime(s.createdAt, nowMs)}`,
+        `- \`${mdInline(s.sandboxId)}\` — ${mdText(s.backend)} · ${mdText(s.status)} · created ${relativeTime(s.createdAt, nowMs)}`,
       );
     }
     lines.push("");
@@ -1008,10 +1051,10 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     const orr = model.orr;
     lines.push(
       "## Operational readiness",
-      `overall: ${orr.overall} · disposition: ${orr.disposition.replace(/_/g, " ")}${orr.targetName ? ` · target ${orr.targetName}` : ""}`,
+      `overall: ${orr.overall} · disposition: ${orr.disposition.replace(/_/g, " ")}${orr.targetName ? ` · target ${mdText(orr.targetName)}` : ""}`,
     );
-    if (orr.primaryFailureMode) lines.push(`Primary failure mode: ${orr.primaryFailureMode}`);
-    if (orr.mostUrgentFix) lines.push(`Most urgent fix: ${orr.mostUrgentFix}`);
+    if (orr.primaryFailureMode) lines.push(`Primary failure mode: ${mdText(orr.primaryFailureMode)}`);
+    if (orr.mostUrgentFix) lines.push(`Most urgent fix: ${mdText(orr.mostUrgentFix)}`);
     lines.push(
       `scorecards: ${orr.scorecards.pass} pass · ${orr.scorecards.fail} fail · ${orr.scorecards.partial} partial · ${orr.scorecards.notEvaluated} n/e${orr.generatedAt ? ` · ${relativeTime(orr.generatedAt, nowMs)}` : ""}`,
       "",
@@ -1028,7 +1071,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
       .sort((a, b) => (b.estimatedUsd ?? -1) - (a.estimatedUsd ?? -1))
       .slice(0, 5);
     for (const r of topRuns) {
-      lines.push(`- \`${r.runId}\` — ${r.steps} step${r.steps === 1 ? "" : "s"} · ${usdText(r.estimatedUsd)}`);
+      lines.push(`- \`${mdInline(r.runId)}\` — ${r.steps} step${r.steps === 1 ? "" : "s"} · ${usdText(r.estimatedUsd)}`);
     }
     lines.push(SHOWBACK_DISCLAIMER, "");
   }

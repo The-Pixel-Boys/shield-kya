@@ -1,7 +1,16 @@
 /**
  * Local session trail (JSONL). Observe path — not a second PEP.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  statSync,
+} from "node:fs";
 import { join } from "node:path";
 import { configDir } from "./config.js";
 
@@ -91,14 +100,87 @@ export function appendTrail(cwd: string, event: TrailEvent): void {
   appendFileSync(trailPath(cwd), `${JSON.stringify(enriched)}\n`, "utf8");
 }
 
+const TRAIL_MODES = new Set<string>(["observe", "hold", "offline"]);
+const TRAIL_PRODUCTS = new Set<string>([
+  "cursor",
+  "claude",
+  "codex",
+  "grok",
+  "ide",
+  "runtime",
+  "other",
+]);
+
+/**
+ * Validate one parsed JSONL line against the TrailEvent shape. Untrusted
+ * fields (wrong type, unknown mode/product) drop the line or the field —
+ * a single malformed line must never brick the report render.
+ */
+function parseTrailEvent(raw: unknown): TrailEvent | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const e = raw as Record<string, unknown>;
+  if (
+    typeof e.ts !== "string" ||
+    typeof e.sessionId !== "string" ||
+    typeof e.toolId !== "string" ||
+    typeof e.verdict !== "string" ||
+    typeof e.reasonCode !== "string" ||
+    typeof e.mode !== "string" ||
+    !TRAIL_MODES.has(e.mode)
+  ) {
+    return undefined;
+  }
+  return {
+    ts: e.ts,
+    sessionId: e.sessionId,
+    toolId: e.toolId,
+    verdict: e.verdict,
+    reasonCode: e.reasonCode,
+    mode: e.mode as TrailEvent["mode"],
+    ...(typeof e.host === "string" ? { host: e.host } : {}),
+    ...(typeof e.product === "string" && TRAIL_PRODUCTS.has(e.product)
+      ? { product: e.product as TrailProduct }
+      : {}),
+    ...(typeof e.neverEvent === "boolean" ? { neverEvent: e.neverEvent } : {}),
+    ...(typeof e.packId === "string" ? { packId: e.packId } : {}),
+    ...(typeof e.argsHash === "string" ? { argsHash: e.argsHash } : {}),
+    ...(typeof e.summary === "string" ? { summary: e.summary } : {}),
+    ...(typeof e.diffPreview === "string" ? { diffPreview: e.diffPreview } : {}),
+  };
+}
+
+/** trail.jsonl read cap — oversized files are tail-read (recent events win). */
+export const MAX_TRAIL_BYTES = 1024 * 1024;
+
+function readTrailText(path: string): string {
+  const size = statSync(path).size;
+  if (size <= MAX_TRAIL_BYTES) {
+    return readFileSync(path, "utf8");
+  }
+  const fd = openSync(path, "r");
+  let tail: string;
+  try {
+    const buf = Buffer.alloc(MAX_TRAIL_BYTES);
+    const position = Math.max(0, size - MAX_TRAIL_BYTES);
+    const read = readSync(fd, buf, 0, MAX_TRAIL_BYTES, position);
+    tail = buf.subarray(0, read).toString("utf8");
+  } finally {
+    closeSync(fd);
+  }
+  // First line is partial (possibly mid-multibyte) — drop it.
+  const nl = tail.indexOf("\n");
+  return nl === -1 ? "" : tail.slice(nl + 1);
+}
+
 export function readTrail(cwd: string): TrailEvent[] {
   const path = trailPath(cwd);
   if (!existsSync(path)) return [];
-  const lines = readFileSync(path, "utf8").split("\n").filter(Boolean);
+  const lines = readTrailText(path).split("\n").filter(Boolean);
   const out: TrailEvent[] = [];
   for (const line of lines) {
     try {
-      out.push(JSON.parse(line) as TrailEvent);
+      const event = parseTrailEvent(JSON.parse(line));
+      if (event) out.push(event);
     } catch {
       /* skip bad lines */
     }
