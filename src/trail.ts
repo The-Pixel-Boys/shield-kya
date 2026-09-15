@@ -11,8 +11,8 @@ import {
   readSync,
   statSync,
 } from "node:fs";
-import { join } from "node:path";
-import { configDir } from "./config.js";
+import { basename, join } from "node:path";
+import { configDir, globalConfigDir } from "./config.js";
 
 export type TrailProduct =
   | "cursor"
@@ -29,6 +29,8 @@ export interface TrailEvent {
   readonly host?: string;
   /** Coding tool / product that produced the event. */
   readonly product?: TrailProduct;
+  /** Project folder basename the event was written from. */
+  readonly project?: string;
   readonly toolId: string;
   readonly verdict: string;
   readonly reasonCode: string;
@@ -42,8 +44,18 @@ export interface TrailEvent {
   readonly diffPreview?: string;
 }
 
-export function trailPath(cwd: string): string {
+export function globalTrailPath(env: NodeJS.ProcessEnv = process.env): string {
+  return join(globalConfigDir(env), "trail.jsonl");
+}
+
+/** Pre-0.3.0 per-project trail location, still merged on read. */
+export function legacyTrailPath(cwd: string): string {
   return join(configDir(cwd), "trail.jsonl");
+}
+
+/** The trail is global since 0.3.0 — one file for all projects. */
+export function trailPath(_cwd: string, env: NodeJS.ProcessEnv = process.env): string {
+  return globalTrailPath(env);
 }
 
 export function receiptsDir(cwd: string): string {
@@ -90,14 +102,18 @@ export function productLabel(p: TrailProduct | undefined): string {
   }
 }
 
-export function appendTrail(cwd: string, event: TrailEvent): void {
-  const dir = configDir(cwd);
-  mkdirSync(dir, { recursive: true });
+export function appendTrail(
+  cwd: string,
+  event: TrailEvent,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  mkdirSync(globalConfigDir(env), { recursive: true });
   const enriched: TrailEvent = {
     ...event,
-    product: event.product ?? detectProduct(process.env, event.host),
+    product: event.product ?? detectProduct(env, event.host),
+    project: event.project ?? basename(cwd),
   };
-  appendFileSync(trailPath(cwd), `${JSON.stringify(enriched)}\n`, "utf8");
+  appendFileSync(globalTrailPath(env), `${JSON.stringify(enriched)}\n`, "utf8");
 }
 
 const TRAIL_MODES = new Set<string>(["observe", "hold", "offline"]);
@@ -141,6 +157,7 @@ function parseTrailEvent(raw: unknown): TrailEvent | undefined {
     ...(typeof e.product === "string" && TRAIL_PRODUCTS.has(e.product)
       ? { product: e.product as TrailProduct }
       : {}),
+    ...(typeof e.project === "string" ? { project: e.project } : {}),
     ...(typeof e.neverEvent === "boolean" ? { neverEvent: e.neverEvent } : {}),
     ...(typeof e.packId === "string" ? { packId: e.packId } : {}),
     ...(typeof e.argsHash === "string" ? { argsHash: e.argsHash } : {}),
@@ -172,8 +189,7 @@ function readTrailText(path: string): string {
   return nl === -1 ? "" : tail.slice(nl + 1);
 }
 
-export function readTrail(cwd: string): TrailEvent[] {
-  const path = trailPath(cwd);
+function readTrailFile(path: string): TrailEvent[] {
   if (!existsSync(path)) return [];
   const lines = readTrailText(path).split("\n").filter(Boolean);
   const out: TrailEvent[] = [];
@@ -188,10 +204,33 @@ export function readTrail(cwd: string): TrailEvent[] {
   return out;
 }
 
+/**
+ * Global trail + legacy per-cwd trail (pre-0.3.0 installs), merged and sorted
+ * by ts. Unparseable ts sorts last; sort is stable.
+ */
+export function readTrail(cwd: string, env: NodeJS.ProcessEnv = process.env): TrailEvent[] {
+  const globalPath = globalTrailPath(env);
+  const legacy = legacyTrailPath(cwd);
+  const events = readTrailFile(globalPath);
+  if (legacy !== globalPath) events.push(...readTrailFile(legacy));
+  return events
+    .map((event, i) => ({ event, i, t: Date.parse(event.ts) }))
+    .sort((a, b) => {
+      const ta = Number.isNaN(a.t) ? Number.POSITIVE_INFINITY : a.t;
+      const tb = Number.isNaN(b.t) ? Number.POSITIVE_INFINITY : b.t;
+      return ta === tb ? a.i - b.i : ta - tb;
+    })
+    .map(({ event }) => event);
+}
+
 /** Events with ts >= since (ISO or Date). Invalid ts kept if unparseable. */
-export function readTrailSince(cwd: string, since: Date): TrailEvent[] {
+export function readTrailSince(
+  cwd: string,
+  since: Date,
+  env: NodeJS.ProcessEnv = process.env,
+): TrailEvent[] {
   const sinceMs = since.getTime();
-  return readTrail(cwd).filter((e) => {
+  return readTrail(cwd, env).filter((e) => {
     const t = Date.parse(e.ts);
     if (Number.isNaN(t)) return true;
     return t >= sinceMs;

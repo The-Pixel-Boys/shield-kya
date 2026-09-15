@@ -11,6 +11,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveConfig } from "../src/config.js";
 import { runStart } from "../src/commands/start.js";
+import { trailPath } from "../src/trail.js";
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -41,7 +42,7 @@ describe("kya start", () => {
         };
         expect(raw.mcpServers["shield-kya"].args).toContain("serve-mcp");
       }
-      expect(existsSync(join(cwd, ".kya", "trail.jsonl"))).toBe(true);
+      expect(existsSync(trailPath(cwd))).toBe(true);
       expect(r.reportPid).toBeUndefined();
       expect(r.next).toContain("kya stop");
     } finally {

@@ -14,7 +14,7 @@ import { UsageError } from "../errors.js";
 import { runInit } from "./init.js";
 import { openPath, runReceipt } from "./receipt.js";
 import { ensureReceiptDaemon } from "../receipt/daemon.js";
-import { appendTrail, defaultSessionId } from "../trail.js";
+import { appendTrail, defaultSessionId, trailPath } from "../trail.js";
 import { hostReload, hostRunning, listProcessNames, reloadMessage } from "../host-reload.js";
 import {
   CONNECT_REGISTRY,
@@ -43,7 +43,7 @@ export interface StartResult {
 }
 
 function seedTrailIfEmpty(cwd: string): void {
-  const trail = join(cwd, ".kya", "trail.jsonl");
+  const trail = trailPath(cwd);
   if (existsSync(trail) && readFileSync(trail, "utf8").trim()) return;
   appendTrail(cwd, {
     ts: new Date().toISOString(),
