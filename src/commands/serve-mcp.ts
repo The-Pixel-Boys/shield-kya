@@ -52,6 +52,12 @@ export async function runServeMcp(
       client: httpClient,
       kyaHost: config.host,
       agentId: config.agentId,
+      offline: config.offline,
+      trail: {
+        cwd: config.cwd,
+        offline: config.offline,
+        holdEnabled: config.holdEnabled,
+      },
     });
     return { mode: "stdio", stdio };
   }
@@ -63,6 +69,12 @@ export async function runServeMcp(
     client: httpClient,
     kyaHost: config.host,
     agentId: config.agentId,
+    offline: config.offline,
+    trail: {
+      cwd: config.cwd,
+      offline: config.offline,
+      holdEnabled: config.holdEnabled,
+    },
   });
   return { mode: "http", http };
 }

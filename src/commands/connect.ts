@@ -1,12 +1,28 @@
 /**
  * kya connect <host> — wire Shield KYA MCP into a coding host's config file.
- * Idempotent create/merge/skip, modeled on start.ts mergeMcpJson.
- * Global (home) scope by default; --project for hosts with project-level config.
- * Hosts without a verified MCP config stay copy-paste recipes (recipeOnly).
+ * Idempotent create/merge/skip. Global (home) scope by default; --project for
+ * hosts with project-level config. Hosts without a verified MCP config stay
+ * copy-paste recipes (recipeOnly).
+ *
+ * Home-config writes are merge-only and symlink-safe: an existing target is
+ * resolved with realpath and must be a regular file (dotfile setups symlink
+ * ~/.claude.json & co. — writing the resolved regular file is supported).
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ResolvedConfig } from "../config.js";
 import { UsageError } from "../errors.js";
@@ -25,7 +41,7 @@ export interface HostSpec {
   /** Root key holding the server map ("mcpServers" | "mcp" | "amp.mcpServers"). */
   readonly rootKey: string;
   /** Server entry dialect. */
-  readonly shape: "standard" | "opencode-local";
+  readonly shape: "standard" | "opencode-local" | "grok-toml";
   /** Set when the host has no verified auto-wire: docs/hosts page to follow. */
   readonly recipeOnly?: string;
 }
@@ -35,18 +51,20 @@ function cliJsPath(): string {
   return fileURLToPath(new URL("../cli.js", import.meta.url));
 }
 
-function standardBlock(): Record<string, unknown> {
+export function standardServerBlock(hostId: string): Record<string, unknown> {
   return {
     command: process.execPath,
     args: [cliJsPath(), "serve-mcp", "--stdio"],
     env: {
       KYA_HOST: "ide",
       KYA_OFFLINE: "1",
+      // Separates MCP-originated activity per host on the report's Sessions panel.
+      KYA_SESSION_ID: `mcp:${hostId}`,
     },
   };
 }
 
-function opencodeBlock(): Record<string, unknown> {
+function opencodeBlock(hostId: string): Record<string, unknown> {
   return {
     type: "local",
     command: [process.execPath, cliJsPath(), "serve-mcp", "--stdio"],
@@ -54,11 +72,25 @@ function opencodeBlock(): Record<string, unknown> {
     environment: {
       KYA_HOST: "ide",
       KYA_OFFLINE: "1",
+      KYA_SESSION_ID: `mcp:${hostId}`,
     },
   };
 }
 
 export const CONNECT_REGISTRY: Readonly<Record<string, HostSpec>> = {
+  claude: {
+    label: "Claude Code",
+    globalPath: (h) => join(h, ".claude.json"),
+    projectPath: (c) => join(c, ".mcp.json"),
+    rootKey: "mcpServers",
+    shape: "standard",
+  },
+  grok: {
+    label: "Grok",
+    globalPath: (h) => join(h, ".grok", "config.toml"),
+    rootKey: "mcp_servers",
+    shape: "grok-toml",
+  },
   opencode: {
     label: "OpenCode",
     globalPath: (h) => join(h, ".config", "opencode", "opencode.json"),
@@ -160,52 +192,221 @@ export interface ConnectInput {
   readonly procs?: ReadonlySet<string>;
 }
 
-function serverBlock(spec: HostSpec): Record<string, unknown> {
-  return spec.shape === "opencode-local" ? opencodeBlock() : standardBlock();
+function serverBlock(hostId: string, spec: HostSpec): Record<string, unknown> {
+  return spec.shape === "opencode-local"
+    ? opencodeBlock(hostId)
+    : standardServerBlock(hostId);
 }
 
-function mergeHostConfig(
+/**
+ * Resolve the path a write will land on. An existing symlinked host config
+ * (dotfiles setups) resolves to its real regular file; anything else that
+ * exists but is not a regular file is refused.
+ */
+function writeTarget(path: string): string {
+  if (!existsSync(path)) return path;
+  let real: string;
+  try {
+    real = realpathSync(path);
+  } catch {
+    throw new UsageError(`${path} cannot be resolved — refusing to write`);
+  }
+  if (!statSync(real).isFile()) {
+    throw new UsageError(
+      `${path} does not resolve to a regular file — refusing to write`,
+    );
+  }
+  return real;
+}
+
+/**
+ * Crash-safe write: tmp file in the same directory, then rename onto the
+ * target (atomic on POSIX and win32 within one volume). A mid-write crash
+ * leaves the original config intact; the tmp file is removed best-effort.
+ * An existing target's file mode is carried over — a rename would otherwise
+ * turn a 0600 config into the umask default.
+ */
+function atomicWriteSync(target: string, content: string): void {
+  const tmp = `${target}.kya-tmp-${process.pid}`;
+  try {
+    let mode: number | undefined;
+    try {
+      mode = statSync(target).mode;
+    } catch {
+      /* new file — keep default mode */
+    }
+    writeFileSync(tmp, content, "utf8");
+    if (mode !== undefined) {
+      try {
+        chmodSync(tmp, mode);
+      } catch {
+        /* win32 chmod semantics differ; POSIX correctness is what matters */
+      }
+    }
+    renameSync(tmp, target);
+  } catch (err) {
+    try {
+      rmSync(tmp, { force: true });
+    } catch {
+      /* best-effort cleanup */
+    }
+    throw err;
+  }
+}
+
+/**
+ * Where a create should land. A dangling symlink (dotfiles target not yet
+ * materialized) resolves to its link target — relative links resolve against
+ * the link's directory — so the rename completes the link instead of
+ * replacing it with a regular file.
+ */
+function createTarget(path: string): string {
+  try {
+    if (lstatSync(path).isSymbolicLink()) {
+      const resolved = resolve(dirname(path), readlinkSync(path));
+      mkdirSync(dirname(resolved), { recursive: true });
+      return resolved;
+    }
+  } catch {
+    /* not a symlink or unreadable link — plain create below */
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  return path;
+}
+
+/** Merge "shield-kya" into a JSON host config under rootKey. Never clobbers. */
+export function mergeJsonHostConfig(
   path: string,
-  spec: HostSpec,
+  rootKey: string,
+  block: Record<string, unknown>,
   force: boolean,
 ): ConnectStatus {
-  const block = serverBlock(spec);
   if (!existsSync(path)) {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(
-      path,
-      `${JSON.stringify({ [spec.rootKey]: { "shield-kya": block } }, null, 2)}\n`,
-      "utf8",
+    atomicWriteSync(
+      createTarget(path),
+      `${JSON.stringify({ [rootKey]: { "shield-kya": block } }, null, 2)}\n`,
     );
     return "created";
   }
+  const target = writeTarget(path);
   let raw: Record<string, unknown>;
   try {
-    raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    raw = JSON.parse(readFileSync(target, "utf8")) as Record<string, unknown>;
   } catch {
     // Never rewrite a host's real config we cannot parse — that destroys settings.
     throw new UsageError(
       `${path} is not valid JSON — fix it by hand or back it up and delete it, then re-run connect`,
     );
   }
-  const existing = raw[spec.rootKey];
+  const existing = raw[rootKey];
   if (existing !== undefined && (typeof existing !== "object" || existing === null || Array.isArray(existing))) {
     throw new UsageError(
-      `${path} has "${spec.rootKey}" but it is not an object — refusing to clobber it`,
+      `${path} has "${rootKey}" but it is not an object — refusing to clobber it`,
     );
   }
   const servers = (existing ?? {}) as Record<string, unknown>;
-  if (servers["shield-kya"] && !force) return "skipped";
-  raw[spec.rootKey] = { ...servers, "shield-kya": block };
-  writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, "utf8");
+  // Presence of the key — even a null value — counts as wired: never touch it
+  // without --force.
+  if (Object.prototype.hasOwnProperty.call(servers, "shield-kya") && !force) {
+    return "skipped";
+  }
+  raw[rootKey] = { ...servers, "shield-kya": block };
+  atomicWriteSync(target, `${JSON.stringify(raw, null, 2)}\n`);
   return "wired";
 }
 
-export async function runConnect(
-  config: ResolvedConfig,
-  input: ConnectInput,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<ConnectResult> {
+const GROK_TABLE_HEADER = "[mcp_servers.shield-kya]";
+const GROK_TABLE_RE = /^\s*\[mcp_servers\.shield-kya\]\s*(?:#.*)?$/m;
+const GROK_QUOTED_TABLE_RE =
+  /^\s*\[\s*mcp_servers\s*\.\s*["']shield-kya["']\s*\]/m;
+const GROK_INLINE_RE = /^\s*shield-kya\s*=/m;
+
+function grokTableBlock(hostId: string): string {
+  // JSON string literal syntax is valid TOML for these shapes.
+  const args = [cliJsPath(), "serve-mcp", "--stdio"]
+    .map((s) => JSON.stringify(s))
+    .join(", ");
+  return [
+    GROK_TABLE_HEADER,
+    `command = ${JSON.stringify(process.execPath)}`,
+    `args = [${args}]`,
+    `env = { KYA_HOST = "ide", KYA_OFFLINE = "1", KYA_SESSION_ID = ${JSON.stringify(`mcp:${hostId}`)} }`,
+    "enabled = true",
+    "",
+  ].join("\n");
+}
+
+/**
+ * Minimal TOML wiring for Grok: append the [mcp_servers.shield-kya] table at
+ * EOF, skip when present, --force replaces the existing table block. An inline
+ * `shield-kya = …` definition under [mcp_servers] cannot be merged safely as
+ * text — refuse it with a clear error.
+ */
+function mergeGrokToml(path: string, hostId: string, force: boolean): ConnectStatus {
+  const block = grokTableBlock(hostId);
+  if (!existsSync(path)) {
+    atomicWriteSync(createTarget(path), block);
+    return "created";
+  }
+  const target = writeTarget(path);
+  const text = readFileSync(target, "utf8");
+  const header = GROK_TABLE_RE.exec(text);
+  if (header && !force) return "skipped";
+  if (!header) {
+    if (GROK_QUOTED_TABLE_RE.test(text)) {
+      throw new UsageError(
+        `${path} has a quoted [mcp_servers."shield-kya"] table — appending an unquoted one would duplicate it; fix the header by hand, then re-run connect`,
+      );
+    }
+    if (GROK_INLINE_RE.test(text)) {
+      throw new UsageError(
+        `${path} defines shield-kya inline under [mcp_servers] — remove that line by hand, then re-run connect`,
+      );
+    }
+    const sep = text.length === 0 || text.endsWith("\n") ? "" : "\n";
+    atomicWriteSync(target, `${text}${sep}${block}`);
+    return "wired";
+  }
+  // --force: replace the existing table (header line through the next table
+  // header or EOF) with a fresh block.
+  const start = header.index;
+  const lineEnd = text.indexOf("\n", start);
+  const bodyStart = lineEnd === -1 ? text.length : lineEnd + 1;
+  const nextHeader = text.slice(bodyStart).search(/^\s*\[/m);
+  const end = nextHeader === -1 ? text.length : bodyStart + nextHeader;
+  const replaced = `${text.slice(0, start)}${block}${text.slice(end)}`;
+  atomicWriteSync(target, replaced);
+  return "wired";
+}
+
+function mergeHostConfig(
+  path: string,
+  hostId: string,
+  spec: HostSpec,
+  force: boolean,
+): ConnectStatus {
+  if (spec.shape === "grok-toml") return mergeGrokToml(path, hostId, force);
+  return mergeJsonHostConfig(path, spec.rootKey, serverBlock(hostId, spec), force);
+}
+
+export interface WireHostInput {
+  readonly host: string;
+  readonly scope?: ConnectScope;
+  readonly force?: boolean;
+  readonly home: string;
+  readonly cwd: string;
+}
+
+export interface WireHostResult {
+  readonly host: string;
+  readonly label: string;
+  readonly path: string;
+  readonly status: ConnectStatus;
+  readonly scope: ConnectScope;
+}
+
+/** Shared wiring used by `kya connect` and `kya start`. */
+export function wireHost(input: WireHostInput): WireHostResult {
   const key = input.host.trim().toLowerCase();
   const spec = CONNECT_REGISTRY[key];
   if (!spec) {
@@ -219,30 +420,53 @@ export async function runConnect(
     );
   }
   const scope: ConnectScope = input.scope ?? "global";
-  const home = env.KYA_HOME?.trim() || homedir();
   const path =
     scope === "project"
-      ? spec.projectPath?.(config.cwd)
-      : spec.globalPath?.(home);
+      ? spec.projectPath?.(input.cwd)
+      : spec.globalPath?.(input.home);
   if (!path) {
     throw new UsageError(
       `${spec.label} has no ${scope}-scope config — try --${scope === "project" ? "global" : "project"}`,
     );
   }
-  const status = mergeHostConfig(path, spec, Boolean(input.force));
+  const status = mergeHostConfig(path, key, spec, Boolean(input.force));
+  return { host: key, label: spec.label, path, status, scope };
+}
+
+/** Per-host next-step line after wiring (accurate about restarts). */
+export function wireNextMessage(
+  hostId: string,
+  label: string,
+  procs: ReadonlySet<string>,
+): string {
   const verify =
     "Verify: ask the agent to list its MCP tools — kya.policy_evaluate, kya.session_ingest, kya.request_approval should appear.";
-  const reload = hostReload(key);
-  const next = reload
-    ? `${reloadMessage(reload, spec.label, hostRunning(reload, input.procs ?? listProcessNames()))} ${verify}`
-    : `Restart ${spec.label} so the shield-kya MCP server loads. ${verify}`;
+  const reload = hostReload(hostId);
+  return reload
+    ? `${reloadMessage(reload, label, hostRunning(reload, procs))} ${verify}`
+    : `Restart ${label} so the shield-kya MCP server loads. ${verify}`;
+}
+
+export async function runConnect(
+  config: ResolvedConfig,
+  input: ConnectInput,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<ConnectResult> {
+  const home = env.KYA_HOME?.trim() || homedir();
+  const wired = wireHost({
+    host: input.host,
+    scope: input.scope,
+    force: input.force,
+    home,
+    cwd: config.cwd,
+  });
   return {
-    host: key,
-    label: spec.label,
-    path,
-    status,
-    scope,
-    next,
+    ...wired,
+    next: wireNextMessage(
+      wired.host,
+      wired.label,
+      input.procs ?? listProcessNames(),
+    ),
   };
 }
 
