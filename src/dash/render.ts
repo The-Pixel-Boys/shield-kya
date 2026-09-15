@@ -10,11 +10,13 @@ export interface StatusStrip {
   readonly pane: DashPane;
 }
 
-/** Strip C0 / ESC / OSC so plane-controlled strings cannot drive the TTY. */
+/** Strip C0 / ESC / OSC / bidi / zero-width so plane-controlled strings
+ * cannot drive the TTY or spoof display order. */
 export function stripEscapes(text: string): string {
   return text
     .replace(/\u001b(?:\][^\u0007]*(?:\u0007|\u001b\\)|[@-Z\\-_]|[\[\]()#][0-9;?]*[ -/]*[@-~])/g, "")
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+    .replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "");
 }
 
 export function hline(ch = "─"): string {
@@ -115,11 +117,15 @@ export function assertNoSecrets(text: string, extra?: string): void {
     /AKIA[A-Z0-9]{12,}/,
     /eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}/,
     /[?&#](?:access_token|api[_-]?key|token|secret|password|auth)=[^&\s#"']+/i,
+    /[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^/\s:@]+:[^/\s@]+@/,
+    /sk-proj-[A-Za-z0-9_\-]{20,}/,
     /Cookie:\s*\S+/i,
     /\bsession=[^\s;&"']{8,}/i,
     /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/i,
     /-----END [A-Z0-9 ]*PRIVATE KEY-----/i,
-    /\b(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*(?!\[redacted\])[^\s#"']{4,}/i,
+    // Keyword assignments require a realistically long value — short benign
+    // mentions ("refreshed token: ab12cd34") must not DoS every render.
+    /\b(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*(?!\[redacted\])[^\s#"']{16,}/i,
     /\bxox[baprs]-[A-Za-z0-9-]{10,}/i,
   ];
   for (const p of pats) {

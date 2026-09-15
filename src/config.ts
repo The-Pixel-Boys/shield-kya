@@ -177,7 +177,7 @@ function str(v: string | boolean | undefined): string | undefined {
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 
-function isLoopbackUrl(raw: string | undefined): boolean {
+export function isLoopbackUrl(raw: string | undefined): boolean {
   if (!raw) return false;
   try {
     const host = new URL(raw).hostname.toLowerCase();

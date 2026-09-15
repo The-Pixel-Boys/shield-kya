@@ -84,6 +84,13 @@ export function startLiveReceiptServer(
       if (!tokenOk(url, req, token)) {
         return unauthorized(res);
       }
+      if (req.method === "GET" && url.pathname === "/healthz") {
+        // Cheap liveness handshake for daemon reuse — never renders, so a
+        // render-time failure (e.g. assertNoSecrets) cannot wedge it.
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("ok\n");
+        return;
+      }
       if (req.method === "GET" && url.pathname === "/events") {
         if (clients.size >= MAX_SSE_CLIENTS) {
           res.writeHead(503, { "Content-Type": "text/plain; charset=utf-8" });
@@ -112,6 +119,9 @@ export function startLiveReceiptServer(
               sessionId: options.sessionId,
               days: options.days,
               live: true,
+              // Token rides the model into the script tag — never a post-hoc
+              // string replace on rendered HTML (attacker text could anchor it).
+              liveToken: token,
             }),
           );
         } catch {
@@ -119,11 +129,6 @@ export function startLiveReceiptServer(
           res.end("receipt render failed\n");
           return;
         }
-        // Inject token into EventSource so the browser can auth without a second prompt.
-        html = html.replace(
-          "EventSource('/events')",
-          `EventSource('/events?t=${token}')`,
-        );
         res.writeHead(200, {
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "no-store",

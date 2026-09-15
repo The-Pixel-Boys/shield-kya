@@ -7,17 +7,20 @@
  * shutdown.
  */
 import {
+  closeSync,
   existsSync,
+  fchmodSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { configDir, type ResolvedConfig } from "../config.js";
+import { configDir, isLoopbackUrl, type ResolvedConfig } from "../config.js";
 import { KyaError } from "../errors.js";
 
 export interface ReceiptDaemonState {
@@ -63,13 +66,38 @@ export function readDaemonState(cwd: string): ReceiptDaemonState | undefined {
 
 export function writeDaemonState(cwd: string, state: ReceiptDaemonState): void {
   mkdirSync(configDir(cwd), { recursive: true });
-  writeFileSync(daemonStatePath(cwd), `${JSON.stringify(state, null, 2)}\n`, {
-    encoding: "utf8",
-    mode: 0o600,
-  });
+  const path = daemonStatePath(cwd);
+  // Never write through a planted symlink; force 0600 on pre-existing files
+  // (the mode argument only applies at creation).
+  removeIfSymlink(path);
+  const fd = openSync(path, "w", 0o600);
+  try {
+    fchmodSync(fd, 0o600);
+    writeFileSync(fd, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  } finally {
+    closeSync(fd);
+  }
 }
 
-export function clearDaemonState(cwd: string): void {
+function removeIfSymlink(path: string): void {
+  try {
+    if (lstatSync(path).isSymbolicLink()) rmSync(path, { force: true });
+  } catch {
+    /* absent — nothing to remove */
+  }
+}
+
+/**
+ * Remove the state file. With expectedPid set (daemon shutdown), removal is
+ * skipped when the file was already replaced by a newer daemon (pid mismatch)
+ * — a dying daemon must not delete its successor's state. Read errors /
+ * missing / corrupt state still remove (we own the normal case).
+ */
+export function clearDaemonState(cwd: string, expectedPid?: number): void {
+  if (expectedPid !== undefined) {
+    const state = readDaemonState(cwd);
+    if (state && state.pid !== expectedPid) return;
+  }
   rmSync(daemonStatePath(cwd), { force: true });
 }
 
@@ -90,12 +118,70 @@ function sleep(ms: number): Promise<void> {
 
 function cliJsPath(): string {
   // dist/receipt/daemon.js → dist/cli.js
-  return fileURLToPath(new URL("../cli.js", import.meta.url));
+  const built = fileURLToPath(new URL("../cli.js", import.meta.url));
+  if (existsSync(built)) return built;
+  // Running from src/ (vitest) — spawn the built CLI.
+  return fileURLToPath(new URL("../../dist/cli.js", import.meta.url));
 }
 
 /**
- * Reuse the running daemon when its pid is alive; otherwise spawn a fresh
- * detached one and wait for it to publish its state file.
+ * Verify a pid is really our receipt daemon before signaling it.
+ * On non-win32 inspect the process args; on win32 fall back to alive-only.
+ */
+export function isReceiptDaemonProcess(pid: number): boolean {
+  if (!pidAlive(pid)) return false;
+  if (process.platform === "win32") return true;
+  try {
+    const args = execFileSync("ps", ["-p", String(pid), "-o", "args="], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return args.includes("receipt-serve") && args.includes(cliJsPath());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A stored state file is only trustworthy if its url is loopback and the
+ * server behind it answers a token-authenticated handshake with 200.
+ * Uses /healthz: O(1) and decoupled from render failures of the full page.
+ */
+async function verifyStoredDaemon(state: ReceiptDaemonState): Promise<boolean> {
+  if (!isLoopbackUrl(state.url)) return false;
+  try {
+    const target = new URL("/healthz", new URL(state.url));
+    const res = await fetch(target, {
+      headers: { authorization: `Bearer ${state.token}` },
+      redirect: "error",
+      signal: AbortSignal.timeout(1500),
+    });
+    res.body?.cancel().catch(() => undefined);
+    return res.status === 200;
+  } catch {
+    return false;
+  }
+}
+
+/** SIGTERM our own wedged daemon and wait for it to exit (past the live
+ * server's 2s force-close, so its shutdown runs before we respawn). */
+async function stopOwnedDaemon(pid: number): Promise<void> {
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    return;
+  }
+  for (let waited = 0; waited < 2_500 && pidAlive(pid); waited += 100) {
+    await sleep(100);
+  }
+}
+
+/**
+ * Reuse the running daemon only when its pid is alive AND the stored loopback
+ * url answers the token handshake; otherwise spawn a fresh detached one and
+ * wait for it to publish its state file. A wedged daemon that IS ours is
+ * stopped first so failed handshakes cannot leak orphans; a foreign pid is
+ * never signaled.
  */
 export async function ensureReceiptDaemon(
   config: ResolvedConfig,
@@ -103,12 +189,19 @@ export async function ensureReceiptDaemon(
 ): Promise<ReceiptDaemonHandle> {
   const existing = readDaemonState(config.cwd);
   if (existing && pidAlive(existing.pid)) {
-    return { url: existing.url, pid: existing.pid, reused: true };
+    if (await verifyStoredDaemon(existing)) {
+      return { url: existing.url, pid: existing.pid, reused: true };
+    }
+    if (isReceiptDaemonProcess(existing.pid)) {
+      await stopOwnedDaemon(existing.pid);
+    }
   }
   clearDaemonState(config.cwd);
 
   mkdirSync(configDir(config.cwd), { recursive: true });
-  const logFd = openSync(daemonLogPath(config.cwd), "a");
+  const logPath = daemonLogPath(config.cwd);
+  removeIfSymlink(logPath);
+  const logFd = openSync(logPath, "a");
   const args = [cliJsPath(), "receipt-serve", "--days", String(input.days)];
   if (input.sessionId) args.push("--session", input.sessionId);
   const child = spawn(process.execPath, args, {
