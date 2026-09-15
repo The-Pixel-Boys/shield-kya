@@ -9,14 +9,13 @@ import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { CONNECT_REGISTRY } from "../commands/connect.js";
 import type { OrrDisposition, OrrRating, OrrReport } from "../commands/orr.js";
-import { readFileConfig, type KyaFileConfig } from "../config.js";
+import type { KyaFileConfig } from "../config.js";
 import {
   hostReload,
   hostRunning,
   listProcessNames,
   type HostReload,
 } from "../host-reload.js";
-import { loadSandboxState } from "../sandbox/runtime.js";
 import type { SandboxRecord } from "../sandbox/types.js";
 import {
   buildShowback,
@@ -52,22 +51,41 @@ function confinedFile(file: string, root: string): string | undefined {
   }
 }
 
-/** Local identity from .kya/config.json; config.json never holds the API key.
- * Only string fields pass through; baseUrl is inert display text (never a link). */
-export function loadIdentity(cwd: string): KyaFileConfig | undefined {
+const MAX_CWD_STATE_BYTES = 1024 * 1024;
+
+/**
+ * Parse a JSON file strictly inside cwd: symlink refusal, realpath jail,
+ * regular-file check, size cap. Returns undefined on any failure.
+ */
+function readConfinedJsonFile(
+  cwd: string,
+  relPath: string,
+  maxBytes: number,
+): unknown | undefined {
+  const path = confinedFile(join(cwd, relPath), cwd);
+  if (!path) return undefined;
   try {
-    const raw = readFileConfig(cwd) as Record<string, unknown>;
-    const out: Record<string, string> = {};
-    for (const key of ["agentId", "agentName", "host", "baseUrl"] as const) {
-      const v = raw[key];
-      if (typeof v !== "string" || !v.trim()) continue;
-      if (key === "host" && v !== "ide" && v !== "runtime") continue;
-      out[key] = v;
-    }
-    return Object.keys(out).length > 0 ? (out as KyaFileConfig) : undefined;
+    if (statSync(path).size > maxBytes) return undefined;
+    return JSON.parse(readFileSync(path, "utf8")) as unknown;
   } catch {
     return undefined;
   }
+}
+
+/** Local identity from .kya/config.json; config.json never holds the API key.
+ * Only string fields pass through; baseUrl is inert display text (never a link). */
+export function loadIdentity(cwd: string): KyaFileConfig | undefined {
+  const raw = readConfinedJsonFile(cwd, join(".kya", "config.json"), MAX_CWD_STATE_BYTES);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const source = raw as Record<string, unknown>;
+  const out: Record<string, string> = {};
+  for (const key of ["agentId", "agentName", "host", "baseUrl"] as const) {
+    const v = source[key];
+    if (typeof v !== "string" || !v.trim()) continue;
+    if (key === "host" && v !== "ide" && v !== "runtime") continue;
+    out[key] = v;
+  }
+  return Object.keys(out).length > 0 ? (out as KyaFileConfig) : undefined;
 }
 
 export interface SandboxCard {
@@ -81,12 +99,8 @@ export function loadSandboxes(
   env: NodeJS.ProcessEnv = process.env,
 ): SandboxCard {
   const backend = env.KYA_SANDBOX?.trim().toLowerCase() || undefined;
-  let sandboxes: SandboxRecord[] = [];
-  try {
-    sandboxes = loadSandboxState(cwd);
-  } catch {
-    sandboxes = [];
-  }
+  const raw = readConfinedJsonFile(cwd, join(".kya", "sandboxes.json"), MAX_CWD_STATE_BYTES);
+  const sandboxes: SandboxRecord[] = Array.isArray(raw) ? (raw as SandboxRecord[]) : [];
   return { backend, sandboxes };
 }
 
@@ -116,65 +130,60 @@ function strOr(v: unknown): string {
 
 /** Slim ORR card from <cwd>/orr-report/report.json (default orr --out). */
 export function loadOrrCard(cwd: string): OrrCard | undefined {
-  const path = confinedFile(join(cwd, "orr-report", "report.json"), cwd);
-  if (!path) return undefined;
-  try {
-    if (statSync(path).size > MAX_ORR_REPORT_BYTES) return undefined;
-    const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
-    const report = raw as Partial<OrrReport>;
-    if (
-      typeof report.overall !== "string" ||
-      !ORR_RATINGS.has(report.overall) ||
-      typeof report.disposition !== "string" ||
-      !ORR_DISPOSITIONS.has(report.disposition)
-    ) {
-      return undefined;
-    }
-    const counts = { pass: 0, fail: 0, partial: 0, notEvaluated: 0 };
-    if (Array.isArray(report.scorecards)) {
-      for (const card of report.scorecards) {
-        switch ((card as { result?: unknown } | null)?.result) {
-          case "pass":
-            counts.pass += 1;
-            break;
-          case "fail":
-            counts.fail += 1;
-            break;
-          case "partial":
-            counts.partial += 1;
-            break;
-          case "not_evaluated":
-            counts.notEvaluated += 1;
-            break;
-        }
-      }
-    }
-    const targetName =
-      report.target && typeof report.target.name === "string"
-        ? report.target.name.slice(0, MAX_ORR_TEXT_CHARS)
-        : undefined;
-    return {
-      overall: report.overall,
-      disposition: report.disposition,
-      primaryFailureMode: strOr(report.primary_failure_mode).slice(0, MAX_ORR_TEXT_CHARS),
-      mostUrgentFix: strOr(report.most_urgent_fix).slice(0, MAX_ORR_TEXT_CHARS),
-      generatedAt: strOr(report.generated_at),
-      targetName,
-      scorecards: counts,
-    };
-  } catch {
+  const raw = readConfinedJsonFile(
+    cwd,
+    join("orr-report", "report.json"),
+    MAX_ORR_REPORT_BYTES,
+  );
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const report = raw as Partial<OrrReport>;
+  if (
+    typeof report.overall !== "string" ||
+    !ORR_RATINGS.has(report.overall) ||
+    typeof report.disposition !== "string" ||
+    !ORR_DISPOSITIONS.has(report.disposition)
+  ) {
     return undefined;
   }
+  const counts = { pass: 0, fail: 0, partial: 0, notEvaluated: 0 };
+  if (Array.isArray(report.scorecards)) {
+    for (const card of report.scorecards) {
+      switch ((card as { result?: unknown } | null)?.result) {
+        case "pass":
+          counts.pass += 1;
+          break;
+        case "fail":
+          counts.fail += 1;
+          break;
+        case "partial":
+          counts.partial += 1;
+          break;
+        case "not_evaluated":
+          counts.notEvaluated += 1;
+          break;
+      }
+    }
+  }
+  const targetName =
+    report.target && typeof report.target.name === "string"
+      ? report.target.name.slice(0, MAX_ORR_TEXT_CHARS)
+      : undefined;
+  return {
+    overall: report.overall,
+    disposition: report.disposition,
+    primaryFailureMode: strOr(report.primary_failure_mode).slice(0, MAX_ORR_TEXT_CHARS),
+    mostUrgentFix: strOr(report.most_urgent_fix).slice(0, MAX_ORR_TEXT_CHARS),
+    generatedAt: strOr(report.generated_at),
+    targetName,
+    scorecards: counts,
+  };
 }
 
 /** Observe-only showback from .kya/usage.json inside cwd. */
 export function loadShowbackCard(cwd: string): ShowbackReport | undefined {
-  const path = confinedFile(join(cwd, ".kya", "usage.json"), cwd);
-  if (!path) return undefined;
+  const raw = readConfinedJsonFile(cwd, join(".kya", "usage.json"), MAX_USAGE_FILE_BYTES);
+  if (raw === undefined) return undefined;
   try {
-    if (statSync(path).size > MAX_USAGE_FILE_BYTES) return undefined;
-    const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
     const records = parseUsageFilePayload(raw);
     if (records.length === 0) return undefined;
     return buildShowback(records);
@@ -197,7 +206,11 @@ export interface WiredHostRow {
 
 function hasWiredEntry(path: string, rootKey: string): boolean {
   try {
-    if (statSync(path).size > MAX_HOST_CONFIG_BYTES) return false;
+    // statSync follows symlinks on purpose (dotfile setups symlink host
+    // configs) — but only regular files are ever read: FIFOs, devices and
+    // sockets would block or stream forever.
+    const st = statSync(path);
+    if (!st.isFile() || st.size > MAX_HOST_CONFIG_BYTES) return false;
     const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
     const servers = (raw as Record<string, unknown>)[rootKey];

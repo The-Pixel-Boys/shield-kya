@@ -26,6 +26,8 @@ export async function runReceiptServe(
   try {
     await live.waitUntilClosed;
   } finally {
-    clearDaemonState(config.cwd);
+    // Only remove the state file if it is still ours — a successor daemon
+    // spawned during our slow shutdown must not lose its state.
+    clearDaemonState(config.cwd, process.pid);
   }
 }
