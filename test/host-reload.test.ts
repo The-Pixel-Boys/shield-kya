@@ -109,6 +109,7 @@ describe("messaging integration", () => {
 
   it("start next-steps speak per host (cursor auto, claude resume tip)", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "kya-reload-start-"));
+    const home = mkdtempSync(join(tmpdir(), "kya-reload-start-home-"));
     try {
       const config = resolveConfig({
         cwd,
@@ -118,6 +119,7 @@ describe("messaging integration", () => {
       });
       const r = await runStart(config, {
         open: false,
+        home,
         procs: new Set(["claude"]),
       });
       expect(r.next).toContain("No restart needed"); // Cursor
@@ -132,6 +134,7 @@ describe("messaging integration", () => {
       expect(wired.mcpServers["shield-kya"]).toBeDefined();
     } finally {
       rmSync(cwd, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
     }
   });
 });

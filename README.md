@@ -43,7 +43,7 @@ npm i -g @shield-agent/kya@latest && kya start
 
 Run it in your project directory. (From a clone of this repo, `./scripts/install-local.sh` replaces the npm install.)
 
-That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/mcp.json` → `kya serve-mcp --stdio`), and **opens** the live activity report. The report runs in the background — you get your terminal back; `kya stop` stops it, `kya receipt --open` reopens it. Cursor, Kiro, Qwen, Amp, Droid, Cline, and Grok pick the server up live with no restart (Kimi: just a new session); Claude Code, Codex, OpenCode, Gemini, Copilot CLI, and Kilo CLI load it on next launch — `claude --resume` keeps your conversation.
+That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/mcp.json` → `kya serve-mcp --stdio`), also **wires user-level configs for every installed host it detects** (`~/.claude.json`, `~/.kimi-code/`, `~/.grok/`, `~/.cursor/`, …), and **opens** the live activity report. The report runs in the background — you get your terminal back; `kya stop` stops it, `kya receipt --open` reopens it. Cursor, Kiro, Qwen, Amp, Droid, Cline, and Grok pick the server up live with no restart (Kimi: just a new session); Claude Code, Codex, OpenCode, Gemini, Copilot CLI, and Kilo CLI load it on next launch — `claude --resume` keeps your conversation.
 
 ![KYA activity receipt — agent tool trail with Allow / Deny / Hold](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/activity-receipt.png)
 
@@ -58,9 +58,11 @@ kya start --force     # rewrite MCP blocks
 
 ## One command per host
 
-`kya start` covers Claude Code, Cursor, and any host that reads `.mcp.json`. For the rest, `kya connect` writes the host's own config dialect directly:
+`kya start` covers Claude Code, Cursor, and any host that reads `.mcp.json` — and auto-wires the user-level config of every installed host it detects. For the rest, `kya connect` writes the host's own config dialect directly:
 
 ```bash
+kya connect claude              # ~/.claude.json (merges mcpServers only)
+kya connect grok                # ~/.grok/config.toml (appends [mcp_servers.shield-kya])
 kya connect opencode            # ~/.config/opencode/opencode.json
 kya connect qwen                # ~/.qwen/settings.json
 kya connect amp                 # ~/.config/amp/settings.json
@@ -68,7 +70,7 @@ kya connect qwen --project      # project scope instead of global
 kya connect kiro --force        # overwrite an existing shield-kya entry
 ```
 
-Connect merges — it never rewrites a host config it can't parse, and it keeps your other servers and keys. Supported hosts: `opencode`, `kilo`, `kiro`, `qwen`, `kimi`, `mastracode`, `amp`, `copilot`, `cursor`. Each wires `serve-mcp --stdio` with `KYA_OFFLINE=1` so the gate starts keyless; set `KYA_API_KEY` in the host env when you point at an authenticated plane.
+Connect merges — it never rewrites a host config it can't parse, and it keeps your other servers and keys. Supported hosts: `claude`, `grok`, `opencode`, `kilo`, `kiro`, `qwen`, `kimi`, `mastracode`, `amp`, `copilot`, `cursor`. Each wires `serve-mcp --stdio` with `KYA_OFFLINE=1` so the gate starts keyless; set `KYA_API_KEY` in the host env when you point at an authenticated plane.
 
 Hosts without a `connect` target still work: `kya wrap --offline -- <agent command>` puts the same evaluate gate in front of any CLI. Per-host recipes with verify steps and troubleshooting live in [docs/hosts/](docs/hosts/).
 
@@ -129,7 +131,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.1.42", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.2.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -156,7 +158,7 @@ npx @shield-agent/kya reject --id <approval-id>
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.1.42 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.2.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -167,7 +169,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.1.42 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.2.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -179,7 +181,9 @@ Merge `gemini/settings.example.json` (stdio) or `gemini/settings.hosted.example.
 
 ## Grok
 
-Hosted custom connector: `https://shield-agent.com/mcp` (see `grok/README.md`). Grok rejects localhost. Prefer a Bearer machine key when the UI offers a request header. For a local agent host, use the same stdio launch as Claude/Codex/Gemini.
+**Grok CLI (local):** `kya connect grok` appends a `[mcp_servers.shield-kya]` table to `~/.grok/config.toml` (`serve-mcp --stdio`, keyless offline sample evaluate). In a running session, press `r` in `/mcps` to refresh.
+
+**grok.com (hosted):** custom connector at `https://shield-agent.com/mcp` (see `grok/README.md`). Grok rejects localhost. Prefer a Bearer machine key when the UI offers a request header.
 
 ## More hosts
 
@@ -187,6 +191,8 @@ Each ships a copy-paste example in its own directory; `kya connect <host>` write
 
 | Host | Setup | Example |
 |------|-------|---------|
+| Claude Code | `kya connect claude` (or `kya start`) | — (merges `~/.claude.json` / `.mcp.json`) |
+| Grok CLI | `kya connect grok` | — (appends `[mcp_servers.shield-kya]` to `~/.grok/config.toml`) |
 | OpenCode | `kya connect opencode` | `opencode/opencode.example.json` |
 | Kilo Code | `kya connect kilo` | `kilo/kilo.example.json` |
 | Kiro | `kya connect kiro` | `kiro/mcp.example.json` |

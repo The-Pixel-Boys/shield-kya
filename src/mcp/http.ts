@@ -9,6 +9,7 @@ import {
   MCP_TOOLS,
   type JsonRpcRequest,
   type McpHandlerContext,
+  type McpTrailContext,
 } from "./protocol.js";
 
 export interface HttpMcpOptions {
@@ -17,6 +18,8 @@ export interface HttpMcpOptions {
   readonly client: KyaHttpClient;
   readonly kyaHost: Host;
   readonly agentId?: string;
+  readonly offline?: boolean;
+  readonly trail?: McpTrailContext;
   /** Optional shared secret; also read from KYA_MCP_HTTP_TOKEN. */
   readonly sharedSecret?: string;
 }
@@ -55,6 +58,8 @@ export function startHttpMcp(options: HttpMcpOptions): Promise<HttpMcpServer> {
     client: options.client,
     host: options.kyaHost,
     agentId: options.agentId,
+    offline: options.offline,
+    trail: options.trail,
   };
 
   const server = createServer((req, res) => {

@@ -7,7 +7,7 @@
 import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { CONNECT_REGISTRY } from "../commands/connect.js";
+import { CONNECT_REGISTRY, type HostSpec } from "../commands/connect.js";
 import type { OrrDisposition, OrrRating, OrrReport } from "../commands/orr.js";
 import type { KyaFileConfig } from "../config.js";
 import {
@@ -204,16 +204,20 @@ export interface WiredHostRow {
   readonly recipeOnly: string | undefined;
 }
 
-function hasWiredEntry(path: string, rootKey: string): boolean {
+function hasWiredEntry(path: string, spec: HostSpec): boolean {
   try {
     // statSync follows symlinks on purpose (dotfile setups symlink host
     // configs) — but only regular files are ever read: FIFOs, devices and
     // sockets would block or stream forever.
     const st = statSync(path);
     if (!st.isFile() || st.size > MAX_HOST_CONFIG_BYTES) return false;
-    const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    const text = readFileSync(path, "utf8");
+    if (spec.shape === "grok-toml") {
+      return /^\s*\[mcp_servers\.shield-kya\]\s*(?:#.*)?$/m.test(text);
+    }
+    const raw = JSON.parse(text) as unknown;
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
-    const servers = (raw as Record<string, unknown>)[rootKey];
+    const servers = (raw as Record<string, unknown>)[spec.rootKey];
     if (!servers || typeof servers !== "object" || Array.isArray(servers)) {
       return false;
     }
@@ -225,7 +229,7 @@ function hasWiredEntry(path: string, rootKey: string): boolean {
 
 export function loadWiredHosts(
   cwd: string,
-  home: string = homedir(),
+  home: string = process.env.KYA_HOME?.trim() || homedir(),
   procs?: ReadonlySet<string>,
 ): WiredHostRow[] {
   const running = procs ?? listProcessNames();
@@ -244,10 +248,10 @@ export function loadWiredHosts(
       };
     }
     const globalWired = spec.globalPath
-      ? hasWiredEntry(spec.globalPath(home), spec.rootKey)
+      ? hasWiredEntry(spec.globalPath(home), spec)
       : false;
     const projectWired = spec.projectPath
-      ? hasWiredEntry(spec.projectPath(cwd), spec.rootKey)
+      ? hasWiredEntry(spec.projectPath(cwd), spec)
       : false;
     const wired: WiredState =
       globalWired && projectWired
