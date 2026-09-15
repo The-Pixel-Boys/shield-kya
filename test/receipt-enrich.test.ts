@@ -322,7 +322,7 @@ describe("loadWiredHosts", () => {
       expect(row?.recipeOnly).toMatch(/^docs\/hosts\//);
     }
     expect(rows.filter((r) => r.recipeOnly)).toHaveLength(2);
-    expect(rows).toHaveLength(11);
+    expect(rows).toHaveLength(13);
   });
 
   it("running follows the injected process set", () => {

@@ -5,13 +5,15 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { KyaHttpClient } from "../client.js";
+import type { KyaHttpClient, PolicyEvaluateResponse } from "../client.js";
 import type { Host } from "../config.js";
 import { computeArgsHash } from "../hash.js";
 import { findSampleTool } from "../sample-tools.js";
-import { clientSafeError } from "../errors.js";
+import { evaluateOffline } from "../offline-evaluate.js";
+import { AuthRequiredError, clientSafeError, HttpError } from "../errors.js";
 import { CLI_VERSION } from "../version.js";
 import { parseUsageRecords } from "../showback/cost-per-task.js";
+import { appendTrail, defaultSessionId } from "../trail.js";
 
 export const MCP_SERVER_INFO = {
   name: "shield-kya",
@@ -109,6 +111,48 @@ export interface McpHandlerContext {
   readonly client: KyaHttpClient;
   readonly host: Host;
   readonly agentId?: string;
+  /** Offline sample evaluate (KYA_OFFLINE=1) — no HTTP, never fails on a dead plane. */
+  readonly offline?: boolean;
+  /** Trail recording target; absent in contexts that must not record. */
+  readonly trail?: McpTrailContext;
+}
+
+export interface McpTrailContext {
+  readonly cwd: string;
+  readonly offline: boolean;
+  readonly holdEnabled: boolean;
+}
+
+/**
+ * Record one trail row for a completed MCP tool call. Best-effort by design:
+ * a failed trail write must never change the tool result.
+ */
+function recordMcpTrail(
+  ctx: McpHandlerContext,
+  event: {
+    readonly toolId: string;
+    readonly verdict: string;
+    readonly reasonCode: string;
+    readonly argsHash?: string;
+  },
+): void {
+  const trail = ctx.trail;
+  if (!trail) return;
+  try {
+    appendTrail(trail.cwd, {
+      ts: new Date().toISOString(),
+      sessionId: defaultSessionId(),
+      host: ctx.host,
+      toolId: event.toolId,
+      verdict: event.verdict,
+      reasonCode: event.reasonCode,
+      mode: trail.offline ? "offline" : trail.holdEnabled ? "hold" : "observe",
+      neverEvent: event.reasonCode === "NEVER_EVENT",
+      ...(event.argsHash ? { argsHash: event.argsHash } : {}),
+    });
+  } catch {
+    /* observe path is never allowed to break the gate */
+  }
 }
 
 export async function handleMcpToolCall(
@@ -151,7 +195,7 @@ async function callPolicyEvaluate(
   const argsHash = str(a.argsHash) ?? computeArgsHash(argsObj);
   const irreversible = sample?.irreversible ?? true;
 
-  const response = await ctx.client.evaluatePolicy({
+  const request = {
     toolId,
     action: toolId,
     argsHash,
@@ -165,6 +209,33 @@ async function callPolicyEvaluate(
       sessionId: str(a.sessionId),
       agentId: str(a.agentId) ?? ctx.agentId,
     },
+  };
+
+  let response: PolicyEvaluateResponse;
+  if (ctx.offline) {
+    // Same local evaluator as `kya eval-tool --offline` — a verdict, never a
+    // network error, so the wired (keyless) path still lands on the trail.
+    response = evaluateOffline(request, host);
+  } else {
+    try {
+      response = await ctx.client.evaluatePolicy(request);
+    } catch (err) {
+      // Fail closed on the trail too: a plane we cannot reach is a DENY row,
+      // then the error result goes back unchanged.
+      recordMcpTrail(ctx, {
+        toolId,
+        verdict: "DENY",
+        reasonCode: planeFailureReason(err),
+        argsHash,
+      });
+      throw err;
+    }
+  }
+  recordMcpTrail(ctx, {
+    toolId,
+    verdict: response.verdict,
+    reasonCode: response.reasonCode,
+    argsHash,
   });
   return textResult(response);
 }
@@ -250,11 +321,29 @@ async function callRequestApproval(
     packVersion: str(a.packVersion) ?? "generic",
   });
 
+  recordMcpTrail(ctx, {
+    toolId: str(a.toolId) ?? action,
+    verdict: "REQUIRE_APPROVE",
+    reasonCode: "REQUIRE_APPROVE",
+  });
+
   return textResult({
     ...response,
     note: "Approval opened only — no side effect executed (fail closed until APPROVED)",
     summary: str(a.summary),
   });
+}
+
+/**
+ * Fail-closed reason for a rejected evaluate: the plane answering 401/403
+ * (or a missing key) is an auth problem, not an outage.
+ */
+function planeFailureReason(err: unknown): string {
+  if (err instanceof AuthRequiredError) return "PLANE_AUTH_REJECTED";
+  if (err instanceof HttpError && (err.status === 401 || err.status === 403)) {
+    return "PLANE_AUTH_REJECTED";
+  }
+  return "PLANE_UNREACHABLE";
 }
 
 function textResult(data: unknown, isError = false): McpCallResult {

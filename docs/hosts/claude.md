@@ -5,11 +5,18 @@ Wire KYA into Claude Code or Claude Desktop so tool calls that go through MCP pa
 ## Setup — Claude Code
 
 ```bash
-cd your-project
-kya start
+kya connect claude     # user level: merges shield-kya into ~/.claude.json (mcpServers only)
 ```
 
-`kya start` inits `.kya/`, wires `shield-kya` into `.mcp.json` (and `mcp.json`, `.cursor/mcp.json` when present), and opens the live activity report — it runs in the background, so your terminal returns immediately (`kya stop` stops it). Claude Code loads MCP servers at process start; if a session is open, relaunch with `claude --resume` — it keeps the conversation. `kya start --no-open` wires without the report; `--force` rewrites existing blocks.
+or, for project scope:
+
+```bash
+cd your-project
+kya start              # wires ./.mcp.json (plus user-level configs for every installed host)
+# or: kya connect claude --project
+```
+
+`kya start` also inits `.kya/` and opens the live activity report — it runs in the background, so your terminal returns immediately (`kya stop` stops it). Claude Code loads MCP servers at process start; if a session is open, relaunch with `claude --resume` — it keeps the conversation. `kya start --no-open` wires without the report; `--force` rewrites the existing shield-kya entry.
 
 ## Setup — Claude Desktop
 
@@ -27,10 +34,11 @@ Three MCP tools: `kya.policy_evaluate` (Allow / Deny / Hold), `kya.session_inges
 
 | Setup | Path |
 |-------|------|
+| Claude Code (user) | `~/.claude.json` — `mcpServers` merged, all other keys untouched |
 | Claude Code (project) | `.mcp.json`, `.kya/` in your repo |
 | Claude Desktop | the app's own MCP settings file (you paste it) |
 
-`kya start` merges — existing servers and keys stay.
+Connect and `kya start` merge — existing servers and keys stay. A symlinked `~/.claude.json` (dotfiles setups) is written through to the real file it resolves to.
 
 ## Verify
 

@@ -1,75 +1,45 @@
 /**
  * One-shot OSS onboarding: init → wire local MCP → open live activity report.
+ *
+ * Wiring has two tiers: project files (`.mcp.json`, `mcp.json`,
+ * `.cursor/mcp.json` in cwd) and user-level configs for hosts with evidence
+ * of installation (config file present, or the host's config dir exists).
+ * Both go through connect's merge logic — merge-only, never clobber.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { ResolvedConfig } from "../config.js";
+import { UsageError } from "../errors.js";
 import { runInit } from "./init.js";
 import { openPath, runReceipt } from "./receipt.js";
 import { ensureReceiptDaemon } from "../receipt/daemon.js";
 import { appendTrail, defaultSessionId } from "../trail.js";
 import { hostReload, hostRunning, listProcessNames, reloadMessage } from "../host-reload.js";
+import {
+  CONNECT_REGISTRY,
+  connectableHosts,
+  mergeJsonHostConfig,
+  standardServerBlock,
+  wireHost,
+} from "./connect.js";
+
+export interface WiredUserHost {
+  readonly host: string;
+  readonly label: string;
+  readonly path: string;
+}
 
 export interface StartResult {
   readonly initCreated: readonly string[];
   readonly wired: readonly string[];
   readonly skipped: readonly string[];
+  /** User-level host configs wired (or created) because the host is installed. */
+  readonly wiredHosts: readonly WiredUserHost[];
   readonly liveUrl?: string;
   readonly reportPid?: number;
   readonly reportReused?: boolean;
   readonly next: string;
-}
-
-function cliJsPath(): string {
-  // start.ts → ../cli.js in dist; when running from dist/commands/start.js
-  return fileURLToPath(new URL("../cli.js", import.meta.url));
-}
-
-function mcpServerBlock(): Record<string, unknown> {
-  return {
-    command: process.execPath,
-    args: [cliJsPath(), "serve-mcp", "--stdio"],
-    env: {
-      KYA_HOST: "ide",
-      KYA_OFFLINE: "1",
-    },
-  };
-}
-
-function mergeMcpJson(path: string, force: boolean): "wired" | "skipped" | "created" {
-  const block = mcpServerBlock();
-  if (!existsSync(path)) {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(
-      path,
-      `${JSON.stringify({ mcpServers: { "shield-kya": block } }, null, 2)}\n`,
-      "utf8",
-    );
-    return "created";
-  }
-  if (!force) {
-    try {
-      const raw = JSON.parse(readFileSync(path, "utf8")) as {
-        mcpServers?: Record<string, unknown>;
-      };
-      if (raw.mcpServers?.["shield-kya"]) return "skipped";
-      const next = {
-        ...raw,
-        mcpServers: { ...(raw.mcpServers ?? {}), "shield-kya": block },
-      };
-      writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
-      return "wired";
-    } catch {
-      /* fall through rewrite */
-    }
-  }
-  writeFileSync(
-    path,
-    `${JSON.stringify({ mcpServers: { "shield-kya": block } }, null, 2)}\n`,
-    "utf8",
-  );
-  return "wired";
 }
 
 function seedTrailIfEmpty(cwd: string): void {
@@ -87,26 +57,89 @@ function seedTrailIfEmpty(cwd: string): void {
   });
 }
 
+/**
+ * Config dirs that count as evidence a host is installed even before its
+ * config file exists (home dir itself never counts — ~/.claude.json's parent
+ * is ~). Any other host qualifies only when its config file already exists.
+ */
+const EVIDENCE_DIRS: Readonly<Record<string, (home: string) => string>> = {
+  claude: (h) => join(h, ".claude"),
+  kimi: (h) => join(h, ".kimi-code"),
+  grok: (h) => join(h, ".grok"),
+  cursor: (h) => join(h, ".cursor"),
+};
+
+function hostInstalled(hostId: string, home: string): boolean {
+  const globalPath = CONNECT_REGISTRY[hostId]?.globalPath?.(home);
+  if (globalPath && existsSync(globalPath)) return true;
+  const evidence = EVIDENCE_DIRS[hostId]?.(home);
+  return Boolean(evidence && existsSync(evidence));
+}
+
 export async function runStart(
   config: ResolvedConfig,
-  input: { force?: boolean; open?: boolean; procs?: ReadonlySet<string> } = {},
+  input: {
+    force?: boolean;
+    open?: boolean;
+    procs?: ReadonlySet<string>;
+    /** Test hook: home dir for user-level host wiring. */
+    home?: string;
+  } = {},
 ): Promise<StartResult> {
   const force = Boolean(input.force);
   const open = input.open !== false;
+  const home = input.home?.trim() || process.env.KYA_HOME?.trim() || homedir();
 
   const init = runInit({ cwd: config.cwd, force: false });
   const wired: string[] = [];
   const skipped: string[] = [...init.skipped];
+  const wiredHosts: WiredUserHost[] = [];
+  const hostNotesIds = new Set<string>();
 
-  const targets = [
-    join(config.cwd, ".mcp.json"), // Claude Code
-    join(config.cwd, "mcp.json"),
-    join(config.cwd, ".cursor", "mcp.json"), // Cursor project MCP
+  // Project files: Claude Code (.mcp.json), the generic mcp.json, and
+  // Cursor's project MCP (.cursor/mcp.json).
+  const projectWiring: readonly (() => {
+    host?: string;
+    path: string;
+    status: string;
+  })[] = [
+    () => wireHost({ host: "claude", scope: "project", force, home, cwd: config.cwd }),
+    () => ({
+      path: join(config.cwd, "mcp.json"),
+      status: mergeJsonHostConfig(
+        join(config.cwd, "mcp.json"),
+        "mcpServers",
+        standardServerBlock("generic"),
+        force,
+      ),
+    }),
+    () => wireHost({ host: "cursor", scope: "project", force, home, cwd: config.cwd }),
   ];
-  for (const path of targets) {
-    const status = mergeMcpJson(path, force);
-    if (status === "skipped") skipped.push(path);
-    else wired.push(path);
+  for (const wire of projectWiring) {
+    try {
+      const r = wire();
+      if (r.status === "skipped") skipped.push(r.path);
+      else wired.push(r.path);
+      if (r.host) hostNotesIds.add(r.host);
+    } catch (err) {
+      if (err instanceof UsageError) skipped.push(String(err.message));
+      else throw err;
+    }
+  }
+
+  // User-level configs for hosts with evidence of installation.
+  for (const hostId of connectableHosts()) {
+    const spec = CONNECT_REGISTRY[hostId]!;
+    if (!spec.globalPath || !hostInstalled(hostId, home)) continue;
+    try {
+      const r = wireHost({ host: hostId, scope: "global", force, home, cwd: config.cwd });
+      if (r.status === "skipped") skipped.push(r.path);
+      else wiredHosts.push({ host: r.host, label: r.label, path: r.path });
+      hostNotesIds.add(r.host);
+    } catch (err) {
+      if (err instanceof UsageError) skipped.push(String(err.message));
+      else throw err;
+    }
   }
 
   seedTrailIfEmpty(config.cwd);
@@ -125,22 +158,25 @@ export async function runStart(
     openPath(daemon.url);
   }
 
-  // start wires the configs Claude Code (.mcp.json / mcp.json) and Cursor
-  // (.cursor/mcp.json) read — the reload note is per-host, not a blanket
-  // "restart everything".
+  // Reload note per host actually wired (project or user level), not a
+  // blanket "restart everything".
   const procs = input.procs ?? listProcessNames();
-  const hostNotes = (["cursor", "claude"] as const)
-    .map((id) => hostReload(id))
-    .filter((info): info is NonNullable<typeof info> => Boolean(info))
-    .map((info) =>
-      reloadMessage(info, info.id === "claude" ? "Claude Code" : "Cursor", hostRunning(info, procs)),
-    )
+  const hostNotes = [...hostNotesIds]
+    .map((id) => {
+      const info = hostReload(id);
+      const label = CONNECT_REGISTRY[id]?.label;
+      return info && label
+        ? reloadMessage(info, label, hostRunning(info, procs))
+        : undefined;
+    })
+    .filter((note): note is string => Boolean(note))
     .join(" ");
 
   return {
     initCreated: init.created,
     wired,
     skipped,
+    wiredHosts,
     liveUrl,
     reportPid,
     reportReused,
@@ -156,6 +192,9 @@ export function formatStartHuman(r: StartResult): string {
     "KYA start",
     r.initCreated.length ? `init: ${r.initCreated.join(", ")}` : "init: ok",
     r.wired.length ? `wired: ${r.wired.join(", ")}` : undefined,
+    r.wiredHosts.length
+      ? `wired hosts: ${r.wiredHosts.map((h) => `${h.label} (${h.path})`).join(", ")}`
+      : undefined,
     r.liveUrl ? `report: ${r.liveUrl}` : undefined,
     r.next,
   ]

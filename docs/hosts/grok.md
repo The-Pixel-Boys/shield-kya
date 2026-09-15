@@ -2,7 +2,13 @@
 
 Wire KYA into Grok so calls to Shield's MCP pass evaluate first. Allow runs, Deny stops, Hold waits for a person.
 
-Grok is hosted-only for this integration: grok.com rejects `localhost` and private IPs, and there is no grok.com stdio path. Do not tunnel the OSS HTTP server to a public URL — use the hosted endpoint with a machine key.
+## Setup — Grok CLI (local)
+
+```bash
+kya connect grok
+```
+
+That appends a `[mcp_servers.shield-kya]` table to `~/.grok/config.toml` (command: `kya serve-mcp --stdio` from the install you ran connect in; env: `KYA_HOST=ide`, `KYA_OFFLINE=1`, `KYA_SESSION_ID=mcp:grok`; `enabled = true`). Re-running skips an existing table; `--force` replaces just that table. In a running Grok session, press `r` in `/mcps` to refresh.
 
 ## Setup — grok.com connectors
 
@@ -29,9 +35,9 @@ chat = Client(api_key=os.environ["XAI_API_KEY"]).chat.create(
 )
 ```
 
-## Setup — local agent host (not grok.com)
+## Setup — local agent host (not Grok CLI, not grok.com)
 
-For a local Grok-driven agent, use the same stdio launch as Claude/Codex/Gemini: `npx --no-install @shield-agent/kya@… serve-mcp --stdio` with `KYA_BASE_URL`, `KYA_API_KEY`, `KYA_HOST` in env.
+For a custom local Grok-driven agent, use the same stdio launch as Claude/Codex/Gemini: `npx --no-install @shield-agent/kya@… serve-mcp --stdio` with `KYA_BASE_URL`, `KYA_API_KEY`, `KYA_HOST` in env.
 
 ## What KYA reports
 
@@ -39,11 +45,17 @@ Same three tools everywhere: `kya.policy_evaluate` (Allow / Deny / Hold), `kya.s
 
 ## Files written
 
-None locally. The connector lives in your grok.com account; the SDK path lives in your own code.
+| Setup | Path |
+|-------|------|
+| Grok CLI | `~/.grok/config.toml` — one appended `[mcp_servers.shield-kya]` table |
+| grok.com | none locally — the connector lives in your grok.com account |
+| xAI SDK | none — the `mcp(...)` tool lives in your own code |
+
+Connect appends and never rewrites unrelated TOML. An inline `shield-kya = …` definition under `[mcp_servers]` can't be merged as text — connect stops and tells you instead of guessing.
 
 ## Verify
 
-1. In grok.com, open a chat with the connector enabled and ask for the available tools — the three `kya.*` tools should be listed.
+1. Grok CLI: open a session, run `/mcps` — `shield-kya` should list with the three tools (press `r` to refresh if the session was already open). In grok.com, open a chat with the connector enabled and ask for the available tools.
 2. Trigger a small evaluation and check the receipt for the row.
 3. Local smoke:
 
@@ -55,7 +67,7 @@ None locally. The connector lives in your grok.com account; the SDK path lives i
 
 ## Uninstall
 
-Delete the connector in grok.com's connector settings, or remove the `mcp(...)` tool from your SDK code. Nothing was installed locally.
+Grok CLI: delete the `[mcp_servers.shield-kya]` table from `~/.grok/config.toml` (or rewire later with `kya connect grok --force`). grok.com: delete the connector in connector settings; xAI SDK: remove the `mcp(...)` tool from your code. Nothing else is installed — no daemon, no background process.
 
 ## Troubleshooting
 

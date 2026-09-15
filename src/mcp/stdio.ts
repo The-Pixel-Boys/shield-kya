@@ -5,12 +5,15 @@ import {
   handleJsonRpc,
   type JsonRpcRequest,
   type McpHandlerContext,
+  type McpTrailContext,
 } from "./protocol.js";
 
 export interface StdioMcpOptions {
   readonly client: KyaHttpClient;
   readonly kyaHost: Host;
   readonly agentId?: string;
+  readonly offline?: boolean;
+  readonly trail?: McpTrailContext;
   readonly input?: NodeJS.ReadableStream;
   readonly output?: NodeJS.WritableStream;
   /** When true, do not attach process signal handlers (tests). */
@@ -34,6 +37,8 @@ export function startStdioMcp(options: StdioMcpOptions): StdioMcpHandle {
     client: options.client,
     host: options.kyaHost,
     agentId: options.agentId,
+    offline: options.offline,
+    trail: options.trail,
   };
 
   let closed = false;

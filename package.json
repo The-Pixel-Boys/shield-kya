@@ -1,6 +1,6 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.1.42",
+  "version": "0.2.0",
   "description": "Know Your Agent light CLI + local MCP gate (provider-agnostic, zero vertical packs required).",
   "license": "MIT",
   "type": "module",

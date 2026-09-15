@@ -22,6 +22,9 @@ interface WiredServer {
 
 /** Read the written config the way the host would. */
 function extractServer(host: string, configPath: string): WiredServer {
+  if (host === "grok") {
+    return extractGrokTomlServer(configPath);
+  }
   const raw = JSON.parse(readFileSync(configPath, "utf8")) as Record<
     string,
     Record<string, Record<string, unknown>>
@@ -44,6 +47,35 @@ function extractServer(host: string, configPath: string): WiredServer {
     env: Record<string, string>;
   };
   return { command: entry.command, args: entry.args, env: entry.env };
+}
+
+/** Minimal reader for the TOML table `kya connect grok` generates. */
+function extractGrokTomlServer(configPath: string): WiredServer {
+  const text = readFileSync(configPath, "utf8");
+  const lines = text.split("\n");
+  const start = lines.findIndex((l) =>
+    /^\s*\[mcp_servers\.shield-kya\]/.test(l),
+  );
+  const rest = start === -1 ? [] : lines.slice(start + 1);
+  const endIdx = rest.findIndex((l) => /^\s*\[/.test(l));
+  const section = (endIdx === -1 ? rest : rest.slice(0, endIdx)).join("\n");
+  const commandRaw = /command = ("(?:[^"\\]|\\.)*")/.exec(section)?.[1];
+  const argsRaw = /args = (\[[^\]]*\])/.exec(section)?.[1];
+  const envRaw = /env = \{([^}]*)\}/.exec(section)?.[1] ?? "";
+  if (!commandRaw || !argsRaw) {
+    throw new Error(`grok config missing shield-kya table: ${configPath}`);
+  }
+  const env = Object.fromEntries(
+    [...envRaw.matchAll(/(\w+) = ("(?:[^"\\]|\\.)*")/g)].map((m) => [
+      m[1]!,
+      JSON.parse(m[2]!) as string,
+    ]),
+  );
+  return {
+    command: JSON.parse(commandRaw) as string,
+    args: JSON.parse(argsRaw) as string[],
+    env,
+  };
 }
 
 interface JsonRpcResponse {

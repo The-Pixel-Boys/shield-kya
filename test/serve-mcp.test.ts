@@ -189,9 +189,13 @@ describe("MCP protocol tools", () => {
 
 describe("HTTP serve-mcp", () => {
   it("starts HTTP gate and serves tools + health", async () => {
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const cwd = mkdtempSync(join(tmpdir(), "kya-serve-mcp-"));
     const client = mockClient();
     const result = await runServeMcp(
-      { ...baseConfig, mcpPort: 0 },
+      { ...baseConfig, cwd, mcpPort: 0 },
       { mode: "http", port: 0 },
       client,
     );
@@ -238,6 +242,7 @@ describe("HTTP serve-mcp", () => {
     expect(rpc.result.content[0].text).toContain("ALLOW");
 
     await result.http!.close();
+    rmSync(cwd, { recursive: true, force: true });
   });
 
   it("does not echo exception text on invalid JSON", async () => {
