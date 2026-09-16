@@ -12,6 +12,7 @@ import { globalConfigDir, kyaHome } from "../src/config.js";
 import {
   appendTrail,
   globalTrailPath,
+  hostToProduct,
   legacyTrailPath,
   readTrail,
   readTrailSince,
@@ -141,5 +142,24 @@ describe("global trail", () => {
     expect(events.map((e) => e.toolId)).toEqual(["new"]);
     const other = mkdtempSync(join(tmpdir(), "kya-home-"));
     expect(readTrailSince(cwd, new Date(0), { KYA_HOME: other })).toEqual([]);
+  });
+
+  it("keeps product kimi", () => {
+    const home = mkdtempSync(join(tmpdir(), "kya-home-"));
+    const env = { KYA_HOME: home };
+    mkdirSync(join(home, ".kya"), { recursive: true });
+    appendFileSync(globalTrailPath(env), `${JSON.stringify({ ...baseEvent, product: "kimi" })}\n`);
+    expect(readTrail(mkdtempSync(join(tmpdir(), "kya-proj-")), env)[0]!.product).toBe("kimi");
+  });
+});
+
+describe("hostToProduct", () => {
+  it("maps hook host ids to products and falls back to other", () => {
+    expect(hostToProduct("claude")).toBe("claude");
+    expect(hostToProduct("grok")).toBe("grok");
+    expect(hostToProduct("kimi")).toBe("kimi");
+    expect(hostToProduct("cursor")).toBe("cursor");
+    expect(hostToProduct("codex")).toBe("codex");
+    expect(hostToProduct("windsurf")).toBe("other");
   });
 });

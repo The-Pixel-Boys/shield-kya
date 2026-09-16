@@ -10,7 +10,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveConfig } from "../src/config.js";
-import { runStart } from "../src/commands/start.js";
+import { formatStartHuman, runStart } from "../src/commands/start.js";
 import { trailPath } from "../src/trail.js";
 
 function tmp(prefix: string): string {
@@ -151,6 +151,62 @@ describe("kya start", () => {
       // A host whose wiring failed must not claim a shield-kya load.
       expect(r.next).not.toMatch(/[Cc]laude/);
       expect(r.next).toContain("No restart needed"); // Cursor wired fine
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("wires PreToolUse hooks for installed claude/grok/kimi, idempotently", async () => {
+    const cwd = tmp("kya-start-");
+    const home = tmp("kya-start-home-");
+    try {
+      mkdirSync(join(home, ".claude"));
+      mkdirSync(join(home, ".grok"));
+      mkdirSync(join(home, ".kimi-code"));
+
+      const first = await runStart(cfg(cwd), { open: false, home });
+      expect(first.hooksWired.map((h) => h.host).sort()).toEqual([
+        "claude",
+        "grok",
+        "kimi",
+      ]);
+
+      const claudeSettings = join(home, ".claude", "settings.json");
+      const grokHooks = join(home, ".grok", "hooks", "shield-kya.json");
+      const kimiToml = join(home, ".kimi-code", "config.toml");
+
+      const claude = JSON.parse(readFileSync(claudeSettings, "utf8")) as {
+        hooks: { PreToolUse: Array<{ hooks: Array<{ command: string }> }> };
+      };
+      expect(claude.hooks.PreToolUse[0]!.hooks[0]!.command).toContain(
+        "hook --host claude",
+      );
+      const grok = JSON.parse(readFileSync(grokHooks, "utf8")) as {
+        hooks: { PreToolUse: Array<{ hooks: Array<{ command: string }> }> };
+      };
+      expect(grok.hooks.PreToolUse[0]!.hooks[0]!.command).toContain(
+        "hook --host grok",
+      );
+      const kimiText = readFileSync(kimiToml, "utf8");
+      expect(kimiText).toContain("[[hooks]]");
+      expect(kimiText).toContain("hook --host kimi");
+
+      // Human output announces the hook wiring and its session-start semantics.
+      expect(formatStartHuman(first)).toContain(
+        "hooks: Claude Code, Grok, Kimi Code CLI (PreToolUse interception — applies to new sessions)",
+      );
+      expect(first.next).toContain("load hooks at session start");
+
+      // Second run: hooks skipped, files byte-identical.
+      const snapshot = [claudeSettings, grokHooks, kimiToml].map((p) =>
+        readFileSync(p, "utf8"),
+      );
+      const second = await runStart(cfg(cwd), { open: false, home });
+      expect(second.hooksWired).toHaveLength(0);
+      expect(
+        [claudeSettings, grokHooks, kimiToml].map((p) => readFileSync(p, "utf8")),
+      ).toEqual(snapshot);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
       rmSync(home, { recursive: true, force: true });
