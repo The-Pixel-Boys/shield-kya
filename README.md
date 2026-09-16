@@ -74,6 +74,20 @@ Connect merges — it never rewrites a host config it can't parse, and it keeps 
 
 Hosts without a `connect` target still work: `kya wrap --offline -- <agent command>` puts the same evaluate gate in front of any CLI. Per-host recipes with verify steps and troubleshooting live in [docs/hosts/](docs/hosts/).
 
+## Hook interception
+
+`kya start` also wires a `PreToolUse` hook into every installed hook-capable host it detects: Claude Code (`~/.claude/settings.json`, merge-only), Grok (`~/.grok/hooks/shield-kya.json`, kya-managed file), and Kimi Code (`~/.kimi-code/config.toml`, `[[hooks]]` append). Every tool call the agent makes then passes through `kya hook` first: evaluated locally (offline, sub-second, no network) and recorded on the global trail.
+
+Decision mapping: a local never-list **DENY** blocks the tool call (exit `2` plus `hookSpecificOutput` deny JSON with `permissionDecision: "deny"`). **ALLOW** and **REQUIRE_APPROVE** are recorded on the trail as advisory and the call proceeds. Manual wiring can pass `--strict` on the hook command to also block **REQUIRE_APPROVE**.
+
+Hooks are fail-open: any hook error or timeout allows the call. They are alerts plus local never-list enforcement, not the sole barrier — plane enforcement remains the MCP `kya.policy_evaluate` path. Hooks take effect in new sessions; all three hosts load hooks at session start.
+
+```bash
+kya connect claude --hooks   # wire the PreToolUse hook by hand
+kya connect grok --hooks
+kya connect kimi --hooks
+```
+
 ## Longer path (optional)
 
 ```bash
@@ -135,7 +149,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.3.0", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.4.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -162,7 +176,7 @@ npx @shield-agent/kya reject --id <approval-id>
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.3.0 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.4.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -173,7 +187,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.3.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.4.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 

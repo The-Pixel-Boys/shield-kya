@@ -1,10 +1,11 @@
 /**
  * One-shot OSS onboarding: init → wire local MCP → open live activity report.
  *
- * Wiring has two tiers: project files (`.mcp.json`, `mcp.json`,
- * `.cursor/mcp.json` in cwd) and user-level configs for hosts with evidence
- * of installation (config file present, or the host's config dir exists).
- * Both go through connect's merge logic — merge-only, never clobber.
+ * Wiring has three tiers: project files (`.mcp.json`, `mcp.json`,
+ * `.cursor/mcp.json` in cwd), user-level MCP configs for hosts with evidence
+ * of installation (config file present, or the host's config dir exists),
+ * and PreToolUse hooks for hook-capable hosts (claude, grok, kimi).
+ * All go through merge-only logic — never clobber.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -23,6 +24,7 @@ import {
   standardServerBlock,
   wireHost,
 } from "./connect.js";
+import { HOOK_HOSTS, wireHook } from "./wire-hooks.js";
 
 export interface WiredUserHost {
   readonly host: string;
@@ -36,6 +38,8 @@ export interface StartResult {
   readonly skipped: readonly string[];
   /** User-level host configs wired (or created) because the host is installed. */
   readonly wiredHosts: readonly WiredUserHost[];
+  /** PreToolUse hook wiring for installed hook-capable hosts (claude/grok/kimi). */
+  readonly hooksWired: readonly WiredUserHost[];
   readonly liveUrl?: string;
   readonly reportPid?: number;
   readonly reportReused?: boolean;
@@ -142,6 +146,19 @@ export async function runStart(
     }
   }
 
+  // PreToolUse hook wiring for installed hook-capable hosts.
+  const hookHosts = HOOK_HOSTS.filter((id) => hostInstalled(id, home));
+  const hooksWired: WiredUserHost[] = [];
+  for (const id of hookHosts) {
+    try {
+      const r = wireHook({ host: id, home, force });
+      if (r.status !== "skipped") hooksWired.push({ host: r.host, label: r.label, path: r.path });
+    } catch (err) {
+      if (err instanceof UsageError) skipped.push(String(err.message));
+      else throw err;
+    }
+  }
+
   seedTrailIfEmpty(config.cwd);
 
   let liveUrl: string | undefined;
@@ -177,13 +194,17 @@ export async function runStart(
     wired,
     skipped,
     wiredHosts,
+    hooksWired,
     liveUrl,
     reportPid,
     reportReused,
     next:
       `${hostNotes} ` +
       "The report runs in the background — reopen with `kya receipt --open`, " +
-      "stop with `kya stop`.",
+      "stop with `kya stop`." +
+      (hooksWired.length
+        ? " Hooks take effect in new sessions — claude, grok, and kimi all load hooks at session start."
+        : ""),
   };
 }
 
@@ -194,6 +215,9 @@ export function formatStartHuman(r: StartResult): string {
     r.wired.length ? `wired: ${r.wired.join(", ")}` : undefined,
     r.wiredHosts.length
       ? `wired hosts: ${r.wiredHosts.map((h) => `${h.label} (${h.path})`).join(", ")}`
+      : undefined,
+    r.hooksWired.length
+      ? `hooks: ${r.hooksWired.map((h) => h.label).join(", ")} (PreToolUse interception — applies to new sessions)`
       : undefined,
     r.liveUrl ? `report: ${r.liveUrl}` : undefined,
     r.next,

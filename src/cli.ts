@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @shield-agent/kya — light install CLI
- * Commands: init | register-agent | eval-tool | wrap | invoke | approve | reject
+ * Commands: init | register-agent | eval-tool | wrap | hook | invoke | approve | reject
  *   | agents | agent | passport | kill | approvals | sessions | shrink
  *   | serve-mcp | orr run | dash
  * Fail-closed: empty KYA_API_KEY against auth plane → non-zero exit.
@@ -12,7 +12,7 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolveConfig } from "./config.js";
 import { KyaError } from "./errors.js";
-import { parseArgs } from "./parse-args.js";
+import { flagBool, flagString, parseArgs } from "./parse-args.js";
 import { initFromArgs } from "./commands/init.js";
 import {
   registerAgentInputFromArgs,
@@ -72,6 +72,7 @@ import {
   runInvoke,
 } from "./commands/invoke.js";
 import { runSandboxCommand } from "./commands/sandbox.js";
+import { runHook } from "./commands/hook.js";
 import { formatStopHuman, runStop } from "./commands/stop.js";
 import { runReceiptServe } from "./commands/receipt-serve.js";
 import { ensureSupportedNode } from "./node-upgrade.js";
@@ -87,11 +88,14 @@ Commands:
   stop              Stop the background report server started by kya start
   connect <host>    Wire KYA MCP into a coding host config
                     (${connectableHosts().join("|")}; --project for project scope, --force to overwrite)
+                    --hooks also wires the host's PreToolUse hook (claude|grok|kimi)
   init              Scaffold .kya/ config + sample tools + .env.example
   register-agent    POST /api/v1/kya/agents (human mint; server applies allow/break-glass/approve)
   eval-tool         Policy evaluate (HTTP plane or --offline sample)
   wrap              Evaluate + record trail. Never executes.
                     Default observe: no Hold ticket (no second approve). --hold / KYA_HOLD=1 for org Hold.
+  hook              PreToolUse interception for native-hook hosts (claude|grok|kimi|…)
+                    Reads the hook payload from stdin; exit 2 blocks. --strict denies advisory.
   receipt           Activity report HTML/JSON/MD (default: last 3 days, all tools; --open)
   invoke            Authorize on the plane after Allow or APPROVED. Never runs the write here.
   approve           Human APPROVE an approval id (kya.approve scope)
@@ -257,11 +261,13 @@ export async function runCli(
         });
         const force =
           parsed.flags["force"] === true || parsed.flags["force"] === "true";
+        const hooks =
+          parsed.flags["hooks"] === true || parsed.flags["hooks"] === "true";
         const scope =
           parsed.flags["project"] === true || parsed.flags["project"] === "true"
             ? ("project" as const)
             : ("global" as const);
-        const result = await runConnect(config, { host, scope, force }, env);
+        const result = await runConnect(config, { host, scope, force, hooks }, env);
         if (config.json) {
           io.log(JSON.stringify(result, null, 2));
         } else {
@@ -590,6 +596,31 @@ export async function runCli(
 
       case "sandbox": {
         return await runSandboxCommand(parsed);
+      }
+
+      case "hook": {
+        const host = flagString(parsed.flags, "host") ?? "other";
+        const strict = flagBool(parsed.flags, "strict");
+        let stdinText = "";
+        if (!process.stdin.isTTY) {
+          stdinText = await new Promise<string>((res) => {
+            // Buffer chunks, not string concat — a multibyte UTF-8 char can
+            // straddle a chunk boundary.
+            const chunks: Buffer[] = [];
+            process.stdin.on("data", (c: Buffer) => chunks.push(c));
+            // Pipe errors must not hang the hook — resolve with what arrived.
+            process.stdin.on("error", () =>
+              res(Buffer.concat(chunks).toString("utf8")),
+            );
+            process.stdin.on("end", () =>
+              res(Buffer.concat(chunks).toString("utf8")),
+            );
+          });
+        }
+        const r = await runHook({ host, strict, stdinText, env, cwd });
+        if (r.stdout) process.stdout.write(r.stdout);
+        if (r.stderr) process.stderr.write(r.stderr);
+        return r.exitCode;
       }
 
       default:

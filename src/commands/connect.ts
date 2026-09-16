@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 import type { ResolvedConfig } from "../config.js";
 import { UsageError } from "../errors.js";
 import { hostReload, hostRunning, listProcessNames, reloadMessage } from "../host-reload.js";
+import { hookSupported, wireHook } from "./wire-hooks.js";
 
 export type ConnectScope = "global" | "project";
 export type ConnectStatus = "created" | "wired" | "skipped";
@@ -46,7 +47,7 @@ export interface HostSpec {
   readonly recipeOnly?: string;
 }
 
-function cliJsPath(): string {
+export function cliJsPath(): string {
   // connect.ts → ../cli.js in dist; when running from dist/commands/connect.js
   return fileURLToPath(new URL("../cli.js", import.meta.url));
 }
@@ -181,6 +182,9 @@ export interface ConnectResult {
   readonly path: string;
   readonly status: ConnectStatus;
   readonly scope: ConnectScope;
+  /** Set when --hooks wired (or created) the host's PreToolUse hook config. */
+  readonly hooksPath?: string;
+  readonly hooksStatus?: ConnectStatus;
   readonly next: string;
 }
 
@@ -188,6 +192,8 @@ export interface ConnectInput {
   readonly host: string;
   readonly scope?: ConnectScope;
   readonly force?: boolean;
+  /** Also wire the host's PreToolUse hook (claude/grok/kimi only). */
+  readonly hooks?: boolean;
   /** Test hook: running process basenames instead of a live ps scan. */
   readonly procs?: ReadonlySet<string>;
 }
@@ -203,7 +209,7 @@ function serverBlock(hostId: string, spec: HostSpec): Record<string, unknown> {
  * (dotfiles setups) resolves to its real regular file; anything else that
  * exists but is not a regular file is refused.
  */
-function writeTarget(path: string): string {
+export function writeTarget(path: string): string {
   if (!existsSync(path)) return path;
   let real: string;
   try {
@@ -226,7 +232,7 @@ function writeTarget(path: string): string {
  * An existing target's file mode is carried over — a rename would otherwise
  * turn a 0600 config into the umask default.
  */
-function atomicWriteSync(target: string, content: string): void {
+export function atomicWriteSync(target: string, content: string): void {
   const tmp = `${target}.kya-tmp-${process.pid}`;
   try {
     let mode: number | undefined;
@@ -260,7 +266,7 @@ function atomicWriteSync(target: string, content: string): void {
  * the link's directory — so the rename completes the link instead of
  * replacing it with a regular file.
  */
-function createTarget(path: string): string {
+export function createTarget(path: string): string {
   try {
     if (lstatSync(path).isSymbolicLink()) {
       const resolved = resolve(dirname(path), readlinkSync(path));
@@ -316,7 +322,9 @@ export function mergeJsonHostConfig(
 }
 
 const GROK_TABLE_HEADER = "[mcp_servers.shield-kya]";
-const GROK_TABLE_RE = /^\s*\[mcp_servers\.shield-kya\]\s*(?:#.*)?$/m;
+// Horizontal whitespace only ([^\S\n]): \s would match newlines and let the
+// match start on a preceding blank line, mis-slicing the --force replace.
+const GROK_TABLE_RE = /^[^\S\n]*\[mcp_servers\.shield-kya\][^\S\n]*(?:#.*)?$/m;
 const GROK_QUOTED_TABLE_RE =
   /^\s*\[\s*mcp_servers\s*\.\s*["']shield-kya["']\s*\]/m;
 const GROK_INLINE_RE = /^\s*shield-kya\s*=/m;
@@ -372,7 +380,7 @@ function mergeGrokToml(path: string, hostId: string, force: boolean): ConnectSta
   const start = header.index;
   const lineEnd = text.indexOf("\n", start);
   const bodyStart = lineEnd === -1 ? text.length : lineEnd + 1;
-  const nextHeader = text.slice(bodyStart).search(/^\s*\[/m);
+  const nextHeader = text.slice(bodyStart).search(/^[^\S\n]*\[/m);
   const end = nextHeader === -1 ? text.length : bodyStart + nextHeader;
   const replaced = `${text.slice(0, start)}${block}${text.slice(end)}`;
   atomicWriteSync(target, replaced);
@@ -453,6 +461,11 @@ export async function runConnect(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<ConnectResult> {
   const home = env.KYA_HOME?.trim() || homedir();
+  if (input.hooks && !hookSupported(input.host)) {
+    throw new UsageError(
+      `no hook wiring for ${input.host} — supported: claude, grok, kimi`,
+    );
+  }
   const wired = wireHost({
     host: input.host,
     scope: input.scope,
@@ -460,13 +473,34 @@ export async function runConnect(
     home,
     cwd: config.cwd,
   });
+  let hooksPath: string | undefined;
+  let hooksStatus: ConnectStatus | undefined;
+  if (input.hooks) {
+    let r;
+    try {
+      r = wireHook({ host: wired.host, home, force: input.force });
+    } catch (err) {
+      // The MCP write already landed — say so, so the user knows the state.
+      if (err instanceof UsageError) {
+        throw new UsageError(
+          `${err.message} (note: MCP config was already wired at ${wired.path})`,
+        );
+      }
+      throw err;
+    }
+    hooksPath = r.path;
+    hooksStatus = r.status;
+  }
   return {
     ...wired,
-    next: wireNextMessage(
-      wired.host,
-      wired.label,
-      input.procs ?? listProcessNames(),
-    ),
+    hooksPath,
+    hooksStatus,
+    next:
+      wireNextMessage(
+        wired.host,
+        wired.label,
+        input.procs ?? listProcessNames(),
+      ) + (hooksStatus && hooksStatus !== "skipped" ? " Hooks take effect in new sessions." : ""),
   };
 }
 
@@ -477,9 +511,20 @@ export function formatConnectHuman(r: ConnectResult): string {
       : r.status === "wired"
         ? "wired"
         : "already wired (skipped — use --force to overwrite)";
+  const hooksVerb =
+    r.hooksStatus === undefined
+      ? undefined
+      : r.hooksStatus === "created"
+        ? "hooks created"
+        : r.hooksStatus === "wired"
+          ? "hooks wired"
+          : "hooks already wired (skipped — use --force to overwrite)";
   return [
     `KYA connect ${r.host}`,
     `${verb}: ${r.path}`,
+    hooksVerb ? `${hooksVerb}: ${r.hooksPath}` : undefined,
     r.next,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }

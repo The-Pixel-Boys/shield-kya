@@ -19,6 +19,7 @@ export type TrailProduct =
   | "claude"
   | "codex"
   | "grok"
+  | "kimi"
   | "ide"
   | "runtime"
   | "other";
@@ -93,12 +94,32 @@ export function productLabel(p: TrailProduct | undefined): string {
       return "Codex";
     case "grok":
       return "Grok";
+    case "kimi":
+      return "Kimi Code";
     case "ide":
       return "IDE";
     case "runtime":
       return "Runtime";
     default:
       return "Other";
+  }
+}
+
+/** Map a hook --host id to the trail product (explicit beats env sniffing). */
+export function hostToProduct(host: string): TrailProduct {
+  switch (host) {
+    case "claude":
+      return "claude";
+    case "grok":
+      return "grok";
+    case "kimi":
+      return "kimi";
+    case "cursor":
+      return "cursor";
+    case "codex":
+      return "codex";
+    default:
+      return "other";
   }
 }
 
@@ -122,6 +143,7 @@ const TRAIL_PRODUCTS = new Set<string>([
   "claude",
   "codex",
   "grok",
+  "kimi",
   "ide",
   "runtime",
   "other",
