@@ -11,8 +11,10 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { resolveConfig } from "../src/config.js";
+import { UsageError } from "../src/errors.js";
 import {
   connectableHosts,
+  formatConnectHuman,
   knownHosts,
   runConnect,
 } from "../src/commands/connect.js";
@@ -574,6 +576,34 @@ describe("kya connect grok", () => {
     }
   });
 
+  it("--force replace of a table after a blank line keeps exactly one table", async () => {
+    const home = tmp();
+    const cwd = tmp();
+    try {
+      const target = join(home, ".grok", "config.toml");
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(
+        target,
+        'model = "x"\n\n[mcp_servers.shield-kya]\ncommand = "old"\n',
+        "utf8",
+      );
+      const forced = await runConnect(
+        cfg(cwd),
+        { host: "grok", force: true },
+        { KYA_HOME: home },
+      );
+      expect(forced.status).toBe("wired");
+      const text = readFileSync(target, "utf8");
+      expect(text.match(/\[mcp_servers\.shield-kya\]/g)).toHaveLength(1);
+      expect(text).toContain('model = "x"');
+      expect(text).not.toContain('command = "old"');
+      expect(text).toContain("serve-mcp");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
   it("has no project scope", async () => {
     const home = tmp();
     const cwd = tmp();
@@ -581,6 +611,96 @@ describe("kya connect grok", () => {
       await expect(
         runConnect(cfg(cwd), { host: "grok", scope: "project" }, { KYA_HOME: home }),
       ).rejects.toThrow(/no project-scope config/);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("kya connect --hooks", () => {
+  it("wires both the MCP config and the PreToolUse hook for claude", async () => {
+    const home = tmp();
+    const cwd = tmp();
+    try {
+      const r = await runConnect(
+        cfg(cwd),
+        { host: "claude", hooks: true },
+        { KYA_HOME: home },
+      );
+      expect(r.status).toBe("created");
+      expect(r.hooksPath).toBe(join(home, ".claude", "settings.json"));
+      expect(r.hooksStatus).toBe("created");
+
+      // MCP wiring landed.
+      const mcp = JSON.parse(
+        readFileSync(join(home, ".claude.json"), "utf8"),
+      ) as { mcpServers: Record<string, unknown> };
+      expect(mcp.mcpServers["shield-kya"]).toBeDefined();
+
+      // Hook wiring landed.
+      const settings = JSON.parse(readFileSync(r.hooksPath!, "utf8")) as {
+        hooks: { PreToolUse: Array<{ hooks: Array<{ command: string }> }> };
+      };
+      expect(settings.hooks.PreToolUse[0]!.hooks[0]!.command).toContain(
+        "hook --host claude",
+      );
+
+      // Human output reports both writes.
+      const human = formatConnectHuman(r);
+      expect(human).toContain("hooks created:");
+      expect(r.next).toContain("Hooks take effect in new sessions.");
+
+      // Idempotent second run — no hooks note when nothing changed.
+      const second = await runConnect(
+        cfg(cwd),
+        { host: "claude", hooks: true },
+        { KYA_HOME: home },
+      );
+      expect(second.status).toBe("skipped");
+      expect(second.hooksStatus).toBe("skipped");
+      expect(second.next).not.toContain("Hooks take effect in new sessions.");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("reports the already-wired MCP config when hook wiring fails", async () => {
+    const home = tmp();
+    const cwd = tmp();
+    try {
+      const settings = join(home, ".claude", "settings.json");
+      mkdirSync(dirname(settings), { recursive: true });
+      writeFileSync(settings, "{ not json", "utf8");
+      const err = await runConnect(
+        cfg(cwd),
+        { host: "claude", hooks: true },
+        { KYA_HOME: home },
+      ).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(UsageError);
+      const message = String((err as UsageError).message);
+      expect(message).toContain("not valid JSON");
+      expect(message).toContain(
+        `MCP config was already wired at ${join(home, ".claude.json")}`,
+      );
+      // The MCP write really landed; the corrupt settings file is untouched.
+      expect(existsSync(join(home, ".claude.json"))).toBe(true);
+      expect(readFileSync(settings, "utf8")).toBe("{ not json");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses --hooks for a host without hook wiring, before touching its config", async () => {
+    const home = tmp();
+    const cwd = tmp();
+    try {
+      await expect(
+        runConnect(cfg(cwd), { host: "qwen", hooks: true }, { KYA_HOME: home }),
+      ).rejects.toThrow(/no hook wiring for qwen/);
+      expect(existsSync(join(home, ".qwen", "settings.json"))).toBe(false);
     } finally {
       rmSync(home, { recursive: true, force: true });
       rmSync(cwd, { recursive: true, force: true });
