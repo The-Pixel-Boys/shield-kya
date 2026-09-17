@@ -7,6 +7,7 @@ import { mkdirSync, watch, type FSWatcher } from "node:fs";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { dirname } from "node:path";
 import type { ResolvedConfig } from "../config.js";
+import { CLI_VERSION } from "../version.js";
 import { loadReceiptModel, renderReceiptHtml } from "./render-receipt.js";
 import { trailPath } from "../trail.js";
 
@@ -85,10 +86,12 @@ export function startLiveReceiptServer(
         return unauthorized(res);
       }
       if (req.method === "GET" && url.pathname === "/healthz") {
-        // Cheap liveness handshake for daemon reuse — never renders, so a
-        // render-time failure (e.g. assertNoSecrets) cannot wedge it.
-        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end("ok\n");
+        // Cheap liveness + version handshake for daemon reuse — never renders,
+        // so a render-time failure (e.g. assertNoSecrets) cannot wedge it. The
+        // version lets a newer CLI refuse to reuse a stale daemon left running
+        // by an older install.
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(`${JSON.stringify({ ok: true, version: CLI_VERSION })}\n`);
         return;
       }
       if (req.method === "GET" && url.pathname === "/events") {
