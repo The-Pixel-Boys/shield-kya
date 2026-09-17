@@ -31,6 +31,7 @@ export {
 } from "./client.js";
 export { computeArgsHash, canonicalJson } from "./hash.js";
 export { SAMPLE_TOOLS, findSampleTool, type SampleToolDescriptor } from "./sample-tools.js";
+export { findHostToolTier, type HostToolTier } from "./host-tools.js";
 export { KyaError, AuthRequiredError, HttpError, UsageError } from "./errors.js";
 export { runInit, initFromArgs, type InitResult } from "./commands/init.js";
 export {
