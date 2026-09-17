@@ -223,6 +223,25 @@ describe("receipt filter engine (inline script, shimmed DOM)", () => {
     expect(visible(partial)).toBe(1);
   });
 
+  it("filters feed rows by tool via the hash and dashboard tool rows", () => {
+    // Hash path: #f=tool:A keeps only the row with data-tool="A".
+    const fromHash = mount(HTML, "#f=tool:A");
+    expect(visible(fromHash)).toBe(1);
+    expect(row(fromHash, "data-tool", "A").classList.contains("filtered-out")).toBe(false);
+    expect(row(fromHash, "data-tool", "B").classList.contains("filtered-out")).toBe(true);
+    expect(chip(fromHash, "tool", "A").getAttribute("aria-pressed")).toBe("true");
+
+    // Click path: dashboard's top-tools row toggles like any other chip.
+    const m = mount(HTML);
+    chip(m, "tool", "A").click();
+    expect(visible(m)).toBe(1);
+    expect(m.location.hash).toBe("#f=tool:A");
+    chip(m, "tool", "B").click(); // OR within the tool group
+    expect(visible(m)).toBe(2);
+    m.clearBtn.click();
+    expect(visible(m)).toBe(5);
+  });
+
   it("clear-filters resets rows, chips, and the hash", () => {
     const m = mount(HTML);
     chip(m, "product", "kimi").click();
