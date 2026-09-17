@@ -3,7 +3,7 @@
  */
 import { assertNoSecrets, clip, stripEscapes } from "../dash/render.js";
 import { clipMultiline, DIFF_MAX_TOTAL_CHARS } from "../diff-preview.js";
-import { productLabel, readTrail, readTrailSince, type TrailEvent } from "../trail.js";
+import { productLabel, readTrail, readTrailSince, type TrailEvent, type TrailProduct } from "../trail.js";
 import type { KyaFileConfig } from "../config.js";
 import {
   loadIdentity,
@@ -162,6 +162,8 @@ export interface SessionAggregate {
 export interface CountRow {
   readonly label: string;
   readonly count: number;
+  /** Raw filter value when it differs from the display label (products). */
+  readonly value?: string;
 }
 
 export interface EventAggregates {
@@ -171,7 +173,7 @@ export interface EventAggregates {
   readonly sessions: readonly SessionAggregate[];
   /** Top 8 reason codes by count. */
   readonly reasons: readonly CountRow[];
-  /** Counts by productLabel, sorted desc. */
+  /** Counts by productLabel, sorted desc; value carries the raw product id. */
   readonly products: readonly CountRow[];
   /** Top 8 projects by count, sorted desc then label asc. */
   readonly projects: readonly CountRow[];
@@ -182,7 +184,7 @@ export function aggregateEvents(events: readonly TrailEvent[]): EventAggregates 
   const modes = { observe: 0, hold: 0, offline: 0 };
   const planes = { ide: 0, runtime: 0 };
   const reasonCounts = new Map<string, number>();
-  const productCounts = new Map<string, number>();
+  const productCounts = new Map<TrailProduct, number>();
   const projectCounts = new Map<string, number>();
   const bySession = new Map<
     string,
@@ -196,8 +198,8 @@ export function aggregateEvents(events: readonly TrailEvent[]): EventAggregates 
     if (e.host === "ide") planes.ide++;
     else if (e.host === "runtime") planes.runtime++;
     reasonCounts.set(e.reasonCode, (reasonCounts.get(e.reasonCode) ?? 0) + 1);
-    const pl = productLabel(e.product);
-    productCounts.set(pl, (productCounts.get(pl) ?? 0) + 1);
+    const pv = e.product ?? "other";
+    productCounts.set(pv, (productCounts.get(pv) ?? 0) + 1);
     const project = e.project?.trim();
     if (project) projectCounts.set(project, (projectCounts.get(project) ?? 0) + 1);
 
@@ -236,7 +238,7 @@ export function aggregateEvents(events: readonly TrailEvent[]): EventAggregates 
     .slice(0, 8);
 
   const products: CountRow[] = [...productCounts.entries()]
-    .map(([label, count]) => ({ label, count }))
+    .map(([value, count]) => ({ label: productLabel(value), count, value }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 
   const projects: CountRow[] = [...projectCounts.entries()]
@@ -366,7 +368,17 @@ function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean
     const preview = e.diffPreview?.trim()
       ? `<details class="diff"><summary>Change preview</summary><pre>${esc(e.diffPreview.trim())}</pre></details>`
       : "";
-    parts.push(`<article class="ev ${t}${never ? " never" : ""}">
+    // Filter facets for the chip bar: raw values (project is attacker-controlled
+    // but esc() is attribute-safe); data-project is omitted when there is none.
+    const project = e.project?.trim();
+    const dataAttrs =
+      `data-verdict="${esc(e.verdict.toUpperCase())}"` +
+      (never ? ` data-never="1"` : "") +
+      ` data-mode="${esc(e.mode)}"` +
+      ` data-plane="${esc(e.host?.trim() || "unknown")}"` +
+      ` data-product="${esc(e.product ?? "other")}"` +
+      (project ? ` data-project="${esc(project)}"` : "");
+    parts.push(`<article class="ev ${t}${never ? " never" : ""}" ${dataAttrs}>
   <div class="rail" aria-hidden="true"><span class="tick"></span></div>
   <div class="main">
     <div class="top">
@@ -407,22 +419,30 @@ function statChips(agg: EventAggregates): {
   products: string;
   projects: string;
 } {
-  const chip = (label: string, n: number, cls = ""): string =>
-    n > 0 ? `<span class="stat${cls ? ` ${cls}` : ""}">${label}<b>${n}</b></span>` : "";
-  const countRowChips = (rows: readonly CountRow[], ariaLabel: string): string =>
+  // Chips are filter toggles: native buttons keep identical styling via .stat.
+  const chip = (label: string, n: number, group: string, value: string, cls = ""): string =>
+    n > 0
+      ? `<button type="button" class="stat${cls ? ` ${cls}` : ""}" data-fgroup="${group}" data-fvalue="${esc(value)}" aria-pressed="false" title="Filter: ${esc(label)}">${esc(label)}<b>${n}</b></button>`
+      : "";
+  const countRowChips = (rows: readonly CountRow[], ariaLabel: string, group: string): string =>
     rows.length >= 2
       ? `<div class="stats" aria-label="${ariaLabel}">${rows
-          .map((r) => `<span class="stat">${esc(clip(r.label, 40))}<b>${r.count}</b></span>`)
+          .map(
+            (r) =>
+              `<button type="button" class="stat" data-fgroup="${group}" data-fvalue="${esc(r.value ?? r.label)}" aria-pressed="false" title="Filter: ${esc(clip(r.label, 40))}">${esc(clip(r.label, 40))}<b>${r.count}</b></button>`,
+          )
           .join("")}</div>`
       : "";
   return {
     modes:
-      chip("Mode: observe", agg.modes.observe) +
-      chip("Mode: hold", agg.modes.hold, "warn") +
-      chip("Mode: offline", agg.modes.offline),
-    planes: chip("IDE", agg.planes.ide) + chip("Runtime", agg.planes.runtime),
-    products: countRowChips(agg.products, "Products"),
-    projects: countRowChips(agg.projects, "Projects"),
+      chip("Mode: observe", agg.modes.observe, "mode", "observe") +
+      chip("Mode: hold", agg.modes.hold, "mode", "hold", "warn") +
+      chip("Mode: offline", agg.modes.offline, "mode", "offline"),
+    planes:
+      chip("IDE", agg.planes.ide, "plane", "ide") +
+      chip("Runtime", agg.planes.runtime, "plane", "runtime"),
+    products: countRowChips(agg.products, "Products", "product"),
+    projects: countRowChips(agg.projects, "Projects", "project"),
   };
 }
 
@@ -621,6 +641,89 @@ export function renderReceiptHtml(model: ReceiptModel): string {
 </script>`
     : "";
 
+  // Client-side chip filters: static and live renders both get this. It runs
+  // standalone (no live token needed) and never touches the EventSource block.
+  // State maps are null-prototype: attacker-controlled values (project names)
+  // must never resolve via Object.prototype. The id lets tests extract just
+  // this script. KNOWN is space-delimited so `indexOf(' '+g+' ')` doubles as a
+  // prototype-safe whitelist ('constructor' etc. never match).
+  const filterScript = `<script id="kya-filters">
+(function(){
+  var feed = document.getElementById('feed');
+  if (!feed) return;
+  var KNOWN = ' verdict never mode plane product project ';
+  var state = Object.create(null);
+  var clearBtn = document.getElementById('clear-filters');
+  var chips = document.querySelectorAll('[data-fgroup]');
+  function parse(){
+    state = Object.create(null);
+    var h = location.hash;
+    if (h.indexOf('#f=') !== 0) return;
+    h.slice(3).split(',').forEach(function(seg){
+      var i = seg.indexOf(':');
+      if (i < 1) return;
+      var g = seg.slice(0, i);
+      if (!/^[a-z]+$/.test(g) || KNOWN.indexOf(' ' + g + ' ') < 0) return;
+      var v;
+      try { v = decodeURIComponent(seg.slice(i + 1)); } catch (e) { return; }
+      if (!v) return;
+      (state[g] || (state[g] = Object.create(null)))[v] = true;
+    });
+  }
+  function save(){
+    var parts = [];
+    Object.keys(state).forEach(function(g){
+      Object.keys(state[g]).forEach(function(v){ parts.push(g + ':' + encodeURIComponent(v)); });
+    });
+    var h = parts.length ? '#f=' + parts.join(',') : '';
+    history.replaceState(null, '', location.pathname + location.search + h);
+  }
+  function active(){
+    return Object.keys(state).some(function(g){ return Object.keys(state[g]).length > 0; });
+  }
+  function apply(){
+    var on = active();
+    feed.querySelectorAll('.ev').forEach(function(row){
+      var show = true;
+      if (on) {
+        for (var g in state) {
+          var val = row.getAttribute('data-' + g);
+          if (val === null || !state[g][val]) { show = false; break; }
+        }
+      }
+      row.classList.toggle('filtered-out', !show);
+    });
+    var day = null, dayHasRows = false;
+    function flush(){ if (day) day.classList.toggle('filtered-out', on && !dayHasRows); }
+    for (var i = 0; i < feed.children.length; i++) {
+      var el = feed.children[i];
+      if (el.classList.contains('day')) { flush(); day = el; dayHasRows = false; }
+      else if (el.classList.contains('ev') && !el.classList.contains('filtered-out')) dayHasRows = true;
+    }
+    flush();
+    chips.forEach(function(chip){
+      var pressed = !!(state[chip.dataset.fgroup] && state[chip.dataset.fgroup][chip.dataset.fvalue]);
+      chip.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    });
+    if (clearBtn) clearBtn.hidden = !on;
+  }
+  chips.forEach(function(chip){
+    chip.addEventListener('click', function(){
+      var g = chip.dataset.fgroup, v = chip.dataset.fvalue;
+      if (state[g] && state[g][v]) {
+        delete state[g][v];
+        if (!Object.keys(state[g]).length) delete state[g];
+      } else {
+        (state[g] || (state[g] = Object.create(null)))[v] = true;
+      }
+      save(); apply();
+    });
+  });
+  if (clearBtn) clearBtn.addEventListener('click', function(){ state = Object.create(null); save(); apply(); });
+  parse(); apply();
+})();
+</script>`;
+
   const livePill = model.live ? `<span class="live" title="Watching trail.jsonl">Live</span>` : "";
 
   const html = `<!DOCTYPE html>
@@ -718,6 +821,19 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   .stat.bad b { color: var(--bad); }
   .stat.warn b { color: var(--warn); }
   .stat.ok b { color: var(--ok); }
+  button.stat {
+    font-family: inherit; cursor: pointer;
+    appearance: none; -webkit-appearance: none;
+  }
+  button.stat:hover { border-color: var(--mute); }
+  .stat[aria-pressed="true"] {
+    color: var(--fg);
+    border-color: color-mix(in srgb, var(--ok) 55%, var(--line));
+    background: color-mix(in srgb, var(--ok) 12%, var(--card));
+  }
+  .stat[hidden] { display: none; }
+  .clear-filters { color: var(--mute); font-size: 0.72rem; }
+  .filtered-out { display: none; }
   .identity {
     margin-top: 0.45rem; color: var(--mute); font-size: 0.78rem;
     word-break: break-word;
@@ -929,11 +1045,12 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     </div>
     ${identityLine(model.identity)}
     <div class="stats" aria-label="Counts">
-      <span class="stat ok">Allow<b>${c.allow}</b></span>
-      <span class="stat bad">Deny<b>${c.deny}</b></span>
-      <span class="stat warn">Review<b>${c.require}</b></span>
-      <span class="stat">Never<b>${c.never}</b></span>
+      <button type="button" class="stat ok" data-fgroup="verdict" data-fvalue="ALLOW" aria-pressed="false" title="Filter: Allow">Allow<b>${c.allow}</b></button>
+      <button type="button" class="stat bad" data-fgroup="verdict" data-fvalue="DENY" aria-pressed="false" title="Filter: Deny">Deny<b>${c.deny}</b></button>
+      <button type="button" class="stat warn" data-fgroup="verdict" data-fvalue="REQUIRE_APPROVE" aria-pressed="false" title="Filter: Review">Review<b>${c.require}</b></button>
+      <button type="button" class="stat" data-fgroup="never" data-fvalue="1" aria-pressed="false" title="Filter: Never">Never<b>${c.never}</b></button>
       ${chips.modes}${chips.planes}
+      <button type="button" class="stat clear-filters" id="clear-filters" hidden>Clear filters ×</button>
     </div>
     ${chips.products}
     ${chips.projects}
@@ -950,6 +1067,7 @@ ${renderFeed(events, nowMs, model.live)}
   ${showbackPanel(model.showback)}
   ${toolsHtml}
 </main>
+${filterScript}
 ${liveScript}
 </body>
 </html>`;
