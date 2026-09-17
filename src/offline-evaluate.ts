@@ -1,11 +1,13 @@
 /**
  * Offline sample policy evaluate for light-install demos.
  * Not a second production PEP — production injects HTTP evaluate against Shield.
- * Same sample tools as docs/dev/kya-custom-tools-sample.md (R8: packs off).
+ * Same sample tools as docs/dev/kya-custom-tools-sample.md (R8: packs off),
+ * plus the well-known host tool vocabulary in host-tools.ts.
  */
 
 import type { Host } from "./config.js";
 import type { PolicyEvaluateRequest, PolicyEvaluateResponse } from "./client.js";
+import { findHostToolTier } from "./host-tools.js";
 import { findSampleTool, type ActionClass, type PolicyVerdict } from "./sample-tools.js";
 
 export type SessionRisk = "LOW" | "MEDIUM" | "HIGH";
@@ -28,6 +30,21 @@ function baseTier(
       return { verdict: "REQUIRE_APPROVE", reasonCode: "HIGH_STAKES_WRITE" };
     }
     return { verdict: "ALLOW", reasonCode: "ALLOW" };
+  }
+
+  // Advisory vocabulary only applies when the caller declared no risk signals;
+  // explicit irreversible/actionClass keep their stricter paths below.
+  if (!irreversible && (actionClass ?? "").trim() === "") {
+    const hostTier = findHostToolTier(toolId);
+    if (hostTier === "READ") {
+      return { verdict: "ALLOW", reasonCode: "LOW_RISK_READ" };
+    }
+    if (hostTier === "WRITE") {
+      return { verdict: "REQUIRE_APPROVE", reasonCode: "HIGH_STAKES_WRITE" };
+    }
+    if (hostTier === "SHELL") {
+      return { verdict: "REQUIRE_APPROVE", reasonCode: "SHELL_EXEC" };
+    }
   }
 
   const ac = (actionClass ?? "") as ActionClass | string;

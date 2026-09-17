@@ -8,7 +8,7 @@
 [![X](https://img.shields.io/badge/X-%40coscosmico-000000?logo=x&logoColor=white)](https://x.com/coscosmico)
 
 
-Gate agent tool calls (Allow / Deny / Hold) before they write or deploy. Local activity receipt included. Free forever under MIT.
+Gate agent tool calls (Allow / Review / Deny) before they write or deploy. Local activity receipt included. Free forever under MIT.
 
 ```bash
 npm i -g @shield-agent/kya@latest && kya start
@@ -19,7 +19,7 @@ Requires **Node.js 24+**. Restart Cursor / Claude Code / Codex once so MCP loads
 
 CLI and local MCP gate for Shield’s Know Your Agent path.
 
-If an agent can change a real system, it has to ask Shield first. You register the agent, wrap the tool, and get Allow, Hold, or Deny. Hold waits for a person. This package does not scan your network. Agents that never call evaluate stay invisible on purpose.
+If an agent can change a real system, it has to ask Shield first. You register the agent, wrap the tool, and get Allow, Review, or Deny. Review waits for a person. This package does not scan your network. Agents that never call evaluate stay invisible on purpose.
 
 Walkthrough: [how you use it](https://shield-agent.com/how-kya-works#using).
 
@@ -45,7 +45,7 @@ Run it in your project directory. (From a clone of this repo, `./scripts/install
 
 That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/mcp.json` → `kya serve-mcp --stdio`), also **wires user-level configs for every installed host it detects** (`~/.claude.json`, `~/.kimi-code/`, `~/.grok/`, `~/.cursor/`, …), and **opens** the live activity report. The report runs in the background — you get your terminal back; `kya stop` stops it, `kya receipt --open` reopens it. Cursor, Kiro, Qwen, Amp, Droid, Cline, and Grok pick the server up live with no restart (Kimi: just a new session); Claude Code, Codex, OpenCode, Gemini, Copilot CLI, and Kilo CLI load it on next launch — `claude --resume` keeps your conversation.
 
-![KYA activity receipt — agent tool trail with Allow / Deny / Hold](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/activity-receipt.png)
+![KYA activity receipt — agent tool trail with Allow / Deny / Review](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/activity-receipt.png)
 
 <!-- Local path kept in package for offline viewers: assets/activity-receipt.png -->
 
@@ -149,7 +149,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.4.1", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.4.2", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -176,7 +176,7 @@ npx @shield-agent/kya reject --id <approval-id>
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.4.1 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.4.2 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -187,7 +187,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.4.1 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.4.2 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 

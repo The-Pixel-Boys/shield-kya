@@ -142,7 +142,7 @@ function tone(verdict: string): "ok" | "bad" | "warn" | "mute" {
 
 function verdictWord(verdict: string): string {
   const v = verdict.toUpperCase();
-  if (v === "REQUIRE_APPROVE") return "HOLD";
+  if (v === "REQUIRE_APPROVE") return "REVIEW";
   return v;
 }
 
@@ -931,7 +931,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     <div class="stats" aria-label="Counts">
       <span class="stat ok">Allow<b>${c.allow}</b></span>
       <span class="stat bad">Deny<b>${c.deny}</b></span>
-      <span class="stat warn">Hold<b>${c.require}</b></span>
+      <span class="stat warn">Review<b>${c.require}</b></span>
       <span class="stat">Never<b>${c.never}</b></span>
       ${chips.modes}${chips.planes}
     </div>
@@ -968,7 +968,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     "",
     mdText(model.rangeLabel),
     "",
-    `Allow ${c.allow} | Deny ${c.deny} | Hold ${c.require} | Never ${c.never}`,
+    `Allow ${c.allow} | Deny ${c.deny} | Review ${c.require} | Never ${c.never}`,
     "",
   ];
 

@@ -383,6 +383,65 @@ describe("renderReceiptHtml sections", () => {
     expect(html).toContain(SHOWBACK_DISCLAIMER);
   });
 
+  it("renders REQUIRE_APPROVE as REVIEW, not HOLD (HTML)", () => {
+    const html = renderReceiptHtml(
+      buildWindowReceiptModel(
+        [
+          ev({
+            ts: iso(0),
+            sessionId: "s",
+            verdict: "REQUIRE_APPROVE",
+            reasonCode: "SHELL_EXEC",
+          }),
+        ],
+        3,
+      ),
+    );
+    // Feed row + stat chip.
+    expect(html).toContain('<span class="verdict">REVIEW</span>');
+    expect(html).toContain("Review<b>1</b>");
+    expect(html).not.toContain(">HOLD<");
+    expect(html).not.toContain("Hold<b>");
+  });
+
+  it("keeps the hold-MODE badge distinct from the REVIEW verdict label", () => {
+    const html = renderReceiptHtml(
+      buildWindowReceiptModel(
+        [
+          ev({
+            ts: iso(0),
+            sessionId: "s",
+            verdict: "REQUIRE_APPROVE",
+            mode: "hold",
+          }),
+        ],
+        3,
+      ),
+    );
+    expect(html).toContain('<span class="verdict">REVIEW</span>');
+    expect(html).toContain('class="modeb" title="hold mode">H<');
+  });
+
+  it("renders REQUIRE_APPROVE as Review in the Markdown counts line and feed", () => {
+    const md = renderReceiptMarkdown(
+      buildWindowReceiptModel(
+        [
+          ev({
+            ts: iso(0),
+            sessionId: "s",
+            verdict: "REQUIRE_APPROVE",
+            reasonCode: "SHELL_EXEC",
+          }),
+        ],
+        3,
+      ),
+    );
+    expect(md).toContain("Allow 0 | Deny 0 | Review 1 | Never 0");
+    expect(md).toContain("**REVIEW**");
+    expect(md).not.toContain("| Hold ");
+    expect(md).not.toContain("**HOLD**");
+  });
+
   it("renders a per-event mode badge with a tooltip", () => {
     const html = renderReceiptHtml(richModel());
     expect(html).toContain('class="modeb" title="observe mode">O<');
