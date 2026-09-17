@@ -748,6 +748,8 @@ describe("chip filters", () => {
       expect(html).toContain("replaceState");
       expect(html).toContain("filtered-out");
       expect(html).toContain("clear-filters");
+      // The hide rule must beat .ev's display:grid in the cascade.
+      expect(html).toContain(".filtered-out { display: none !important; }");
     }
     expect(staticHtml).not.toContain("EventSource(");
     // The live block is byte-for-byte the pre-existing one.
