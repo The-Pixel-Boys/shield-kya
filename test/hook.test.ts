@@ -22,7 +22,7 @@ describe("kya hook", () => {
     expect(r.stdout).toBe("");
     const trail = readTrail(cwd(), e);
     expect(trail).toHaveLength(1);
-    expect(trail[0]).toMatchObject({ toolId: "SomeUnknownTool", verdict: "REQUIRE_APPROVE", sessionId: "sess-1", product: "claude", mode: "offline" });
+    expect(trail[0]).toMatchObject({ toolId: "SomeUnknownTool", verdict: "REQUIRE_APPROVE", reasonCode: "UNKNOWN_TOOL", sessionId: "sess-1", product: "claude", mode: "offline" });
   });
 
   it("denies a never-list tool: exit 2, permissionDecision JSON on stdout, reason on stderr", async () => {
@@ -79,6 +79,6 @@ describe("kya hook", () => {
     expect(r.error).toBeUndefined();
     expect(r.status).toBe(0);
     expect(r.stdout).toBe("");
-    expect(readTrail(c, e)[0]).toMatchObject({ toolId: "Bash", verdict: "REQUIRE_APPROVE", product: "claude" });
+    expect(readTrail(c, e)[0]).toMatchObject({ toolId: "Bash", verdict: "REQUIRE_APPROVE", reasonCode: "SHELL_EXEC", product: "claude" });
   });
 });
