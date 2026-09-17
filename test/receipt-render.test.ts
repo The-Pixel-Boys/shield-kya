@@ -41,7 +41,7 @@ function ev(partial: Partial<TrailEvent> & Pick<TrailEvent, "ts" | "sessionId">)
   };
 }
 
-const NOW = Date.parse("2026-09-14T12:00:00.000Z");
+const NOW = Date.now();
 const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString();
 
 describe("aggregateEvents", () => {
@@ -66,8 +66,8 @@ describe("aggregateEvents", () => {
       { label: "NEVER_EVENT", count: 1 },
     ]);
     expect(agg.products).toEqual([
-      { label: "Cursor", count: 2 },
-      { label: "Claude Code", count: 1 },
+      { label: "Cursor", count: 2, value: "cursor" },
+      { label: "Claude Code", count: 1, value: "claude" },
     ]);
   });
 
@@ -617,6 +617,11 @@ describe("Projects rollup", () => {
     const html = renderReceiptHtml(buildReceiptModel("s", events, {}));
     expect(html).not.toContain(xss);
     expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
+    // Escaped in attribute contexts too (chip value + feed row), never raw.
+    expect(html).toContain('data-fvalue="&lt;img src=x onerror=alert(1)&gt;"');
+    expect(html).toContain('data-project="&lt;img src=x onerror=alert(1)&gt;"');
+    expect(html).not.toContain(`data-fvalue="${xss}"`);
+    expect(html).not.toContain(`data-project="${xss}"`);
   });
 
   it("pins the localeCompare tie-break: equal counts sort label-ascending", () => {
@@ -636,5 +641,134 @@ describe("Projects rollup", () => {
       events.push(ev({ ts: iso(i), sessionId: "s", project: `p${i}` }));
     }
     expect(aggregateEvents(events).projects).toHaveLength(8);
+  });
+});
+
+describe("chip filters", () => {
+  it("stamps filter data attributes on feed rows", () => {
+    const html = renderReceiptHtml(
+      buildReceiptModel(
+        "s",
+        [
+          ev({
+            ts: iso(0),
+            sessionId: "s",
+            toolId: "A",
+            verdict: "DENY",
+            reasonCode: "NEVER_EVENT",
+            neverEvent: true,
+            mode: "hold",
+            host: "runtime",
+            product: "kimi",
+            project: "data-pipeline",
+          }),
+          ev({
+            ts: iso(1),
+            sessionId: "s",
+            toolId: "B",
+            verdict: "REQUIRE_APPROVE",
+            reasonCode: "SHELL_EXEC",
+            mode: "offline",
+          }),
+        ],
+        {},
+      ),
+    );
+    // Full-fidelity row: raw verdict value, never flag, mode, plane, product, project.
+    expect(html).toContain('data-verdict="DENY"');
+    expect(html).toContain('data-never="1"');
+    expect(html).toContain('data-mode="hold"');
+    expect(html).toContain('data-plane="runtime"');
+    expect(html).toContain('data-product="kimi"');
+    expect(html).toContain('data-project="data-pipeline"');
+    // Review verdict keeps the raw REQUIRE_APPROVE value; fallbacks for missing fields.
+    expect(html).toContain('data-verdict="REQUIRE_APPROVE"');
+    expect(html).toContain('data-product="other"');
+    expect(html).toContain('data-plane="unknown"');
+    // never flag and project attribute appear only when set.
+    expect(html.match(/data-never=/g)).toHaveLength(1);
+    expect(html.match(/data-project=/g)).toHaveLength(1);
+  });
+
+  it("renders chips as toggle buttons with filter group/value", () => {
+    const html = renderReceiptHtml(
+      buildReceiptModel(
+        "s",
+        [
+          ev({ ts: iso(0), sessionId: "s", product: "kimi", host: "ide", mode: "observe", project: "dev" }),
+          ev({ ts: iso(1), sessionId: "s", product: "claude", host: "runtime", mode: "hold", project: "data-pipeline" }),
+        ],
+        {},
+      ),
+    );
+    // Verdict chips keep labels, gain button semantics.
+    expect(html).toContain(
+      '<button type="button" class="stat ok" data-fgroup="verdict" data-fvalue="ALLOW" aria-pressed="false" title="Filter: Allow">Allow<b>',
+    );
+    expect(html).toContain('data-fgroup="verdict" data-fvalue="DENY"');
+    expect(html).toContain('data-fgroup="verdict" data-fvalue="REQUIRE_APPROVE"');
+    expect(html).toContain('data-fgroup="never" data-fvalue="1"');
+    expect(html).toContain("Deny<b>");
+    expect(html).toContain("Review<b>");
+    expect(html).toContain("Never<b>");
+    // Mode and plane chips.
+    expect(html).toContain('data-fgroup="mode" data-fvalue="observe"');
+    expect(html).toContain('data-fgroup="mode" data-fvalue="hold"');
+    expect(html).toContain('data-fgroup="plane" data-fvalue="ide"');
+    expect(html).toContain('data-fgroup="plane" data-fvalue="runtime"');
+    expect(html).toContain("Mode: observe");
+    expect(html).toContain(">IDE<");
+    // Product chips carry the raw product id, not the display label.
+    expect(html).toContain(
+      'data-fgroup="product" data-fvalue="kimi" aria-pressed="false" title="Filter: Kimi Code">Kimi Code<b>',
+    );
+    expect(html).toContain('data-fgroup="product" data-fvalue="claude"');
+    expect(html).toContain(">Claude Code<b>");
+    // Project chips carry the raw project string.
+    expect(html).toContain('data-fgroup="project" data-fvalue="dev"');
+    expect(html).toContain('data-fgroup="project" data-fvalue="data-pipeline"');
+    // Every filter chip starts unpressed; a hidden clear control is present.
+    const buttons = html.match(/<button[^>]*>/g) ?? [];
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const b of buttons.filter((b) => b.includes("data-fgroup"))) {
+      expect(b).toContain('aria-pressed="false"');
+    }
+    expect(html).toContain('id="clear-filters"');
+    expect(html).toContain("Clear filters");
+  });
+
+  it("ships the filter script in static and live renders without touching EventSource", () => {
+    const events = [ev({ ts: iso(0), sessionId: "s" })];
+    const staticHtml = renderReceiptHtml(buildReceiptModel("s", events, {}));
+    const liveHtml = renderReceiptHtml(
+      buildReceiptModel("s", events, { live: true, liveToken: "tok-abc123" }),
+    );
+    for (const html of [staticHtml, liveHtml]) {
+      // Hash persistence + hide class + clear control wiring.
+      expect(html).toContain("replaceState");
+      expect(html).toContain("filtered-out");
+      expect(html).toContain("clear-filters");
+    }
+    expect(staticHtml).not.toContain("EventSource(");
+    // The live block is byte-for-byte the pre-existing one.
+    expect(liveHtml).toContain("new EventSource('/events?t=tok-abc123')");
+    expect(liveHtml).toContain("es.onmessage = function(){ location.reload(); };");
+  });
+
+  it("escapes quotes in project names used as attribute values", () => {
+    const html = renderReceiptHtml(
+      buildReceiptModel(
+        "s",
+        [
+          ev({ ts: iso(0), sessionId: "s", project: 'we"ird', toolId: "A" }),
+          ev({ ts: iso(1), sessionId: "s", project: "plain", toolId: "B" }),
+        ],
+        {},
+      ),
+    );
+    expect(html).toContain('data-project="we&quot;ird"');
+    expect(html).toContain('data-fvalue="we&quot;ird"');
+    expect(html).not.toContain('data-project="we"ird"');
+    expect(html).not.toContain('data-fvalue="we"ird"');
   });
 });
