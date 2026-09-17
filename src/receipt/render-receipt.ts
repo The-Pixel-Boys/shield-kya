@@ -833,7 +833,8 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   }
   .stat[hidden] { display: none; }
   .clear-filters { color: var(--mute); font-size: 0.72rem; }
-  .filtered-out { display: none; }
+  /* utility: must beat .ev's display:grid (same specificity, later rule would win) */
+  .filtered-out { display: none !important; }
   .identity {
     margin-top: 0.45rem; color: var(--mute); font-size: 0.78rem;
     word-break: break-word;
