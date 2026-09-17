@@ -19,6 +19,7 @@ import {
   SHOWBACK_DISCLAIMER,
   type ShowbackReport,
 } from "../showback/cost-per-task.js";
+import { computeDashboard, type Dashboard, type DashboardRow, type ToolWorst } from "./dashboard.js";
 
 export interface ReceiptModel {
   readonly title: string;
@@ -368,8 +369,10 @@ function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean
     const preview = e.diffPreview?.trim()
       ? `<details class="diff"><summary>Change preview</summary><pre>${esc(e.diffPreview.trim())}</pre></details>`
       : "";
-    // Filter facets for the chip bar: raw values (project is attacker-controlled
-    // but esc() is attribute-safe); data-project is omitted when there is none.
+    // Filter facets for the chip bar and dashboard: raw values (project is
+    // attacker-controlled but esc() is attribute-safe); data-project is
+    // omitted when there is none. data-tool is clipped to 60 chars and must
+    // match the tool filter values stamped on dashboard rows.
     const project = e.project?.trim();
     const dataAttrs =
       `data-verdict="${esc(e.verdict.toUpperCase())}"` +
@@ -377,6 +380,7 @@ function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean
       ` data-mode="${esc(e.mode)}"` +
       ` data-plane="${esc(e.host?.trim() || "unknown")}"` +
       ` data-product="${esc(e.product ?? "other")}"` +
+      ` data-tool="${esc(clip(e.toolId, 60))}"` +
       (project ? ` data-project="${esc(project)}"` : "");
     parts.push(`<article class="ev ${t}${never ? " never" : ""}" ${dataAttrs}>
   <div class="rail" aria-hidden="true"><span class="tick"></span></div>
@@ -478,6 +482,128 @@ function reasonsPanel(agg: EventAggregates): string {
   </div>
 </section>`;
 }
+
+/** Worst-verdict → CSS var tone: never/deny are bad, review warns, allow is ok. */
+function worstTone(worst: ToolWorst): "ok" | "warn" | "bad" {
+  if (worst === "never" || worst === "deny") return "bad";
+  if (worst === "review") return "warn";
+  return "ok";
+}
+
+/**
+ * Analytics dashboard: four cards in a 2×2 grid. Every data row except the
+ * timeline is a filter toggle on the same data-fgroup/data-fvalue contract as
+ * the header chips — the engine picks them up via the [data-fgroup] query.
+ */
+function dashboardPanel(db: Dashboard): string {
+  if (db.verdictMix.total === 0) return "";
+  const total = db.verdictMix.total;
+  const pct = (n: number): number => Math.round((n / total) * 100);
+
+  // Horizontal bar row that doubles as a feed filter. data-fvalue for tool
+  // rows is clip(toolId, 60) to match the feed's data-tool attribute.
+  const barRow = (
+    label: string,
+    group: string,
+    value: string,
+    widthPct: number,
+    num: string,
+    fill: "ok" | "warn" | "bad",
+  ): string =>
+    `<button type="button" class="db-item" data-fgroup="${group}" data-fvalue="${esc(value)}" aria-pressed="false" title="Filter: ${esc(clip(label, 40))}">
+      <span class="db-label">${esc(clip(label, 40))}</span>
+      <span class="db-bar"><span class="db-fill ${fill}" style="width:${widthPct}%"></span></span>
+      <span class="db-num">${esc(num)}</span>
+    </button>`;
+
+  // Zero-count rows are hidden, consistent with the header chips.
+  const mixRow = (
+    label: string,
+    group: string,
+    value: string,
+    count: number,
+    fill: "ok" | "warn" | "bad",
+  ): string =>
+    count > 0 ? barRow(label, group, value, pct(count), `${pct(count)}%`, fill) : "";
+  const mixCard = `<div class="db-card">
+    <h3>Verdict mix</h3>
+    ${mixRow("Allow", "verdict", "ALLOW", db.verdictMix.allow, "ok")}
+    ${mixRow("Review", "verdict", "REQUIRE_APPROVE", db.verdictMix.review, "warn")}
+    ${mixRow("Deny", "verdict", "DENY", db.verdictMix.deny, "bad")}
+    ${mixRow("Never", "never", "1", db.verdictMix.never, "bad")}
+  </div>`;
+
+  const buckets = db.activity.buckets;
+  const maxCount = Math.max(1, ...buckets.map((b) => b.count));
+  const tlCols = buckets
+    .map((b) => {
+      const h = b.count === 0 ? 0 : Math.max(6, Math.round((b.count / maxCount) * 100));
+      return `<div class="col" title="${esc(b.label)} — ${b.count} event${b.count === 1 ? "" : "s"}"><span class="db-vbar" style="height:${h}%"></span><span class="lab">${esc(b.label)}</span></div>`;
+    })
+    .join("\n      ");
+  const timelineCard = `<div class="db-card">
+    <h3>Activity · ${db.activity.granularity === "hour" ? "hourly" : "daily"}</h3>
+    ${
+      buckets.length === 0
+        ? `<p class="mute small">No parseable timestamps.</p>`
+        : `<div class="db-tl">
+      ${tlCols}
+    </div>`
+    }
+  </div>`;
+
+  const topCount = db.topTools[0]?.count ?? 1;
+  const toolsCard = `<div class="db-card">
+    <h3>Top tools</h3>
+    ${db.topTools
+      .map((t) =>
+        barRow(
+          t.toolId,
+          "tool",
+          clip(t.toolId, 60),
+          Math.max(3, Math.round((t.count / topCount) * 100)),
+          String(t.count),
+          worstTone(t.worst),
+        ),
+      )
+      .join("\n    ")}
+  </div>`;
+
+  const hotspotRows = (rows: readonly DashboardRow[], group: string): string => {
+    const max = Math.max(1, ...rows.map((r) => r.count));
+    return rows
+      .map((r) =>
+        barRow(
+          r.label,
+          group,
+          r.value ?? r.label,
+          Math.max(3, Math.round((r.count / max) * 100)),
+          String(r.count),
+          "bad",
+        ),
+      )
+      .join("\n    ");
+  };
+  const hotspotsCard =
+    db.productHotspots.length === 0 && db.projectHotspots.length === 0
+      ? ""
+      : `<div class="db-card">
+    <h3>Risk hotspots <span class="mute">deny + never</span></h3>
+    ${db.productHotspots.length > 0 ? `<p class="sub">Products</p>\n    ${hotspotRows(db.productHotspots, "product")}` : ""}
+    ${db.projectHotspots.length > 0 ? `<p class="sub">Projects</p>\n    ${hotspotRows(db.projectHotspots, "project")}` : ""}
+  </div>`;
+
+  return `<section class="panel" id="dashboard" aria-label="Analytics">
+  <h2>Analytics</h2>
+  <div class="db-grid">
+  ${mixCard}
+  ${timelineCard}
+  ${toolsCard}
+  ${hotspotsCard}
+  </div>
+</section>`;
+}
+
 
 function wiredHostsPanel(hosts: readonly WiredHostRow[] | undefined): string {
   if (!hosts || hosts.length === 0) return "";
@@ -603,6 +729,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   const c = countVerdicts(events);
   const agg = aggregateEvents(events);
   const chips = statChips(agg);
+  const dashboard = computeDashboard(events);
   const blocked = events.filter((e) => e.neverEvent || e.reasonCode === "NEVER_EVENT");
   const tools =
     model.mcpSeen && model.mcpSeen.length > 0
@@ -651,7 +778,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
 (function(){
   var feed = document.getElementById('feed');
   if (!feed) return;
-  var KNOWN = ' verdict never mode plane product project ';
+  var KNOWN = ' verdict never mode plane product project tool ';
   var state = Object.create(null);
   var clearBtn = document.getElementById('clear-filters');
   var chips = document.querySelectorAll('[data-fgroup]');
@@ -833,6 +960,63 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   }
   .stat[hidden] { display: none; }
   .clear-filters { color: var(--mute); font-size: 0.72rem; }
+  /* Analytics dashboard: 2×2 card grid, collapses to one column on narrow. */
+  .db-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem 1.1rem;
+  }
+  @media (max-width: 700px) {
+    .db-grid { grid-template-columns: 1fr; }
+  }
+  .db-card { min-width: 0; }
+  .db-card h3 {
+    margin: 0 0 0.4rem; font-size: 0.68rem; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase; color: var(--mute);
+  }
+  .db-card h3 .mute { text-transform: none; letter-spacing: 0.02em; font-weight: 600; }
+  .db-card .sub {
+    margin: 0.35rem 0 0.15rem; font-size: 0.66rem; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase; color: var(--day);
+  }
+  /* Filter-linked bar row: block variant of .stat's hover/active contract. */
+  .db-item {
+    display: grid; grid-template-columns: 6.5rem 1fr 2.4rem;
+    gap: 0.5rem; align-items: center; width: 100%;
+    font-family: inherit; font-size: 0.76rem; font-variant-numeric: tabular-nums;
+    color: var(--mute); text-align: left;
+    background: transparent; border: 1px solid transparent; border-radius: 8px;
+    padding: 0.14rem 0.3rem; cursor: pointer;
+    appearance: none; -webkit-appearance: none;
+  }
+  .db-item:hover { border-color: var(--line); background: color-mix(in srgb, var(--bg) 55%, var(--card)); }
+  .db-item[aria-pressed="true"] {
+    color: var(--fg);
+    border-color: color-mix(in srgb, var(--ok) 55%, var(--line));
+    background: color-mix(in srgb, var(--ok) 12%, var(--card));
+  }
+  .db-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .db-bar {
+    height: 0.55rem; border-radius: 4px; overflow: hidden;
+    background: color-mix(in srgb, var(--bg) 55%, var(--card));
+  }
+  .db-fill { display: block; height: 100%; border-radius: 4px; }
+  .db-fill.ok { background: var(--ok); }
+  .db-fill.warn { background: var(--warn); }
+  .db-fill.bad { background: var(--bad); }
+  .db-num { text-align: right; color: var(--fg); }
+  /* Vertical mini-bar timeline (not clickable — no time filter exists). */
+  .db-tl { display: flex; align-items: stretch; gap: 2px; height: 4.6rem; }
+  .db-tl .col {
+    flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-end; gap: 0.15rem;
+  }
+  .db-vbar {
+    width: 100%; min-height: 2px; border-radius: 2px 2px 0 0;
+    background: color-mix(in srgb, var(--ok) 75%, var(--mute));
+  }
+  .db-tl .lab {
+    font-size: 0.52rem; color: var(--mute); white-space: nowrap;
+    overflow: hidden; max-width: 100%; font-variant-numeric: tabular-nums;
+  }
   /* utility: must beat .ev's display:grid (same specificity, later rule would win) */
   .filtered-out { display: none !important; }
   .identity {
@@ -1057,6 +1241,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     ${chips.projects}
   </header>
   ${blockedBanner}
+  ${dashboardPanel(dashboard)}
   <section class="feed" id="feed" aria-label="Activity feed">
 ${renderFeed(events, nowMs, model.live)}
   </section>
@@ -1132,6 +1317,49 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
       ...agg.projects.map((p) => `- ${mdText(p.label)} × ${p.count}`),
       "",
     );
+  }
+
+  const db = computeDashboard(model.events);
+  if (db.verdictMix.total > 0) {
+    const pct = (n: number): number => Math.round((n / db.verdictMix.total) * 100);
+    // never is a reason overlay: the Never share is computed from neverEvent
+    // rows on top of the same 100% = total events base as the verdict buckets.
+    lines.push(
+      "## Analytics",
+      "",
+      `Verdict mix: Allow ${pct(db.verdictMix.allow)}% · Review ${pct(db.verdictMix.review)}% · Deny ${pct(db.verdictMix.deny)}% · Never ${pct(db.verdictMix.never)}%`,
+      "",
+    );
+    if (db.activity.buckets.length > 0) {
+      const max = Math.max(1, ...db.activity.buckets.map((b) => b.count));
+      lines.push(`Activity (${db.activity.granularity === "hour" ? "hourly" : "daily"}):`);
+      for (const b of db.activity.buckets) {
+        const bar = b.count === 0 ? "▁" : "▅".repeat(Math.max(1, Math.round((b.count / max) * 6)));
+        lines.push(`- ${mdText(b.label)} ${bar} ${b.count}`);
+      }
+      lines.push("");
+    }
+    if (db.topTools.length > 0) {
+      lines.push("Top tools:");
+      for (const t of db.topTools) {
+        lines.push(`- \`${mdInline(t.toolId)}\` × ${t.count} (worst: ${t.worst})`);
+      }
+      lines.push("");
+    }
+    if (db.productHotspots.length > 0 || db.projectHotspots.length > 0) {
+      lines.push("Risk hotspots (deny + never):");
+      if (db.productHotspots.length > 0) {
+        lines.push(
+          `- Products: ${db.productHotspots.map((h) => `${mdText(h.label)} × ${h.count}`).join(" · ")}`,
+        );
+      }
+      if (db.projectHotspots.length > 0) {
+        lines.push(
+          `- Projects: ${db.projectHotspots.map((h) => `${mdText(h.label)} × ${h.count}`).join(" · ")}`,
+        );
+      }
+      lines.push("");
+    }
   }
 
   lines.push(
