@@ -86,6 +86,8 @@ Commands:
   start             ONE LINER: init + wire local MCP + open live report
                     (report runs in the background — returns your terminal)
   stop              Stop the background report server started by kya start
+                    (--all also stops orphaned report daemons from other
+                    directories or older installs)
   connect <host>    Wire KYA MCP into a coding host config
                     (${connectableHosts().join("|")}; --project for project scope, --force to overwrite)
                     --hooks also wires the host's PreToolUse hook (claude|grok|kimi)
@@ -216,7 +218,7 @@ export async function runCli(
       }
 
       case "stop": {
-        const result = await runStop(cwd);
+        const result = await runStop(cwd, { all: flagBool(parsed.flags, "all") });
         if (parsed.flags["json"] === true || parsed.flags["json"] === "true") {
           io.log(JSON.stringify(result, null, 2));
         } else {
