@@ -73,6 +73,13 @@ describe("loadCertifyCard", () => {
     for (const g of card.topGaps) {
       expect(gapIds.has(g.id)).toBe(true);
       expect(SEV_RANK[g.severity]).toBeDefined();
+      // Top gaps carry meaning: non-empty title + evidence straight from the
+      // evaluated requirement (evidence is already a redacted one-liner).
+      expect(g.title.length).toBeGreaterThan(0);
+      expect(g.evidence.length).toBeGreaterThan(0);
+      const req = report.requirements.find((r) => r.id === g.id);
+      expect(g.title).toBe(req?.title);
+      expect(g.evidence).toBe(req?.evidence);
     }
     const sorted = [...card.topGaps].sort(
       (a, b) =>
@@ -83,7 +90,7 @@ describe("loadCertifyCard", () => {
     // And it really is the head of the full sorted gap list
     const expected = report.requirements
       .filter((r) => r.status === "gap")
-      .map((r) => ({ id: r.id, severity: r.severity }))
+      .map((r) => ({ id: r.id, title: r.title, severity: r.severity, evidence: r.evidence }))
       .sort(
         (a, b) =>
           (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9) ||
@@ -91,6 +98,24 @@ describe("loadCertifyCard", () => {
       )
       .slice(0, 5);
     expect(card.topGaps).toEqual(expected);
+  });
+
+  it("carries the full requirement detail: all 30, statuses as evaluated", () => {
+    const cwd = tmp();
+    const home = tmp();
+    seedTrail(home);
+    const env = { KYA_HOME: home, KYA_HOLD: "1" };
+    const card = loadCertifyCard(cwd, env);
+    expect(card).toBeDefined();
+    if (!card) return;
+
+    const report = computeLiveCertify(cwd, env, 30);
+    expect(card.requirements).toHaveLength(30);
+    expect(card.requirements).toEqual(report.requirements);
+    // Seeded fixture: KYA_HOLD=1 → SEC-01 passes, gate title intact
+    const sec01 = card.requirements.find((r) => r.id === "SEC-01");
+    expect(sec01?.status).toBe("pass");
+    expect(sec01?.title).toBe("Gate enforces, not observe-only");
   });
 
   it("NEVER throws — unreadable project trail state yields undefined", () => {
@@ -129,9 +154,20 @@ const GAP_CARD: CertifyCard = {
   windowDays: 30,
   trailEvents: 42,
   topGaps: [
-    { id: "SEC-04", severity: "critical" },
-    { id: "DP-01", severity: "high" },
+    {
+      id: "SEC-04",
+      title: "ORR security posture is not red",
+      severity: "critical",
+      evidence: "orr overall red",
+    },
+    {
+      id: "DP-01",
+      title: "Agent tool calls are intercepted and recorded",
+      severity: "high",
+      evidence: "no trail events in window",
+    },
   ],
+  requirements: [],
 };
 
 const PASS_CARD: CertifyCard = {
@@ -143,6 +179,7 @@ const PASS_CARD: CertifyCard = {
   windowDays: 30,
   trailEvents: 7,
   topGaps: [],
+  requirements: [],
 };
 
 /** All-insufficient state: fail-closed gap result with zero gap requirements. */
@@ -155,6 +192,20 @@ const INSUFFICIENT_CARD: CertifyCard = {
   windowDays: 30,
   trailEvents: 0,
   topGaps: [],
+  requirements: [],
+};
+
+/** Stub card whose top gap is SEC-01 with its real catalog title. */
+const SEC01_GAP_CARD: CertifyCard = {
+  ...GAP_CARD,
+  topGaps: [
+    {
+      id: "SEC-01",
+      title: "Gate enforces, not observe-only",
+      severity: "high",
+      evidence: 'gate mode is observe — set KYA_HOLD=1 / KYA_OFFLINE=1 or "gateMode" in .kya/config.json',
+    },
+  ],
 };
 
 describe("renderReceiptHtml certify panel", () => {
@@ -168,7 +219,9 @@ describe("renderReceiptHtml certify panel", () => {
     expect(html).toContain("SEC-04");
     expect(html).toContain("DP-01");
     expect(html).toContain("window 30d, 42 trail events");
-    expect(html).toContain("kya certify for the full gap report + signed bundle");
+    expect(html).toContain(
+      "the Certify tab has the full live requirement table · kya certify for the gap report + signed bundle",
+    );
   });
 
   it("renders a pass card with the green pill", () => {
@@ -210,6 +263,16 @@ describe("renderReceiptMarkdown certify section", () => {
     expect(md).toContain("`SEC-04`");
     expect(md).toContain("`DP-01`");
     expect(md).toContain("kya certify");
+  });
+
+  it("top-gaps list items carry the requirement title next to id + severity", () => {
+    const md = renderReceiptMarkdown(
+      buildWindowReceiptModel([], 3, { certify: SEC01_GAP_CARD }),
+    );
+    expect(md).toContain("- `SEC-01` — Gate enforces, not observe-only (high)");
+    const mdGap = renderReceiptMarkdown(buildWindowReceiptModel([], 3, { certify: GAP_CARD }));
+    expect(mdGap).toContain("- `SEC-04` — ORR security posture is not red (critical)");
+    expect(mdGap).toContain("- `DP-01` — Agent tool calls are intercepted and recorded (high)");
   });
 
   it("puts ## Certify before ## Analytics and ## Feed (dashboard hierarchy)", () => {

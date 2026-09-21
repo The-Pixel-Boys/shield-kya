@@ -9,6 +9,7 @@ import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { computeLiveCertify } from "../certify/live.js";
 import type { RequirementSeverity } from "../certify/catalog.js";
+import type { CertifyRequirementResult } from "../certify/evaluate.js";
 import { CONNECT_REGISTRY, type HostSpec } from "../commands/connect.js";
 import type { OrrDisposition, OrrRating, OrrReport } from "../commands/orr.js";
 import type { KyaFileConfig } from "../config.js";
@@ -208,6 +209,15 @@ export function loadOrrCategoryRatings(
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/** One row of the Certify card's top-gaps list: id + meaning, not just id. */
+export interface CertifyTopGap {
+  readonly id: string;
+  readonly title: string;
+  readonly severity: RequirementSeverity;
+  /** Redacted one-liner by evaluator contract; safe for reports. */
+  readonly evidence: string;
+}
+
 export interface CertifyCard {
   readonly result: "pass" | "gap";
   readonly pass: number;
@@ -216,7 +226,9 @@ export interface CertifyCard {
   readonly attested: number;
   readonly windowDays: number;
   readonly trailEvents: number;
-  readonly topGaps: readonly { id: string; severity: RequirementSeverity }[];
+  readonly topGaps: readonly CertifyTopGap[];
+  /** Every evaluated requirement, in catalog order, as returned by computeLiveCertify. */
+  readonly requirements: readonly CertifyRequirementResult[];
 }
 
 const CERTIFY_SEVERITY_RANK: Record<RequirementSeverity, number> = {
@@ -240,7 +252,7 @@ export function loadCertifyCard(
     const report = computeLiveCertify(cwd, env, 30);
     const topGaps = report.requirements
       .filter((r) => r.status === "gap")
-      .map((r) => ({ id: r.id, severity: r.severity }))
+      .map((r) => ({ id: r.id, title: r.title, severity: r.severity, evidence: r.evidence }))
       .sort(
         (a, b) =>
           CERTIFY_SEVERITY_RANK[a.severity] - CERTIFY_SEVERITY_RANK[b.severity] ||
@@ -256,6 +268,7 @@ export function loadCertifyCard(
       windowDays: report.window.days,
       trailEvents: report.trail.eventCount,
       topGaps,
+      requirements: report.requirements,
     };
   } catch {
     return undefined;
