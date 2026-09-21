@@ -350,7 +350,9 @@ describe("renderReceiptHtml sections", () => {
     expect(html).toContain('aria-label="Showback"');
     // Identity line: name/id · host · baseUrl, as inert text (no link).
     expect(html).toContain("refund-bot/agt-1 · ide · http://127.0.0.1:8090");
-    expect(html).not.toContain("<a "); // no anchors — loader output is never linked
+    // Loader output is never linked — the only anchors in the page are the
+    // in-page tab nav (#overview/#activity/#system).
+    expect(html).not.toMatch(/<a [^>]*href="(?!#)/);
     // Mode chips are distinct from the Hold verdict chip.
     expect(html).toContain("Mode: observe");
     expect(html).toContain("Mode: hold");
@@ -376,8 +378,10 @@ describe("renderReceiptHtml sections", () => {
     expect(html).toContain('class="pill orr-amber"');
     expect(html).toContain("conditional");
     expect(html).toContain("1 pass · 1 fail · 1 partial");
-    // Showback + disclaimer.
-    expect(html).toContain("1000 tokens in · 200 tokens out · ~$0.01");
+    // Showback hero tiles + disclaimer.
+    expect(html).toContain('<span class="kpi-num">1000</span><span class="kpi-lab">Tokens in</span>');
+    expect(html).toContain('<span class="kpi-num">200</span><span class="kpi-lab">Tokens out</span>');
+    expect(html).toContain("~$0.01");
     expect(html).toContain("run-1");
     expect(html).toContain("2 steps");
     expect(html).toContain(SHOWBACK_DISCLAIMER);
