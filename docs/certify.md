@@ -153,6 +153,10 @@ Third parties can verify integrity offline today with the embedded `pubkey`.
 digest of the window's trail events — never raw tool arguments, diffs, or
 secrets. `baseUrl` is never exported.
 
+## Live report panel
+
+The receipt report (`kya receipt`, and the live daemon from `kya start`) carries a **Certify** panel that recomputes the baseline evaluation on every render — result pill, counts, top-5 gaps. It is the same engine and the same honesty rules as `kya certify` (fail-closed on zero certifiable evidence), evaluated in memory with no files written. Static exports show a snapshot; the live daemon updates it as trail events stream in.
+
 ## CI
 
 ```yaml

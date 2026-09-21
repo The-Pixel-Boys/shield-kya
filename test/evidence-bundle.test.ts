@@ -97,9 +97,12 @@ describe("bundle signature", () => {
     };
     expect(verifyBundleSignature(bundle)).toBe(true);
     expect(verifyBundleSignature({ ...bundle, version: 2 })).toBe(false);
-    expect(
-      verifyBundleSignature({ ...bundle, sig: `${String(bundle.sig).slice(0, -2)}AA` }),
-    ).toBe(false);
+    // corrupt deterministically: flip the first char (the old slice(0,-2)+"AA"
+    // was a no-op whenever the real sig happened to end in "AA" — flaky ~1/1000)
+    const sig = String(bundle.sig);
+    const corrupted = (sig[0] === "A" ? "B" : "A") + sig.slice(1);
+    expect(corrupted).not.toBe(sig);
+    expect(verifyBundleSignature({ ...bundle, sig: corrupted })).toBe(false);
     expect(verifyBundleSignature({ ...bundle, sig: 42 })).toBe(false);
     expect(verifyBundleSignature({ ...bundle, pubkey: "!!!" })).toBe(false);
     // key order in the source object must not matter (canonicalJson sorts keys)

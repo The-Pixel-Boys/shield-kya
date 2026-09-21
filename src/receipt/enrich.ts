@@ -7,6 +7,8 @@
 import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
+import { computeLiveCertify } from "../certify/live.js";
+import type { RequirementSeverity } from "../certify/catalog.js";
 import { CONNECT_REGISTRY, type HostSpec } from "../commands/connect.js";
 import type { OrrDisposition, OrrRating, OrrReport } from "../commands/orr.js";
 import type { KyaFileConfig } from "../config.js";
@@ -204,6 +206,60 @@ export function loadOrrCategoryRatings(
     }
   }
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+export interface CertifyCard {
+  readonly result: "pass" | "gap";
+  readonly pass: number;
+  readonly gap: number;
+  readonly insufficientEvidence: number;
+  readonly attested: number;
+  readonly windowDays: number;
+  readonly trailEvents: number;
+  readonly topGaps: readonly { id: string; severity: RequirementSeverity }[];
+}
+
+const CERTIFY_SEVERITY_RANK: Record<RequirementSeverity, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
+
+/**
+ * Live Agent Trust Baseline card, recomputed from local evidence on every
+ * call via computeLiveCertify (read-only, no writes). Fail-safe like every
+ * loader here: any internal error yields undefined, never a throw — the
+ * report renders without the panel rather than not at all.
+ */
+export function loadCertifyCard(
+  cwd: string,
+  env: NodeJS.ProcessEnv = process.env,
+): CertifyCard | undefined {
+  try {
+    const report = computeLiveCertify(cwd, env, 30);
+    const topGaps = report.requirements
+      .filter((r) => r.status === "gap")
+      .map((r) => ({ id: r.id, severity: r.severity }))
+      .sort(
+        (a, b) =>
+          CERTIFY_SEVERITY_RANK[a.severity] - CERTIFY_SEVERITY_RANK[b.severity] ||
+          a.id.localeCompare(b.id),
+      )
+      .slice(0, 5);
+    return {
+      result: report.overall.result,
+      pass: report.overall.pass,
+      gap: report.overall.gap,
+      insufficientEvidence: report.overall.insufficientEvidence,
+      attested: report.overall.attested,
+      windowDays: report.window.days,
+      trailEvents: report.trail.eventCount,
+      topGaps,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 /** Observe-only showback from .kya/usage.json inside cwd. */
