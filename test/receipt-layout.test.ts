@@ -37,6 +37,7 @@ const PASS_CARD: CertifyCard = {
   windowDays: 30,
   trailEvents: 7,
   topGaps: [],
+  requirements: [],
 };
 
 const EVENTS: TrailEvent[] = [
@@ -77,13 +78,15 @@ describe("receipt dashboard layout (hero grid + tabs)", () => {
     expect(html.indexOf('aria-label="Certify"')).toBeGreaterThan(iHero);
   });
 
-  it("ships tab nav links to #overview / #activity / #system", () => {
+  it("ships tab nav links to #overview / #certify / #activity / #system", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel(EVENTS, 3, {}));
     expect(html).toContain('href="#overview"');
+    expect(html).toContain('href="#certify"');
     expect(html).toContain('href="#activity"');
     expect(html).toContain('href="#system"');
     // Zones with matching ids exist so :target can switch them.
     expect(html).toContain('id="overview"');
+    expect(html).toContain('id="certify"');
     expect(html).toContain('id="activity"');
     expect(html).toContain('id="system"');
   });
@@ -108,7 +111,7 @@ describe("receipt dashboard layout (hero grid + tabs)", () => {
 
   it("labels each zone by its tab anchor (tab ids + aria-labelledby)", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel(EVENTS, 3, {}));
-    for (const zone of ["overview", "activity", "system"]) {
+    for (const zone of ["overview", "certify", "activity", "system"]) {
       expect(html).toContain(`id="tab-${zone}" href="#${zone}"`);
       expect(html).toContain(`id="${zone}" aria-labelledby="tab-${zone}"`);
     }
@@ -153,9 +156,10 @@ describe("receipt dashboard layout (hero grid + tabs)", () => {
 
   it("fresh install reads as a guided get-started page, not broken boxes", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3));
-    // Each zone gets a hint instead of an empty frame.
-    expect(html.match(/class="mute small zone-empty"/g)).toHaveLength(2);
+    // Each zone gets a hint instead of an empty frame (incl. the Certify tab).
+    expect(html.match(/class="mute small zone-empty"/g)).toHaveLength(3);
     expect(html).toContain("No activity in this window yet");
+    expect(html).toContain("No live evaluation yet");
     expect(html).toContain("No system state yet");
     // The feed tells the user how to make the first event appear.
     expect(html).toContain('class="empty"');
