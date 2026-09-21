@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   readFileConfig,
   resolveConfig,
+  resolveGateMode,
   writeFileConfig,
 } from "../src/config.js";
 import { AuthRequiredError, UsageError } from "../src/errors.js";
@@ -131,5 +132,73 @@ describe("resolveConfig fail-closed", () => {
       host: "ide",
       agentId: "a1",
     });
+  });
+});
+
+describe("gate mode: config-file leg (flags > env > config > observe)", () => {
+  it("config gateMode hold arms holdEnabled without any env", () => {
+    const cwd = tmp();
+    writeFileConfig(cwd, { gateMode: "hold" });
+    const cfg = resolveConfig({
+      cwd,
+      env: { KYA_API_KEY: "sk" },
+      requireApiKey: true,
+    });
+    expect(cfg.holdEnabled).toBe(true);
+    expect(cfg.offline).toBe(false);
+    expect(resolveGateMode({ cwd, env: {} })).toBe("hold");
+  });
+
+  it("config gateMode offline arms the offline evaluate path (no API key needed)", () => {
+    const cwd = tmp();
+    writeFileConfig(cwd, { gateMode: "offline" });
+    const cfg = resolveConfig({ cwd, env: {} });
+    expect(cfg.offline).toBe(true);
+    expect(cfg.holdEnabled).toBe(false);
+    expect(cfg.apiKey).toBe(""); // offline never requires a key
+    expect(resolveGateMode({ cwd, env: {} })).toBe("offline");
+  });
+
+  it("env switches win over the config key; the key is ignored entirely once env speaks", () => {
+    const cwd = tmp();
+    writeFileConfig(cwd, { gateMode: "offline" });
+    const cfg = resolveConfig({
+      cwd,
+      env: { KYA_HOLD: "1", KYA_API_KEY: "sk" },
+      requireApiKey: true,
+    });
+    expect(cfg.holdEnabled).toBe(true);
+    expect(cfg.offline).toBe(false); // env hold ⇒ config "offline" ignored
+    expect(resolveGateMode({ cwd, env: { KYA_HOLD: "1" } })).toBe("hold");
+  });
+
+  it("flags win over the config key", () => {
+    const cwd = tmp();
+    writeFileConfig(cwd, { gateMode: "offline" });
+    const cfg = resolveConfig({
+      cwd,
+      env: { KYA_API_KEY: "sk" },
+      flags: { hold: true },
+      requireApiKey: true,
+    });
+    expect(cfg.holdEnabled).toBe(true);
+    expect(cfg.offline).toBe(false);
+  });
+
+  it("invalid gateMode values are ignored → observe defaults", () => {
+    const cwd = tmp();
+    for (const bad of ["Hold", "OBSERVE", "yes"]) {
+      writeFileConfig(cwd, { gateMode: bad });
+      const cfg = resolveConfig({
+        cwd,
+        env: { KYA_API_KEY: "sk" },
+        requireApiKey: true,
+      });
+      expect(cfg.holdEnabled).toBe(false);
+      expect(cfg.offline).toBe(false);
+      expect(resolveGateMode({ cwd, env: {} })).toBe("observe");
+    }
+    writeFileConfig(cwd, { gateMode: 42 as unknown as string });
+    expect(resolveGateMode({ cwd, env: {} })).toBe("observe");
   });
 });

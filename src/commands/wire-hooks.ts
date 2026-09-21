@@ -8,9 +8,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { UsageError } from "../errors.js";
+import { atomicWriteSync } from "../fs-atomic.js";
 // imports from connect.ts are call-time only (shared fs/registry helpers) — safe cycle
 import {
-  atomicWriteSync,
   cliJsPath,
   CONNECT_REGISTRY,
   createTarget,

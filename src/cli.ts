@@ -3,7 +3,7 @@
  * @shield-agent/kya — light install CLI
  * Commands: init | register-agent | eval-tool | wrap | hook | invoke | approve | reject
  *   | agents | agent | passport | kill | approvals | sessions | shrink
- *   | serve-mcp | orr run | dash
+ *   | serve-mcp | orr run | dash | certify
  * Fail-closed: empty KYA_API_KEY against auth plane → non-zero exit.
  * Offline sample: eval-tool --offline (demo only; not production PEP).
  */
@@ -31,6 +31,11 @@ import {
   orrRunOptionsFromArgs,
   runOrr,
 } from "./commands/orr.js";
+import {
+  certifyOptionsFromArgs,
+  formatCertifySummary,
+  runCertify,
+} from "./commands/certify.js";
 import { runDash } from "./commands/dash.js";
 import {
   formatAgentTable,
@@ -55,6 +60,7 @@ import {
 } from "./commands/wrap.js";
 import {
   formatReceiptHuman,
+  openPath,
   receiptInputFromArgs,
   runReceipt,
 } from "./commands/receipt.js";
@@ -115,6 +121,11 @@ Commands:
   dash              Terminal desk (FREE panes; actions on a TTY, --once for CI)
   sandbox           Opt-in Firecracker wrap (spawn|exec|kill|status). Not MCP.
                     Requires KYA_SANDBOX=mock|firecracker. MCP still never execs.
+  certify           Agent Trust Baseline gap report from local evidence
+                    (JSON/MD/HTML to .kya/certify/; exit 1 on gaps, exit 2 usage)
+                    --attest REQ-ID --text "…" records a local attestation
+                    --sign also writes an ed25519-signed evidence-bundle.json
+                    (self-signed: integrity + key continuity, NOT identity)
 
 Options (shared):
   --base-url <url>  Control plane origin (or KYA_BASE_URL)
@@ -122,10 +133,12 @@ Options (shared):
   --host <ide|runtime>  Dual-plane host (or KYA_HOST, default ide)
   --offline         Sample evaluate / dash without network
   --hold            wrap: open Hold ticket on REQUIRE_APPROVE (org path; default off)
-  --open            receipt: open HTML in the browser
+  --open            receipt/certify: open HTML in the browser
   --days <n>        receipt: history window (default 3)
   --session <id>    receipt: single session only (optional)
   --once            dash: print one frame and exit (CI / pipes)
+  --window <n>      certify: report window in days (default 30)
+  --fail-on <m>     certify: gap (default, exit 1 on gaps) | never
   --pane <name>     dash pane (home|policy|agents|approvals|sessions|orr|mcp|dashboard|…)
   --json            Machine-readable output
   --help, -h        Show help
@@ -143,6 +156,9 @@ Examples:
   npx @shield-agent/kya serve-mcp --stdio
   npx @shield-agent/kya orr run --path . --out ./orr-report --skip-optional-producers
   npx @shield-agent/kya orr run --path . --producer harness.agentshield --agentshield-json ./agentshield-report.json
+  npx @shield-agent/kya certify --open
+  npx @shield-agent/kya certify --sign --json-stdout
+  npx @shield-agent/kya certify --attest SOC-01 --text "AUP: https://example.com/aup"
   npx @shield-agent/kya wrap --offline --tool-id org.sample.data.write --irreversible
   npx @shield-agent/kya invoke --tool-id org.sample.data.write --args-hash <hash>
   npx @shield-agent/kya approve --id <approval-id>
@@ -490,6 +506,45 @@ export async function runCli(
             `(reporting only — sole PEP remains Shield KYA; scanners are evidence)`,
           );
         }
+        return result.exitCode;
+      }
+
+      case "certify": {
+        // Local-first, evidence-only: no resolveConfig, no API key, no network.
+        const opts = certifyOptionsFromArgs(parsed);
+        const result = runCertify({ ...opts, cwd, env });
+        const jsonOut = opts.jsonStdout || parsed.flags["json"] === true;
+        if (jsonOut) {
+          io.log(JSON.stringify(result.report, null, 2));
+        } else if (!opts.quiet) {
+          io.log(formatCertifySummary(result.report));
+          for (const p of [result.jsonPath, result.mdPath, result.htmlPath, result.bundlePath]) {
+            if (p) io.log(`  wrote ${p}`);
+          }
+          io.log(
+            "(evidence only — sole PEP remains Shield KYA; certify never allows or blocks)",
+          );
+        }
+        // Attestation confirmation is safety-relevant (proof the attest write
+        // happened): it prints even under --quiet, like the key notice;
+        // stderr under --json-stdout so the report JSON stays the only
+        // stdout payload.
+        if (result.attestationRecorded) {
+          const line = `attestation recorded: ${result.attestationRecorded.requirementId} (${result.attestationRecorded.at})`;
+          if (jsonOut) io.error(line);
+          else io.log(line);
+        }
+        // Key lifecycle: surface the signing key fingerprint; a freshly created
+        // key resets continuity (old bundles verify only under the old pubkey).
+        // Safety-relevant, so it prints even in --quiet; stderr under --json-stdout.
+        if (result.keyFingerprint) {
+          const notice =
+            `signed: ${result.bundlePath} (key fp=${result.keyFingerprint}` +
+            (result.keyCreated ? " — new key created, continuity resets here)" : ")");
+          if (jsonOut) io.error(notice);
+          else io.log(notice);
+        }
+        if (opts.open && result.htmlPath) openPath(result.htmlPath);
         return result.exitCode;
       }
 

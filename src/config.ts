@@ -10,7 +10,11 @@ export interface KyaFileConfig {
   readonly host?: Host;
   readonly agentId?: string;
   readonly agentName?: string;
+  /** Gate mode pin: honored only when exactly "hold" or "offline". */
+  readonly gateMode?: string;
 }
+
+export type GateMode = "observe" | "hold" | "offline";
 
 export interface ResolvedConfig {
   readonly baseUrl: string;
@@ -28,7 +32,8 @@ export interface ResolvedConfig {
   readonly offline: boolean;
   /**
    * When false (default), REQUIRE_APPROVE is recorded only — no Hold ticket /
-   * second human prompt. Set KYA_HOLD=1 or --hold for org Hold path.
+   * second human prompt. Armed by --hold / KYA_HOLD=1 / "gateMode":"hold" in
+   * .kya/config.json (flags > env > config > observe, see resolveGateMode).
    */
   readonly holdEnabled: boolean;
 }
@@ -103,6 +108,44 @@ function stripTrailingSlash(url: string): string {
   return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 
+function flagOn(v: string | boolean | undefined): boolean {
+  return v === true || v === "true";
+}
+
+/** Exact truthiness for gate env switches: only "1" or "true" arm a mode. */
+function envOn(v: string | undefined): boolean {
+  return v === "1" || v === "true";
+}
+
+/** Exact-match config leg: only "hold" / "offline" are honored, anything else is observe. */
+function fileGateMode(file: KyaFileConfig): "hold" | "offline" | undefined {
+  const gm = file.gateMode;
+  return gm === "hold" || gm === "offline" ? gm : undefined;
+}
+
+/**
+ * Gate mode resolution, shared by the gate itself (wrap / hook / eval via
+ * resolveConfig) and by `kya certify` — a certify "pass — gate mode is hold"
+ * is only an honest claim when both read this one resolver.
+ *
+ * Precedence: CLI flags (--offline / --hold) > env (KYA_OFFLINE / KYA_HOLD,
+ * exact "1"|"true") > "gateMode" in .kya/config.json (exact "hold"|"offline")
+ * > observe default. Flags and env win as a tier: when any flag/env gate
+ * switch is set, the config key is ignored entirely. Offline outranks hold
+ * within a tier.
+ */
+export function resolveGateMode(input: {
+  readonly cwd: string;
+  readonly env?: NodeJS.ProcessEnv;
+  readonly flags?: Readonly<Record<string, string | boolean>>;
+}): GateMode {
+  const env = input.env ?? process.env;
+  const flags = input.flags ?? {};
+  if (flagOn(flags["offline"]) || envOn(env.KYA_OFFLINE)) return "offline";
+  if (flagOn(flags["hold"]) || envOn(env.KYA_HOLD)) return "hold";
+  return fileGateMode(readFileConfig(input.cwd)) ?? "observe";
+}
+
 /**
  * Resolve runtime config from flags > env > .kya/config.json.
  * Fail-closed: empty API key against network commands exits non-zero.
@@ -137,18 +180,19 @@ export function resolveConfig(options: ResolveOptions = {}): ResolvedConfig {
 
   const tenantHint = env.KYA_TENANT_HINT;
   const json = flags["json"] === true || flags["json"] === "true";
-  const offline =
-    options.offline === true ||
-    flags["offline"] === true ||
-    flags["offline"] === "true" ||
-    env.KYA_OFFLINE === "1" ||
-    env.KYA_OFFLINE === "true";
 
-  const holdEnabled =
-    flags["hold"] === true ||
-    flags["hold"] === "true" ||
-    env.KYA_HOLD === "1" ||
-    env.KYA_HOLD === "true";
+  // Gate mode: flags > env (KYA_OFFLINE/KYA_HOLD) > "gateMode" in
+  // .kya/config.json > observe — the same precedence resolveGateMode
+  // reports, so the gate and `kya certify` can never disagree. Flags/env
+  // win as a tier: the config key applies only when no flag/env gate
+  // switch is set.
+  const flagEnvOffline = flagOn(flags["offline"]) || envOn(env.KYA_OFFLINE);
+  const flagEnvHold = flagOn(flags["hold"]) || envOn(env.KYA_HOLD);
+  const configMode =
+    flagEnvOffline || flagEnvHold ? undefined : fileGateMode(file);
+  const offline =
+    options.offline === true || flagEnvOffline || configMode === "offline";
+  const holdEnabled = flagEnvHold || configMode === "hold";
 
   // Offline sample evaluate never hits the control plane — no API key required.
   const requireApiKey =

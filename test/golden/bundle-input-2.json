@@ -1,0 +1,24 @@
+{
+  "report": {
+    "format": "shield-kya-certify-report",
+    "version": 1,
+    "generatedAt": "2026-09-18T13:00:00.000Z",
+    "catalog": { "id": "agent-trust-baseline", "version": "0.1.0", "updated": "2026-09-18" },
+    "window": { "days": 7, "since": "2026-09-11T13:00:00.000Z", "until": "2026-09-18T13:00:00.000Z" },
+    "trail": {
+      "eventCount": 3,
+      "verdictMix": { "ALLOW": 2, "DENY": 0, "REQUIRE_APPROVE": 1 },
+      "modes": { "observe": 3, "hold": 0, "offline": 0 }
+    },
+    "requirements": [
+      { "id": "SEC-01", "domain": "security", "title": "Gate enforces, not observe-only — „Hold“ ✓", "severity": "high", "status": "gap", "evidence": "gate mode is observe — set KYA_HOLD=1 / KYA_OFFLINE=1 or \"gateMode\" in .kya/config.json" },
+      { "id": "REL-02", "domain": "reliability", "title": "Unknown-tool rate is bounded", "severity": "medium", "status": "pass", "evidence": "0/3 = 0.0% ≤ 5% for reason=UNKNOWN_TOOL" }
+    ],
+    "overall": { "pass": 1, "gap": 1, "insufficientEvidence": 0, "attested": 0, "result": "gap" }
+  },
+  "windowEvents": [
+    { "ts": "2026-09-17T09:00:00.000Z", "sessionId": "s-ümläut", "toolId": "Edit", "verdict": "ALLOW", "reasonCode": "LOW_RISK_READ", "mode": "observe", "product": "kimi", "project": "prøject" },
+    { "ts": "2026-09-17T09:01:00.000Z", "sessionId": "s-ümläut", "toolId": "Write", "verdict": "REQUIRE_APPROVE", "reasonCode": "HIGH_STAKES_WRITE", "mode": "observe", "product": "kimi", "project": "prøject", "summary": "line one\nline two \"quoted\"" },
+    { "ts": "2026-09-17T09:02:00.000Z", "sessionId": "s2", "toolId": "Read", "verdict": "ALLOW", "reasonCode": "LOW_RISK_READ", "mode": "observe", "argsHash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" }
+  ]
+}

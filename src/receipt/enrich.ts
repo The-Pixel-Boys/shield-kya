@@ -179,6 +179,33 @@ export function loadOrrCard(cwd: string): OrrCard | undefined {
   };
 }
 
+/**
+ * Per-category ratings from <cwd>/orr-report/report.json — sibling of the slim
+ * OrrCard for consumers that need category granularity (certify). Same
+ * confined-read pattern; invalid entries are dropped, not fatal.
+ */
+export function loadOrrCategoryRatings(
+  cwd: string,
+): Record<string, OrrRating> | undefined {
+  const raw = readConfinedJsonFile(
+    cwd,
+    join("orr-report", "report.json"),
+    MAX_ORR_REPORT_BYTES,
+  );
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const categories = (raw as Partial<OrrReport>).categories;
+  if (!Array.isArray(categories)) return undefined;
+  const out: Record<string, OrrRating> = {};
+  for (const c of categories) {
+    const id = (c as { id?: unknown } | null)?.id;
+    const rating = (c as { rating?: unknown } | null)?.rating;
+    if (typeof id === "string" && typeof rating === "string" && ORR_RATINGS.has(rating)) {
+      out[id] = rating as OrrRating;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 /** Observe-only showback from .kya/usage.json inside cwd. */
 export function loadShowbackCard(cwd: string): ShowbackReport | undefined {
   const raw = readConfinedJsonFile(cwd, join(".kya", "usage.json"), MAX_USAGE_FILE_BYTES);

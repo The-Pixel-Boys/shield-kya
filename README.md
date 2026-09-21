@@ -130,9 +130,17 @@ Tag sessions with `KYA_HOST=ide` or `KYA_HOST=runtime`. Same policy path either 
 | `KYA_AGENT_ID` | After register | Agent principal id |
 | `KYA_MCP_PORT` | No (default `3920`) | HTTP MCP listen port |
 | `KYA_OFFLINE` | No | `1`/`true` for sample evaluate |
+| `KYA_HOLD` | No | `1`/`true` for the org Hold path (REQUIRE_APPROVE opens a human ticket) |
 | `KYA_DASH_PLAN` | No | `enterprise` unlocks licensed TUI panes |
 | `KYA_DIFF_PREVIEW` | No | `0` disables clipped change previews on the receipt |
 | `KYA_RECEIPT_AUTO` | No | `0` disables auto-open receipt after wrap; `1` forces |
+
+Gate mode can also be pinned in the project's `.kya/config.json`:
+`{"gateMode": "hold"}` or `{"gateMode": "offline"}` (exact values only —
+anything else is ignored). The gate itself (wrap / hook / eval) honors it
+with the precedence flags > env > config > observe, and `kya certify`
+reports through the same resolver, so a certify pass on gate mode always
+reflects how the gate actually runs.
 
 ## MCP tools
 
@@ -149,7 +157,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.5.0", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.6.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -176,7 +184,7 @@ npx @shield-agent/kya reject --id <approval-id>
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.5.0 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.6.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -187,7 +195,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.5.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.6.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -237,6 +245,24 @@ npx @shield-agent/kya orr run --path . --out ./orr-report --producer harness.age
 
 ORR is a reporting board. Scanners, `--scorecard`, and `harness.agentshield` are evidence. They never ALLOW a high-stakes side effect, so they are not a second policy gate. AgentShield is optional and read-only: no `--fix`, no MiniClaw, no runtime hook. This package does not depend on `ecc-agentshield`. If you pass `--producer harness.agentshield` and have neither `--agentshield-json` nor an `agentshield` binary, ORR records a coverage gap and still exits 0. Explicit `--producer` always attempts; `--skip-optional-producers` only skips producers you did not ask for.
 
+## Certify (continuous agent assurance)
+
+`kya certify` evaluates the open **Agent Trust Baseline** catalog (`catalog/agent-trust-baseline-v0.json` — 30 requirements across Data & Privacy, Security, Safety, Reliability, Accountability, Society) against local evidence: the global trail, ORR output, wired hosts, sandbox inventory, receipts, showback, and your recorded attestations. It writes a gap report to `.kya/certify/` (JSON + Markdown + HTML). The gap list is your work plan.
+
+```bash
+npx @shield-agent/kya certify                  # gap report; exit 1 when gaps exist (CI-friendly)
+npx @shield-agent/kya certify --open           # open the HTML report
+npx @shield-agent/kya certify --fail-on never  # report only, always exit 0
+npx @shield-agent/kya certify --attest SOC-01 --text "Acceptable-use policy: https://example.com/aup"
+npx @shield-agent/kya certify --sign           # also emit a signed evidence-bundle.json
+```
+
+Certify is **evidence-only**. It never ALLOWs, DENYs, or blocks anything — the sole PEP remains Shield KYA. Trail-based machine checks never pass on an empty trail (they report `insufficient_evidence`). What a machine cannot check is covered by explicit local attestations (`--attest`), recorded in `.kya/attestations.json` — unverified operator statements, labeled as such.
+
+`--sign` emits `evidence-bundle.json`: canonical JSON, ed25519-signed by a locally generated key (`~/.kya/keys/evidence-ed25519.json`, mode 0600, auto-created on first use). Each `--sign` run prints the signing key fingerprint; when the key was just created the CLI notes that key continuity resets there (earlier bundles stay verifiable only under the old pubkey). A self-signed developer key proves bundle **integrity** and **continuity of a key** — **not identity**. Identity binding and the verified badge are the hosted verification product (separate). The bundle format is open and documented in `docs/certify.md`; anyone can verify a bundle offline with the embedded pubkey.
+
+Everything here is local, free, and offline: no account, no network calls, no license check. The catalog is MIT-licensed and PRs are welcome.
+
 ## Optional sandbox wrap (Firecracker)
 
 Beside the gate, not inside MCP. Opt-in only:
@@ -272,6 +298,7 @@ pnpm build
 - [Per-host recipes (23 hosts)](docs/hosts/)
 - [OTLP metrics (OSS + hosted)](docs/otlp.md)
 - [OWASP MCP governance map](docs/owasp-mcp-governance.md)
+- [kya certify — Agent Trust Baseline gap reports](docs/certify.md)
 - [Hosted operator SSO / SCIM (not in OSS CLI)](docs/hosted-operator-sso.md)
 - See also `LIMITATIONS.md` in this repo
 
