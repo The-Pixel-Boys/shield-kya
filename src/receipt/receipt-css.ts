@@ -7,8 +7,9 @@
  * default and light rides on prefers-color-scheme, with translucency done via
  * color-mix so both schemes share one rule set.
  *
- * Tab switching is pure CSS: nav links point at #overview/#activity/#system
- * and :target shows the matching zone. The hide rules are gated behind
+ * Tab switching is pure CSS: nav links point at #overview/#certify/
+ * #activity/#system and :target shows the matching zone. The hide rules are
+ * gated behind
  * `@supports selector(body:has(*))`, so a browser without :has() simply shows
  * every zone stacked — degraded, but nothing is ever hidden unreachable.
  */
@@ -113,6 +114,17 @@ export function receiptCss(): string {
   }
   /* Hero result pill reads larger than inline status pills. */
   .hero-certify .pill { font-size: 0.82rem; padding: 0.22rem 0.75rem; }
+  /* Status legend + attested summary: small muted single lines under the
+     count tiles; allowed to wrap on narrow viewports. */
+  .hero-certify .legend, .hero-certify .att-line {
+    margin: 0.3rem 0 0; font-size: 0.72rem; color: var(--mute);
+    overflow-wrap: break-word;
+  }
+  /* Evidence one-liner sits beneath its gap row (the row is a flex-wrap). */
+  .hero-certify .rows .gap-ev {
+    flex-basis: 100%; color: var(--mute); font-size: 0.74rem;
+    overflow-wrap: break-word;
+  }
   @media (max-width: 1100px) {
     .hero { grid-template-columns: repeat(2, 1fr); }
   }
@@ -200,12 +212,14 @@ export function receiptCss(): string {
   .zone { scroll-margin-top: 6.4rem; }
   .zone-empty { margin: 0.25rem 0 0.5rem; }
   @supports selector(body:has(*)) {
-    #activity, #system { display: none; }
-    #overview:target, #activity:target, #system:target { display: block; }
+    #activity, #certify, #system { display: none; }
+    #overview:target, #activity:target, #certify:target, #system:target { display: block; }
     body:has(#activity:target) #overview,
+    body:has(#certify:target) #overview,
     body:has(#system:target) #overview { display: none; }
     body:not(:has(.zone:target)) .tab[href="#overview"],
     body:has(#overview:target) .tab[href="#overview"],
+    body:has(#certify:target) .tab[href="#certify"],
     body:has(#activity:target) .tab[href="#activity"],
     body:has(#system:target) .tab[href="#system"] {
       color: var(--fg);
@@ -325,7 +339,7 @@ export function receiptCss(): string {
     display: flex; flex-direction: column; gap: 0.3rem;
     font-size: 0.82rem;
   }
-  .rows li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.45rem; min-width: 0; }
+  .rows li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.45rem; min-width: 0; overflow-wrap: break-word; }
   .rows li.mute { color: var(--mute); }
   .rows .sid, .rows code {
     font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -336,6 +350,24 @@ export function receiptCss(): string {
   .rows .hint {
     font-size: 0.72rem; border-bottom: 1px dotted var(--mute); cursor: help;
   }
+  /* Certify detail table: domains as small-caps heading rows with mini-counts,
+     requirement rows as pill + id + title with the evidence/attestation line
+     beneath (the .rows li is a flex-wrap). */
+  .certify-detail .dom { margin-top: 0.85rem; }
+  .certify-detail .dom-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem;
+  }
+  .certify-detail h3 {
+    margin: 0; font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.07em; text-transform: uppercase; color: var(--day);
+  }
+  .certify-detail .dom-head .cnt { color: var(--mute); font-size: 0.76rem; }
+  .certify-detail .rows { margin-top: 0.35rem; }
+  .certify-detail .evi, .certify-detail .att {
+    flex-basis: 100%; font-size: 0.74rem; color: var(--mute);
+    overflow-wrap: break-word;
+  }
+  .certify-detail .att { color: var(--fg); }
   .wdot {
     width: 0.5rem; height: 0.5rem; border-radius: 50%; flex: none;
     align-self: center; background: var(--mute);
@@ -376,6 +408,8 @@ export function receiptCss(): string {
   .pill.orr-green { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
   .pill.orr-amber { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
   .pill.orr-red { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+  /* Attested tone: neutral foreground — a signed statement, not evidence. */
+  .pill.att { color: var(--fg); border-color: color-mix(in srgb, var(--fg) 35%, transparent); }
   .orrline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.55rem; }
   .orrline .disp { font-size: 0.84rem; font-weight: 600; }
   .alert {

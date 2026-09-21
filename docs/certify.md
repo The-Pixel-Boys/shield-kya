@@ -155,7 +155,7 @@ secrets. `baseUrl` is never exported.
 
 ## Live report panel
 
-The receipt report (`kya receipt`, and the live daemon from `kya start`) carries a **Certify** panel that recomputes the baseline evaluation on every render — result pill, counts, top-5 gaps. It is the same engine and the same honesty rules as `kya certify` (fail-closed on zero certifiable evidence), evaluated in memory with no files written. Static exports show a snapshot; the live daemon updates it as trail events stream in.
+The receipt report (`kya receipt`, and the live daemon from `kya start`) carries a **Certify** panel that recomputes the baseline evaluation on every render — result pill, counts, top-5 gaps. The dashboard also has a dedicated **Certify** tab with the full live requirement table — all requirements, grouped by domain, recomputed per render. It is the same engine and the same honesty rules as `kya certify` (fail-closed on zero certifiable evidence), evaluated in memory with no files written. Static exports show a snapshot; the live daemon updates it as trail events stream in.
 
 ## CI
 

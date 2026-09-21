@@ -3,6 +3,11 @@
  */
 import { assertNoSecrets, clip, stripEscapes } from "../dash/render.js";
 import { clipMultiline, DIFF_MAX_TOTAL_CHARS } from "../diff-preview.js";
+import { DOMAIN_LABELS, domainOrder } from "../certify/render.js";
+import type {
+  CertifyRequirementResult,
+  RequirementStatus,
+} from "../certify/evaluate.js";
 import { productLabel, readTrail, readTrailSince, type TrailEvent, type TrailProduct } from "../trail.js";
 import type { KyaFileConfig } from "../config.js";
 import {
@@ -725,7 +730,26 @@ function heroCertifyPanel(certify: CertifyCard | undefined): string {
 </section>`;
   }
   const state = certify.result === "pass" ? "pass" : "gap";
+  // Status legend: one muted line under the count tiles so the four numbers
+  // read as definitions, not bare counters.
+  const legend = `<p class="legend">gap = requirement failing — your work plan · insufficient = not enough local evidence to evaluate (never counts as pass) · attested = your signed statement, unverified</p>`;
+  // Attested summary: the hero's gap rows are gap-status only, so attestations
+  // surface as one line naming the first attested requirement (+N more) with
+  // its attestation text.
+  const firstAttested = certify.requirements.find((r) => r.status === "attested");
+  const attestedLine =
+    certify.attested === 0
+      ? ""
+      : firstAttested
+        ? `<p class="att-line">attested: <code>${esc(firstAttested.id)}</code>${
+            certify.attested > 1 ? ` (+${certify.attested - 1} more)` : ""
+          } — "${esc(
+            clip(firstAttested.attestation?.text ?? firstAttested.evidence, 100),
+          )}"</p>`
+        : `<p class="att-line">attested: ${certify.attested} — your signed statement, unverified</p>`;
   // topGaps arrives severity-ordered from the loader; cap defensively at 5.
+  // Each row is id — title + severity chip, with the redacted evidence
+  // one-liner beneath (clipped so the hero stays compact).
   const gaps =
     certify.topGaps.length === 0
       ? ""
@@ -734,7 +758,9 @@ ${certify.topGaps
   .slice(0, 5)
   .map(
     (g) =>
-      `    <li><code>${esc(g.id)}</code> <span class="sev ${esc(g.severity)}">${esc(g.severity)}</span></li>`,
+      `    <li><code>${esc(g.id)}</code> — ${esc(g.title)} <span class="sev ${esc(g.severity)}">${esc(g.severity)}</span>${
+        g.evidence ? `<span class="gap-ev">${esc(clip(g.evidence, 140))}</span>` : ""
+      }</li>`,
   )
   .join("\n")}
   </ul>`;
@@ -748,10 +774,82 @@ ${certify.topGaps
     ${kpiTile("Pass", certify.pass, "ok")}
     ${kpiTile("Gap", certify.gap, "warn")}
     ${kpiTile("Insufficient", certify.insufficientEvidence, "mute")}
-    ${kpiTile("Attested", certify.attested, "ok")}
+    ${kpiTile("Attested", certify.attested, "mute")}
   </div>
+  ${legend}
+  ${attestedLine}
   ${gaps}
-  <p class="mute small">live evaluation — window ${certify.windowDays}d, ${certify.trailEvents} trail events · kya certify for the full gap report + signed bundle</p>
+  <p class="mute small">live evaluation — window ${certify.windowDays}d, ${certify.trailEvents} trail events · the Certify tab has the full live requirement table · kya certify for the gap report + signed bundle</p>
+</section>`;
+}
+
+/** Detail-table pill tones, reusing the existing pill/tone system: pass is
+ * green, gap is amber, insufficient evidence keeps the neutral mute default,
+ * attested gets the neutral-foreground .att tone. */
+const DETAIL_PILL_TONE: Record<RequirementStatus, string> = {
+  pass: "ok",
+  gap: "orr-amber",
+  insufficient_evidence: "",
+  attested: "att",
+};
+
+const CERTIFY_DETAIL_TITLE_CLIP = 120;
+const CERTIFY_DETAIL_CLIP = 160;
+
+/**
+ * Certify tab body: the full live requirement table — every evaluated
+ * requirement grouped by domain, domains in catalog order (the card's
+ * requirements arrive in catalog order, so first-seen order IS the catalog
+ * order). Each domain gets a heading row with mini-counts, then one row per
+ * requirement: status pill, id, title, and a muted evidence line beneath —
+ * or the attestation text for attested rows. Empty input yields "" so the
+ * caller falls back to the zone-empty hint (fail-closed: no table without
+ * data).
+ */
+function certifyDetailPanel(
+  requirements: readonly CertifyRequirementResult[],
+): string {
+  if (requirements.length === 0) return "";
+  const sections = domainOrder(requirements)
+    .map((domain) => {
+      const rows = requirements.filter((r) => r.domain === domain);
+      const counts = { pass: 0, gap: 0, insufficient: 0, attested: 0 };
+      for (const r of rows) {
+        if (r.status === "pass") counts.pass++;
+        else if (r.status === "gap") counts.gap++;
+        else if (r.status === "attested") counts.attested++;
+        else counts.insufficient++;
+      }
+      const items = rows
+        .map((r) => {
+          const tone = DETAIL_PILL_TONE[r.status];
+          const pill = `<span class="pill${tone ? ` ${tone}` : ""}">${esc(
+            r.status.replace(/_/g, " "),
+          )}</span>`;
+          const detail = r.attestation
+            ? `<span class="att">attested ${esc(r.attestation.at)} — "${esc(
+                clip(r.attestation.text, CERTIFY_DETAIL_CLIP),
+              )}"</span>`
+            : r.evidence
+              ? `<span class="evi">${esc(clip(r.evidence, CERTIFY_DETAIL_CLIP))}</span>`
+              : "";
+          return `      <li>${pill} <code>${esc(r.id)}</code> — ${esc(
+            clip(r.title, CERTIFY_DETAIL_TITLE_CLIP),
+          )}${detail}</li>`;
+        })
+        .join("\n");
+      const label = DOMAIN_LABELS[domain] ?? domain;
+      return `  <section class="dom" aria-label="${esc(label)}">
+    <div class="dom-head"><h3>${esc(label)}</h3><span class="cnt">${counts.pass} pass · ${counts.gap} gap · ${counts.insufficient} insufficient · ${counts.attested} attested</span></div>
+    <ul class="rows">
+${items}
+    </ul>
+  </section>`;
+    })
+    .join("\n");
+  return `<section class="panel certify-detail" aria-label="Certify detail">
+  <h2>Every requirement — live evaluation</h2>
+${sections}
 </section>`;
 }
 
@@ -906,7 +1004,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   // this script. KNOWN is space-delimited so `indexOf(' '+g+' ')` doubles as a
   // prototype-safe whitelist ('constructor' etc. never match).
   // Filter state persists in the ?f= QUERY param, not the hash: the hash is
-  // owned by the pure-CSS :target tabs (#overview/#activity/#system), so a
+  // owned by the pure-CSS :target tabs (#overview/#certify/#activity/#system), so a
   // hash-based filter would hide the Activity zone on every chip toggle and
   // every tab click would wipe the filter. Legacy #f= hashes are still parsed
   // on load (read-only); the next save writes the ?f= form and drops the
@@ -1024,6 +1122,10 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     [dashboardPanel(dashboard), sessionsPanel(agg, nowMs), reasonsPanel(agg)],
     "No activity in this window yet — analytics appear once events land.",
   );
+  const certifyBody = zoneBody(
+    [model.certify ? certifyDetailPanel(model.certify.requirements) : ""],
+    "No live evaluation yet — wrap tool calls and run kya certify to build the baseline.",
+  );
   const systemBody = zoneBody(
     [
       wiredHostsPanel(model.wiredHosts),
@@ -1054,6 +1156,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     </header>
     <nav class="tabs" aria-label="Report sections">
       <a class="tab" id="tab-overview" href="#overview">Overview</a>
+      <a class="tab" id="tab-certify" href="#certify">Certify</a>
       <a class="tab" id="tab-activity" href="#activity">Activity</a>
       <a class="tab" id="tab-system" href="#system">System</a>
     </nav>
@@ -1067,6 +1170,9 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   </div>
   <section class="zone" id="overview" aria-labelledby="tab-overview">
     ${overviewBody}
+  </section>
+  <section class="zone" id="certify" aria-labelledby="tab-certify">
+    ${certifyBody}
   </section>
   <section class="zone" id="activity" aria-labelledby="tab-activity">
     <div class="feed-head">
@@ -1164,11 +1270,11 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     if (c.topGaps.length > 0) {
       lines.push("Top gaps:");
       for (const g of c.topGaps) {
-        lines.push(`- \`${mdInline(g.id)}\` — ${mdText(g.severity)}`);
+        lines.push(`- \`${mdInline(g.id)}\` — ${mdText(g.title)} (${mdText(g.severity)})`);
       }
     }
     lines.push(
-      `live evaluation — window ${c.windowDays}d, ${c.trailEvents} trail events · kya certify for the full gap report + signed bundle`,
+      `live evaluation — window ${c.windowDays}d, ${c.trailEvents} trail events · the Certify tab has the full live requirement table · kya certify for the gap report + signed bundle`,
       "",
     );
   }

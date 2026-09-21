@@ -351,7 +351,7 @@ describe("renderReceiptHtml sections", () => {
     // Identity line: name/id · host · baseUrl, as inert text (no link).
     expect(html).toContain("refund-bot/agt-1 · ide · http://127.0.0.1:8090");
     // Loader output is never linked — the only anchors in the page are the
-    // in-page tab nav (#overview/#activity/#system).
+    // in-page tab nav (#overview/#certify/#activity/#system).
     expect(html).not.toMatch(/<a [^>]*href="(?!#)/);
     // Mode chips are distinct from the Hold verdict chip.
     expect(html).toContain("Mode: observe");

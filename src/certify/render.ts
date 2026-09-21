@@ -10,7 +10,8 @@ import type {
   RequirementStatus,
 } from "./evaluate.js";
 
-const DOMAIN_LABELS: Record<string, string> = {
+/** Shared domain display labels — the receipt Certify tab uses these too. */
+export const DOMAIN_LABELS: Record<string, string> = {
   "data-privacy": "Data & Privacy",
   security: "Security",
   safety: "Safety",
@@ -19,10 +20,12 @@ const DOMAIN_LABELS: Record<string, string> = {
   society: "Society",
 };
 
-/** Catalog order of domains, derived from requirement order in the report. */
-export function domainOrder(report: CertifyReport): string[] {
+/** Catalog order of domains, derived from requirement order. */
+export function domainOrder(
+  requirements: readonly { domain: string }[],
+): string[] {
   const seen: string[] = [];
-  for (const r of report.requirements) {
+  for (const r of requirements) {
     if (!seen.includes(r.domain)) seen.push(r.domain);
   }
   return seen;
@@ -62,7 +65,7 @@ export function formatCertifyMarkdown(report: CertifyReport): string {
     }
   }
   lines.push("");
-  for (const domain of domainOrder(report)) {
+  for (const domain of domainOrder(report.requirements)) {
     const rows = report.requirements.filter((r) => r.domain === domain);
     if (rows.length === 0) continue;
     lines.push(
@@ -132,7 +135,7 @@ ${gaps
   )
   .join("\n")}
 </ol>`;
-  const domainSections = domainOrder(report)
+  const domainSections = domainOrder(report.requirements)
     .map((domain) => {
       const rows = report.requirements.filter((r) => r.domain === domain);
       if (rows.length === 0) return "";
