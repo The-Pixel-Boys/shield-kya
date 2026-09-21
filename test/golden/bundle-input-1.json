@@ -1,0 +1,24 @@
+{
+  "report": {
+    "format": "shield-kya-certify-report",
+    "version": 1,
+    "generatedAt": "2026-09-18T12:00:00.000Z",
+    "catalog": { "id": "agent-trust-baseline", "version": "0.1.0", "updated": "2026-09-18" },
+    "window": { "days": 30, "since": "2026-08-19T12:00:00.000Z", "until": "2026-09-18T12:00:00.000Z" },
+    "trail": {
+      "eventCount": 2,
+      "verdictMix": { "ALLOW": 1, "DENY": 1, "REQUIRE_APPROVE": 0 },
+      "modes": { "observe": 1, "hold": 1, "offline": 0 }
+    },
+    "requirements": [
+      { "id": "DP-02", "domain": "data-privacy", "title": "No high-stakes writes allowed in hold mode", "severity": "critical", "status": "pass", "evidence": "0/2 events match verdict=ALLOW reason=HIGH_STAKES_WRITE mode=hold in 30d" },
+      { "id": "SOC-01", "domain": "society", "title": "Acceptable-use policy", "severity": "high", "status": "attested", "evidence": "attested 2026-09-01T00:00:00.000Z", "attestation": { "text": "AUP at https://example.com/aup", "at": "2026-09-01T00:00:00.000Z" } }
+    ],
+    "overall": { "pass": 1, "gap": 0, "insufficientEvidence": 0, "attested": 1, "result": "pass" }
+  },
+  "windowEvents": [
+    { "ts": "2026-09-10T10:00:00.000Z", "sessionId": "s1", "toolId": "Read", "verdict": "ALLOW", "reasonCode": "LOW_RISK_READ", "mode": "observe", "product": "claude", "project": "demo" },
+    { "ts": "2026-09-11T10:00:00.000Z", "sessionId": "s1", "toolId": "Bash", "verdict": "DENY", "reasonCode": "SHELL_EXEC", "mode": "hold", "product": "claude", "project": "demo" }
+  ],
+  "agent": { "agentId": "ag_golden1", "agentName": "golden-agent", "host": "ide" }
+}

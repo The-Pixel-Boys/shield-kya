@@ -11,6 +11,8 @@ export {
   writeFileConfig,
   configDir,
   configFilePath,
+  resolveGateMode,
+  type GateMode,
   type Host,
   type KyaFileConfig,
   type ResolvedConfig,
@@ -84,3 +86,57 @@ export {
   type ShowbackReport,
 } from "./showback/cost-per-task.js";
 export { estimateRequestUsd, lookupRate, PUBLISHED_MODEL_RATES } from "./showback/rates.js";
+export {
+  runCertify,
+  certifyOptionsFromArgs,
+  formatCertifySummary,
+  countReceipts,
+  type CertifyCliOptions,
+  type CertifyOptions,
+  type CertifyResult,
+} from "./commands/certify.js";
+export {
+  loadCatalog,
+  validateCatalog,
+  defaultCatalogPath,
+  MAX_CATALOG_BYTES,
+  type Catalog,
+  type CatalogRequirement,
+  type RequirementCheck,
+  type RequirementSeverity,
+  type TrailMatch,
+} from "./certify/catalog.js";
+export {
+  evaluateRequirement,
+  matchEvent,
+  trailWindow,
+  type CertifyReport,
+  type CertifyRequirementResult,
+  type CertifyTrailStats,
+  type EvidenceContext,
+  type RequirementAttestation,
+  type RequirementStatus,
+} from "./certify/evaluate.js";
+export {
+  attestationsPath,
+  loadAttestations,
+  recordAttestation,
+  type AttestationRecord,
+} from "./certify/attest.js";
+export { formatCertifyMarkdown, renderCertifyHtml } from "./certify/render.js";
+export { loadOrrCategoryRatings } from "./receipt/enrich.js";
+export {
+  buildEvidenceBundle,
+  evidenceKeyFromSerialized,
+  evidenceKeyPath,
+  fingerprintSpki,
+  loadOrCreateEvidenceKey,
+  signCanonicalPayload,
+  verifyBundleSignature,
+  EVIDENCE_BUNDLE_FORMAT,
+  EVIDENCE_BUNDLE_VERSION,
+  type BundleAgent,
+  type EvidenceBundleInput,
+  type EvidenceKey,
+  type SerializedEvidenceKey,
+} from "./sign/evidence-bundle.js";
