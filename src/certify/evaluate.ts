@@ -1,6 +1,6 @@
 /**
  * Agent Trust Baseline evaluators. Pure functions over a pre-assembled
- * EvidenceContext — no I/O here; all loading lives in commands/certify.ts.
+ * EvidenceContext — no I/O here; all loading lives in certify/context.ts.
  * Evidence only: never a second PEP, never ALLOWs anything. Empty evidence
  * windows yield insufficient_evidence, never a vacuous pass.
  */
@@ -90,7 +90,56 @@ export interface EvidenceContext {
   readonly attestations: ReadonlyMap<string, RequirementAttestation>;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+export const DAY_MS = 24 * 60 * 60 * 1000;
+
+export interface CertifyOverallCounts {
+  readonly pass: number;
+  readonly gap: number;
+  readonly insufficientEvidence: number;
+  readonly attested: number;
+}
+
+export function countRequirements(
+  requirements: readonly CertifyRequirementResult[],
+): CertifyOverallCounts {
+  const counts = { pass: 0, gap: 0, insufficientEvidence: 0, attested: 0 };
+  for (const r of requirements) {
+    if (r.status === "pass") counts.pass++;
+    else if (r.status === "gap") counts.gap++;
+    else if (r.status === "attested") counts.attested++;
+    else counts.insufficientEvidence++;
+  }
+  return counts;
+}
+
+/**
+ * Fail-closed overall: zero certifiable evidence (all insufficient_evidence)
+ * must never headline as pass — a green badge requires real evidence.
+ * Shared by runCertify and computeLiveCertify so they can never diverge.
+ */
+export function computeOverall(
+  counts: CertifyOverallCounts,
+): CertifyReport["overall"] {
+  return {
+    ...counts,
+    result: counts.gap > 0 ? "gap" : counts.pass + counts.attested > 0 ? "pass" : "gap",
+  };
+}
+
+export function trailStats(events: readonly TrailEvent[]): CertifyTrailStats {
+  const verdictMix = { ALLOW: 0, DENY: 0, REQUIRE_APPROVE: 0 };
+  const modes = { observe: 0, hold: 0, offline: 0 };
+  for (const e of events) {
+    const v = e.verdict.toUpperCase();
+    if (v === "ALLOW") verdictMix.ALLOW++;
+    else if (v === "DENY") verdictMix.DENY++;
+    else if (v === "REQUIRE_APPROVE") verdictMix.REQUIRE_APPROVE++;
+    if (e.mode === "observe") modes.observe++;
+    else if (e.mode === "hold") modes.hold++;
+    else modes.offline++;
+  }
+  return { eventCount: events.length, verdictMix, modes };
+}
 
 export function matchEvent(e: TrailEvent, m: TrailMatch): boolean {
   if (m.verdict !== undefined && e.verdict.toUpperCase() !== m.verdict.toUpperCase()) {

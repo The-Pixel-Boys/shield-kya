@@ -108,8 +108,12 @@ export {
 } from "./certify/catalog.js";
 export {
   evaluateRequirement,
+  computeOverall,
+  countRequirements,
   matchEvent,
+  trailStats,
   trailWindow,
+  type CertifyOverallCounts,
   type CertifyReport,
   type CertifyRequirementResult,
   type CertifyTrailStats,
@@ -117,6 +121,7 @@ export {
   type RequirementAttestation,
   type RequirementStatus,
 } from "./certify/evaluate.js";
+export { computeLiveCertify } from "./certify/live.js";
 export {
   attestationsPath,
   loadAttestations,

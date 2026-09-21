@@ -4,41 +4,28 @@
  * DENYs, or blocks anything. Local-first: no network, no account, no key check.
  */
 
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { kyaHome, resolveGateMode } from "../config.js";
 import { assertNoSecrets } from "../dash/render.js";
 import { UsageError } from "../errors.js";
 import { flagBool, flagString, type ParsedArgs } from "../parse-args.js";
 import { loadCatalog } from "../certify/catalog.js";
+import { assembleEvidenceContext } from "../certify/context.js";
 import {
+  computeOverall,
+  countRequirements,
+  DAY_MS,
   evaluateRequirement,
+  trailStats,
   trailWindow,
   type CertifyReport,
-  type CertifyTrailStats,
-  type EvidenceContext,
 } from "../certify/evaluate.js";
 import { formatCertifyMarkdown, renderCertifyHtml } from "../certify/render.js";
 import {
-  loadAttestations,
   recordAttestation,
   type AttestationRecord,
 } from "../certify/attest.js";
-import {
-  loadIdentity,
-  loadOrrCard,
-  loadOrrCategoryRatings,
-  loadSandboxes,
-  loadShowbackCard,
-  loadWiredHosts,
-} from "../receipt/enrich.js";
-import { readTrail, receiptsDir, type TrailEvent } from "../trail.js";
+import { loadIdentity } from "../receipt/enrich.js";
 import {
   buildEvidenceBundle,
   loadOrCreateEvidenceKey,
@@ -128,31 +115,9 @@ export function certifyOptionsFromArgs(parsed: ParsedArgs): CertifyCliOptions {
   };
 }
 
-/** Receipt artifacts (html/json/md) in .kya/receipts. */
-export function countReceipts(cwd: string): number {
-  try {
-    const dir = receiptsDir(cwd);
-    if (!existsSync(dir) || !statSync(dir).isDirectory()) return 0;
-    return readdirSync(dir).filter((n) => /\.(html|json|md)$/i.test(n)).length;
-  } catch {
-    return 0;
-  }
-}
-
-function trailStats(events: readonly TrailEvent[]): CertifyTrailStats {
-  const verdictMix = { ALLOW: 0, DENY: 0, REQUIRE_APPROVE: 0 };
-  const modes = { observe: 0, hold: 0, offline: 0 };
-  for (const e of events) {
-    const v = e.verdict.toUpperCase();
-    if (v === "ALLOW") verdictMix.ALLOW++;
-    else if (v === "DENY") verdictMix.DENY++;
-    else if (v === "REQUIRE_APPROVE") verdictMix.REQUIRE_APPROVE++;
-    if (e.mode === "observe") modes.observe++;
-    else if (e.mode === "hold") modes.hold++;
-    else modes.offline++;
-  }
-  return { eventCount: events.length, verdictMix, modes };
-}
+// Lives in certify/context.ts next to the assembly that consumes it;
+// re-exported here to keep the existing import surface stable.
+export { countReceipts } from "../certify/context.js";
 
 export function runCertify(options: CertifyOptions): CertifyResult {
   const catalog = loadCatalog(options.catalogPath);
@@ -167,33 +132,13 @@ export function runCertify(options: CertifyOptions): CertifyResult {
     attestationRecorded = recordAttestation(options.cwd, wanted, options.attest.text);
   }
 
-  const events = readTrail(options.cwd, options.env);
-  const wiredHosts = loadWiredHosts(options.cwd, kyaHome(options.env));
-  const sandboxes = loadSandboxes(options.cwd, options.env);
-  const ctx: EvidenceContext = {
-    now,
-    events,
-    // The shared resolver the gate itself uses (config.ts) — certify can
-    // never report a mode the gate would not actually run.
-    gateMode: resolveGateMode({ cwd: options.cwd, env: options.env }),
-    wiredHostCount: wiredHosts.filter((h) => h.wired !== "none").length,
-    orr: loadOrrCard(options.cwd),
-    orrCategories: loadOrrCategoryRatings(options.cwd),
-    sandboxCount: sandboxes.sandboxes.length,
-    receiptCount: countReceipts(options.cwd),
-    showbackPresent: loadShowbackCard(options.cwd) !== undefined,
-    attestations: loadAttestations(options.cwd),
-  };
+  const ctx = assembleEvidenceContext(options.cwd, options.env, now);
 
   const requirements = catalog.requirements.map((r) => evaluateRequirement(r, ctx));
-  const inWindow = trailWindow(events, options.windowDays, now);
-  const counts = { pass: 0, gap: 0, insufficientEvidence: 0, attested: 0 };
-  for (const r of requirements) {
-    if (r.status === "pass") counts.pass++;
-    else if (r.status === "gap") counts.gap++;
-    else if (r.status === "attested") counts.attested++;
-    else counts.insufficientEvidence++;
-  }
+  // Report-window stats/bundle filtering stays here (0.6.0): ctx.events is
+  // the full trail; per-check windows are owned by the evaluators.
+  const inWindow = trailWindow(ctx.events, options.windowDays, now);
+  const counts = countRequirements(requirements);
   const report: CertifyReport = {
     format: "shield-kya-certify-report",
     version: 1,
@@ -201,17 +146,12 @@ export function runCertify(options: CertifyOptions): CertifyResult {
     catalog: { id: catalog.id, version: catalog.version, updated: catalog.updated },
     window: {
       days: options.windowDays,
-      since: new Date(now.getTime() - options.windowDays * 24 * 60 * 60 * 1000).toISOString(),
+      since: new Date(now.getTime() - options.windowDays * DAY_MS).toISOString(),
       until: now.toISOString(),
     },
     trail: trailStats(inWindow),
     requirements,
-    overall: {
-      ...counts,
-      // Fail-closed: zero certifiable evidence (all insufficient_evidence)
-      // must never headline as pass — a green badge requires real evidence.
-      result: counts.gap > 0 ? "gap" : counts.pass + counts.attested > 0 ? "pass" : "gap",
-    },
+    overall: computeOverall(counts),
   };
 
   const outDir = resolve(options.cwd, options.out);

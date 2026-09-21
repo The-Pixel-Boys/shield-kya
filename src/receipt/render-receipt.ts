@@ -6,11 +6,13 @@ import { clipMultiline, DIFF_MAX_TOTAL_CHARS } from "../diff-preview.js";
 import { productLabel, readTrail, readTrailSince, type TrailEvent, type TrailProduct } from "../trail.js";
 import type { KyaFileConfig } from "../config.js";
 import {
+  loadCertifyCard,
   loadIdentity,
   loadOrrCard,
   loadSandboxes,
   loadShowbackCard,
   loadWiredHosts,
+  type CertifyCard,
   type OrrCard,
   type SandboxCard,
   type WiredHostRow,
@@ -43,6 +45,8 @@ export interface ReceiptModel {
   readonly wiredHosts?: readonly WiredHostRow[];
   /** Slim ORR card from orr-report/report.json. */
   readonly orr?: OrrCard;
+  /** Live Agent Trust Baseline card, recomputed on every model load. */
+  readonly certify?: CertifyCard;
   /** Observe-only showback from .kya/usage.json. */
   readonly showback?: ShowbackReport;
 }
@@ -269,6 +273,7 @@ export function buildReceiptModel(
     sandboxes: extras?.sandboxes,
     wiredHosts: extras?.wiredHosts,
     orr: extras?.orr,
+    certify: extras?.certify,
     showback: extras?.showback,
   };
 }
@@ -292,6 +297,7 @@ export function buildWindowReceiptModel(
     sandboxes: extras?.sandboxes,
     wiredHosts: extras?.wiredHosts,
     orr: extras?.orr,
+    certify: extras?.certify,
     showback: extras?.showback,
   };
 }
@@ -313,6 +319,7 @@ export function loadReceiptModel(input: {
     sandboxes: loadSandboxes(input.cwd),
     wiredHosts: loadWiredHosts(input.cwd),
     orr: loadOrrCard(input.cwd),
+    certify: loadCertifyCard(input.cwd),
     showback,
     spend: showback
       ? {
@@ -685,6 +692,36 @@ function orrPanel(orr: OrrCard | undefined, nowMs: number): string {
   ${failure}
   ${fix}
   <p class="mute small">scorecards: ${orr.scorecards.pass} pass · ${orr.scorecards.fail} fail · ${orr.scorecards.partial} partial · ${orr.scorecards.notEvaluated} n/e${when}</p>
+</section>`;
+}
+
+function certifyPanel(certify: CertifyCard | undefined): string {
+  if (!certify) return "";
+  const chips = [
+    ["Pass", certify.pass],
+    ["Gap", certify.gap],
+    ["Insufficient", certify.insufficientEvidence],
+    ["Attested", certify.attested],
+  ]
+    .map(([label, n]) => `<span class="stat">${label}<b>${n}</b></span>`)
+    .join("");
+  const gaps =
+    certify.topGaps.length === 0
+      ? ""
+      : `<ul class="rows">
+${certify.topGaps
+  .map((g) => `    <li><code>${esc(g.id)}</code> — ${esc(g.severity)}</li>`)
+  .join("\n")}
+  </ul>`;
+  // Pill tones reuse the ORR panel's classes: pass is green, gap is amber.
+  return `<section class="panel" aria-label="Certify">
+  <h2>Certify — Agent Trust Baseline</h2>
+  <div class="orrline">
+    <span class="pill orr-${certify.result === "pass" ? "green" : "amber"}">${esc(certify.result)}</span>
+  </div>
+  <div class="stats">${chips}</div>
+  ${gaps}
+  <p class="mute small">live evaluation — window ${certify.windowDays}d, ${certify.trailEvents} trail events · kya certify for the full gap report + signed bundle</p>
 </section>`;
 }
 
@@ -1250,6 +1287,7 @@ ${renderFeed(events, nowMs, model.live)}
   ${wiredHostsPanel(model.wiredHosts)}
   ${sandboxesPanel(model.sandboxes, nowMs)}
   ${orrPanel(model.orr, nowMs)}
+  ${certifyPanel(model.certify)}
   ${showbackPanel(model.showback)}
   ${toolsHtml}
 </main>
@@ -1439,6 +1477,24 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     if (orr.mostUrgentFix) lines.push(`Most urgent fix: ${mdText(orr.mostUrgentFix)}`);
     lines.push(
       `scorecards: ${orr.scorecards.pass} pass · ${orr.scorecards.fail} fail · ${orr.scorecards.partial} partial · ${orr.scorecards.notEvaluated} n/e${orr.generatedAt ? ` · ${relativeTime(orr.generatedAt, nowMs)}` : ""}`,
+      "",
+    );
+  }
+
+  if (model.certify) {
+    const c = model.certify;
+    lines.push(
+      "## Certify",
+      `result: ${c.result} · counts: ${c.pass} pass · ${c.gap} gap · ${c.insufficientEvidence} insufficient · ${c.attested} attested`,
+    );
+    if (c.topGaps.length > 0) {
+      lines.push("Top gaps:");
+      for (const g of c.topGaps) {
+        lines.push(`- \`${mdInline(g.id)}\` — ${mdText(g.severity)}`);
+      }
+    }
+    lines.push(
+      `live evaluation — window ${c.windowDays}d, ${c.trailEvents} trail events · kya certify for the full gap report + signed bundle`,
       "",
     );
   }
