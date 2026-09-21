@@ -107,6 +107,8 @@ Install hub: [https://shield-agent.com/install](https://shield-agent.com/install
 
 One trail for all projects: `~/.kya/trail.jsonl` (`KYA_HOME` overrides `~`). `kya receipt --open` from any directory shows activity from every project. Each event carries its project folder name — the report adds a Projects rollup once two or more projects appear, and shows the project on each feed entry. Older per-project `<project>/.kya/trail.jsonl` files are still read and merged; no migration. The trail is capped at 1 MB (tail-read: oldest events drop away), shared across all projects.
 
+The report itself is a dashboard: a hero row on top (live **Certify** result, verdict mix, activity sparkline, showback) with tabbed sections below — **Overview** (analytics, sessions, reasons), **Activity** (the filterable event feed), **System** (wired hosts, sandboxes, ORR). Everything is one standalone offline HTML page; the live daemon from `kya start` re-renders it on every event.
+
 ## Dual plane
 
 ```
@@ -157,7 +159,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.7.0", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.8.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -184,7 +186,7 @@ npx @shield-agent/kya reject --id <approval-id>
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.7.0 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.8.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -195,7 +197,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.7.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.8.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
