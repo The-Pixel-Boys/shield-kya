@@ -1,7 +1,7 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.9.0",
-  "description": "Know Your Agent light CLI + local MCP gate (provider-agnostic, zero vertical packs required).",
+  "version": "0.9.1",
+  "description": "Audit trail & traceability for AI agents — local MCP gate (Allow/Review/Deny), live receipt dashboard, trust-baseline certification.",
   "license": "MIT",
   "type": "module",
   "mcpName": "io.github.The-Pixel-Boys/shield-kya",
