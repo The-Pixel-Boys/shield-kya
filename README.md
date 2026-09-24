@@ -8,7 +8,7 @@
 [![X](https://img.shields.io/badge/X-%40coscosmico-000000?logo=x&logoColor=white)](https://x.com/coscosmico)
 
 
-Gate agent tool calls (Allow / Review / Deny) before they write or deploy. Local activity receipt included. Free forever under MIT.
+**Audit trail & traceability for AI agents.** Every tool call your coding agents make — gated (Allow / Review / Deny), recorded on a live local dashboard, and certifiable against the Agent Trust Baseline. One command. Free forever under MIT.
 
 ```bash
 npm i -g @shield-agent/kya@latest && kya start
@@ -45,9 +45,13 @@ Run it in your project directory. (From a clone of this repo, `./scripts/install
 
 That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/mcp.json` → `kya serve-mcp --stdio`), also **wires user-level configs for every installed host it detects** (`~/.claude.json`, `~/.kimi-code/`, `~/.grok/`, `~/.cursor/`, …), and **opens** the live activity report. The report runs in the background — you get your terminal back; `kya stop` stops it, `kya receipt --open` reopens it. Cursor, Kiro, Qwen, Amp, Droid, Cline, and Grok pick the server up live with no restart (Kimi: just a new session); Claude Code, Codex, OpenCode, Gemini, Copilot CLI, and Kilo CLI load it on next launch — `claude --resume` keeps your conversation.
 
-![KYA activity receipt — agent tool trail with Allow / Deny / Review](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/activity-receipt.png)
+![KYA report — live dashboard: Certify trust baseline, verdicts, analytics](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-overview.png)
 
-<!-- Local path kept in package for offline viewers: assets/activity-receipt.png -->
+![Certify tab — full Agent Trust Baseline requirement table with evidence](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-certify.png)
+
+![Activity tab — filterable agent tool-call feed with verdicts](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-activity.png)
+
+<!-- Local paths kept in package for offline viewers: assets/report-overview.png, assets/report-certify.png, assets/report-activity.png (legacy: assets/activity-receipt.png) -->
 
 ```bash
 kya start --no-open   # wire only
@@ -159,7 +163,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.9.0", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.9.1", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -186,7 +190,7 @@ npx @shield-agent/kya reject --id <approval-id>
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.9.0 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.9.1 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -197,7 +201,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.9.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.9.1 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
