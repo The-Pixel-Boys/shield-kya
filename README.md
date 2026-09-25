@@ -51,7 +51,9 @@ That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/m
 
 ![Activity tab — filterable agent tool-call feed with verdicts](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-activity.png)
 
-<!-- Local paths kept in package for offline viewers: assets/report-overview.png, assets/report-certify.png, assets/report-activity.png (legacy: assets/activity-receipt.png) -->
+![Changes tab — what actually changed per session: files touched with redacted diff previews](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-changes.png)
+
+<!-- Local paths kept in package for offline viewers: assets/report-overview.png, assets/report-certify.png, assets/report-activity.png, assets/report-changes.png (legacy: assets/activity-receipt.png) -->
 
 ```bash
 kya start --no-open   # wire only
