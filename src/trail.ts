@@ -43,6 +43,8 @@ export interface TrailEvent {
   readonly summary?: string;
   /** Clipped redacted change preview (never full patch). */
   readonly diffPreview?: string;
+  /** Clipped redacted target file path (never raw args). */
+  readonly targetPath?: string;
 }
 
 export function globalTrailPath(env: NodeJS.ProcessEnv = process.env): string {
@@ -185,6 +187,7 @@ function parseTrailEvent(raw: unknown): TrailEvent | undefined {
     ...(typeof e.argsHash === "string" ? { argsHash: e.argsHash } : {}),
     ...(typeof e.summary === "string" ? { summary: e.summary } : {}),
     ...(typeof e.diffPreview === "string" ? { diffPreview: e.diffPreview } : {}),
+    ...(typeof e.targetPath === "string" ? { targetPath: e.targetPath } : {}),
   };
 }
 

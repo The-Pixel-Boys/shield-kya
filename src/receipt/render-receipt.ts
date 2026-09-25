@@ -27,6 +27,7 @@ import {
   type ShowbackReport,
 } from "../showback/cost-per-task.js";
 import { computeDashboard, type Dashboard, type DashboardRow, type ToolWorst } from "./dashboard.js";
+import { buildChangesModel, type ChangesModel } from "./changes.js";
 import { receiptCss } from "./receipt-css.js";
 
 export interface ReceiptModel {
@@ -394,6 +395,7 @@ function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean
       ` data-plane="${esc(e.host?.trim() || "unknown")}"` +
       ` data-product="${esc(e.product ?? "other")}"` +
       ` data-tool="${esc(clip(e.toolId, 60))}"` +
+      ` data-session="${esc(e.sessionId || "unknown")}"` +
       (project ? ` data-project="${esc(project)}"` : "");
     parts.push(`<article class="ev ${t}${never ? " never" : ""}" ${dataAttrs}>
   <div class="rail" aria-hidden="true"><span class="tick"></span></div>
@@ -414,6 +416,72 @@ function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean
 </article>`);
   }
   return parts.join("\n");
+}
+
+/** Worst-change pill tone, reusing the pill palette: allow ok, review amber, deny/never red. */
+function changeWorstPill(worst: ToolWorst): string {
+  const cls = worst === "allow" ? "ok" : worst === "review" ? "orr-amber" : "orr-red";
+  return `<span class="pill ${cls}">${worst}</span>`;
+}
+
+/**
+ * Changes tab body: session → file → chronological entries, each entry
+ * carrying the same clipped preview the feed renders. Entries are stamped
+ * with the full filter facet set (like feed articles) so the chip engine
+ * filters them; file/session groups are collapsed client-side when every
+ * entry inside is filtered out.
+ */
+function changesPanel(changes: ChangesModel, nowMs: number): string {
+  if (changes.sessions.length === 0) {
+    return `<p class="empty">No recorded changes yet — write/edit tool calls will show up here.</p>`;
+  }
+  return changes.sessions
+    .map((s) => {
+      const files = s.files
+        .map((f) => {
+          const entries = f.entries
+            .map((e) => {
+              const t = tone(e.verdict);
+              const project = e.project?.trim();
+              const dataAttrs =
+                `data-verdict="${esc(e.verdict.toUpperCase())}"` +
+                (e.never ? ` data-never="1"` : "") +
+                ` data-mode="${esc(e.mode)}"` +
+                ` data-plane="${esc(e.host?.trim() || "unknown")}"` +
+                ` data-product="${esc(e.product ?? "other")}"` +
+                ` data-tool="${esc(clip(e.toolId, 60))}"` +
+                ` data-session="${esc(s.sessionId)}"` +
+                (project ? ` data-project="${esc(project)}"` : "");
+              return `      <div class="chg-entry ${t}${e.never ? " never" : ""}" ${dataAttrs}>
+        <div class="top">
+          <span class="verdict">${esc(verdictWord(e.verdict))}</span>${modeBadge(e.mode)}
+          <code class="tool">${esc(e.toolId)}</code>
+          <time class="when" datetime="${esc(e.ts)}" title="${esc(e.ts)}">${esc(clock(e.ts))} <span class="rel">${esc(relativeTime(e.ts, nowMs))}</span></time>
+        </div>
+        <details class="diff"><summary>Change preview</summary><pre>${esc(e.preview)}</pre></details>
+      </div>`;
+            })
+            .join("\n");
+          return `    <div class="chg-file">
+      <div class="chg-file-head">
+        <code class="path" title="${esc(f.path)}">${esc(clip(f.path, 80))}</code>
+        <span class="cnt">${f.writes} write${f.writes === 1 ? "" : "s"}</span>
+        ${changeWorstPill(f.worst)}
+      </div>
+${entries}
+    </div>`;
+        })
+        .join("\n");
+      return `  <div class="chg-session">
+    <div class="chg-sess-head">
+      <code class="sid" title="${esc(s.sessionId)}">${esc(clip(s.sessionId, 24))}</code>
+      <span class="cnt">${s.fileCount} file${s.fileCount === 1 ? "" : "s"} · ${s.changeCount} change${s.changeCount === 1 ? "" : "s"}</span>
+      <span class="rel">${esc(relativeTime(s.lastTs, nowMs))}</span>
+    </div>
+${files}
+  </div>`;
+    })
+    .join("\n");
 }
 
 function identityLine(identity: KyaFileConfig | undefined): string {
@@ -463,17 +531,28 @@ function statChips(agg: EventAggregates): {
   };
 }
 
-function sessionsPanel(agg: EventAggregates, nowMs: number): string {
+function sessionsPanel(agg: EventAggregates, nowMs: number, changes: ChangesModel): string {
   if (agg.sessions.length === 0) return "";
+  const filesBySession = new Map(changes.sessions.map((s) => [s.sessionId, s.fileCount]));
+  // Rows are filter toggles on the same data-fgroup/data-fvalue contract as
+  // the header chips and dashboard rows (see statChips).
   const rows = agg.sessions
-    .map(
-      (s) => `<li>
-      <span class="wdot ${s.worst}" title="worst verdict: ${s.worst}"></span>
-      <code class="sid" title="${esc(s.sessionId)}">${esc(clip(s.sessionId, 24))}</code>
-      <span class="cnt">${s.events} event${s.events === 1 ? "" : "s"}</span>
-      <span class="rel">${esc(relativeTime(s.lastTs, nowMs))}</span>
-    </li>`,
-    )
+    .map((s) => {
+      const files = filesBySession.get(s.sessionId) ?? 0;
+      const filesMeta =
+        files > 0
+          ? `<span class="cnt">${files} file${files === 1 ? "" : "s"} changed</span>`
+          : "";
+      return `<li>
+      <button type="button" class="sess-item" data-fgroup="session" data-fvalue="${esc(s.sessionId)}" aria-pressed="false" title="Filter: session ${esc(clip(s.sessionId, 24))}">
+        <span class="wdot ${s.worst}" title="worst verdict: ${s.worst}"></span>
+        <code class="sid" title="${esc(s.sessionId)}">${esc(clip(s.sessionId, 24))}</code>
+        <span class="cnt">${s.events} event${s.events === 1 ? "" : "s"}</span>
+        ${filesMeta}
+        <span class="rel">${esc(relativeTime(s.lastTs, nowMs))}</span>
+      </button>
+    </li>`;
+    })
     .join("\n");
   return `<section class="panel" aria-label="Sessions">
   <h2>Sessions</h2>
@@ -944,21 +1023,30 @@ ${topRuns
 </section>`;
 }
 
-export function renderReceiptHtml(model: ReceiptModel): string {
-  const nowMs = Date.now();
-  const events = [...model.events].map((e) => ({
+/**
+ * Defensive normalization for untrusted trail fields before rendering.
+ * clip() flattens newlines (single-line contexts: code spans, headers);
+ * diffPreview keeps them via clipMultiline so <pre>/fenced diffs survive.
+ */
+function normalizeTrailEvents(events: readonly TrailEvent[]): TrailEvent[] {
+  return events.map((e) => ({
     ...e,
     toolId: clip(e.toolId, 160),
     reasonCode: clip(e.reasonCode, 80),
     summary: e.summary ? clip(e.summary, 120) : undefined,
-    // Preserve newlines — dash clip() flattens them and breaks <pre> diffs.
     diffPreview: e.diffPreview ? clipMultiline(e.diffPreview, DIFF_MAX_TOTAL_CHARS) : undefined,
+    targetPath: e.targetPath ? clip(e.targetPath, 80) : undefined,
   }));
+}
+
+export function renderReceiptHtml(model: ReceiptModel): string {  const nowMs = Date.now();
+  const events = normalizeTrailEvents(model.events);
 
   const c = countVerdicts(events);
   const agg = aggregateEvents(events);
   const chips = statChips(agg);
   const dashboard = computeDashboard(events);
+  const changes = buildChangesModel(events);
   const blocked = events.filter((e) => e.neverEvent || e.reasonCode === "NEVER_EVENT");
   const tools =
     model.mcpSeen && model.mcpSeen.length > 0
@@ -1004,16 +1092,17 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   // this script. KNOWN is space-delimited so `indexOf(' '+g+' ')` doubles as a
   // prototype-safe whitelist ('constructor' etc. never match).
   // Filter state persists in the ?f= QUERY param, not the hash: the hash is
-  // owned by the pure-CSS :target tabs (#overview/#certify/#activity/#system), so a
-  // hash-based filter would hide the Activity zone on every chip toggle and
-  // every tab click would wipe the filter. Legacy #f= hashes are still parsed
-  // on load (read-only); the next save writes the ?f= form and drops the
-  // legacy fragment.
+  // owned by the pure-CSS :target tabs (#overview/#changes/#certify/#activity/
+  // #system), so a hash-based filter would hide the Activity zone on every
+  // chip toggle and every tab click would wipe the filter. Legacy #f= hashes
+  // are still parsed on load (read-only); the next save writes the ?f= form
+  // and drops the legacy fragment.
   const filterScript = `<script id="kya-filters">
 (function(){
   var feed = document.getElementById('feed');
   if (!feed) return;
-  var KNOWN = ' verdict never mode plane product project tool ';
+  var chg = document.getElementById('changes-list');
+  var KNOWN = ' verdict never mode plane product project tool session ';
   var state = Object.create(null);
   var clearBtn = document.getElementById('clear-filters');
   var chips = document.querySelectorAll('[data-fgroup]');
@@ -1068,17 +1157,19 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   function active(){
     return Object.keys(state).some(function(g){ return Object.keys(state[g]).length > 0; });
   }
+  // AND across groups, OR within a group; an unstamped facet never matches.
+  function rowVisible(row, on){
+    if (!on) return true;
+    for (var g in state) {
+      var val = row.getAttribute('data-' + g);
+      if (val === null || !state[g][val]) return false;
+    }
+    return true;
+  }
   function apply(){
     var on = active();
     feed.querySelectorAll('.ev').forEach(function(row){
-      var show = true;
-      if (on) {
-        for (var g in state) {
-          var val = row.getAttribute('data-' + g);
-          if (val === null || !state[g][val]) { show = false; break; }
-        }
-      }
-      row.classList.toggle('filtered-out', !show);
+      row.classList.toggle('filtered-out', !rowVisible(row, on));
     });
     var day = null, dayHasRows = false;
     function flush(){ if (day) day.classList.toggle('filtered-out', on && !dayHasRows); }
@@ -1088,6 +1179,17 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       else if (el.classList.contains('ev') && !el.classList.contains('filtered-out')) dayHasRows = true;
     }
     flush();
+    // Changes tab: entries filter individually; file/session groups collapse
+    // when no entry inside survives.
+    if (chg) {
+      chg.querySelectorAll('.chg-entry').forEach(function(row){
+        row.classList.toggle('filtered-out', !rowVisible(row, on));
+      });
+      chg.querySelectorAll('.chg-file, .chg-session').forEach(function(group){
+        var vis = group.querySelectorAll('.chg-entry:not(.filtered-out)').length > 0;
+        group.classList.toggle('filtered-out', on && !vis);
+      });
+    }
     chips.forEach(function(chip){
       var pressed = !!(state[chip.dataset.fgroup] && state[chip.dataset.fgroup][chip.dataset.fvalue]);
       chip.setAttribute('aria-pressed', pressed ? 'true' : 'false');
@@ -1119,7 +1221,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       ? parts.filter(Boolean).join("\n    ")
       : `<p class="mute small zone-empty">${empty}</p>`;
   const overviewBody = zoneBody(
-    [dashboardPanel(dashboard), sessionsPanel(agg, nowMs), reasonsPanel(agg)],
+    [dashboardPanel(dashboard), sessionsPanel(agg, nowMs, changes), reasonsPanel(agg)],
     "No activity in this window yet — analytics appear once events land.",
   );
   const certifyBody = zoneBody(
@@ -1156,6 +1258,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     </header>
     <nav class="tabs" aria-label="Report sections">
       <a class="tab" id="tab-overview" href="#overview">Overview</a>
+      <a class="tab" id="tab-changes" href="#changes">Changes</a>
       <a class="tab" id="tab-certify" href="#certify">Certify</a>
       <a class="tab" id="tab-activity" href="#activity">Activity</a>
       <a class="tab" id="tab-system" href="#system">System</a>
@@ -1170,6 +1273,11 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   </div>
   <section class="zone" id="overview" aria-labelledby="tab-overview">
     ${overviewBody}
+  </section>
+  <section class="zone" id="changes" aria-labelledby="tab-changes">
+    <section class="feed chg" id="changes-list" aria-label="Changes by session and file">
+${changesPanel(changes, nowMs)}
+    </section>
   </section>
   <section class="zone" id="certify" aria-labelledby="tab-certify">
     ${certifyBody}
@@ -1339,6 +1447,39 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
       }),
     "",
   );
+
+  // Same normalization as the HTML path: targetPath flows into single-line
+  // `#### ` code-span headers, so embedded newlines must be flattened first.
+  const changes = buildChangesModel(normalizeTrailEvents(model.events));
+  if (changes.sessions.length > 0) {
+    lines.push("## Changes", "");
+    for (const s of changes.sessions) {
+      lines.push(
+        `### \`${mdInline(s.sessionId)}\` — ${s.fileCount} file${s.fileCount === 1 ? "" : "s"}, ${s.changeCount} change${s.changeCount === 1 ? "" : "s"}, last ${relativeTime(s.lastTs, nowMs)}`,
+        "",
+      );
+      for (const f of s.files) {
+        lines.push(
+          `#### \`${mdInline(f.path)}\` — ${f.writes} write${f.writes === 1 ? "" : "s"}, worst: ${f.worst}`,
+          "",
+        );
+        for (const e of f.entries) {
+          // Same fencing contract as the md feed: verbatim content, tilde
+          // fence one longer than the longest run inside.
+          const diff = stripEscapes(e.preview);
+          const fence = mdFence(diff);
+          lines.push(
+            `- **${mdText(verdictWord(e.verdict))}** \`${mdInline(e.toolId)}\` — ${mdText(e.ts)}`,
+            "",
+            fence,
+            diff,
+            fence,
+            "",
+          );
+        }
+      }
+    }
+  }
 
   if (agg.sessions.length > 0) {
     lines.push(

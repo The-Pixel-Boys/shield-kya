@@ -16,7 +16,7 @@ import {
 import { appendTrail, defaultSessionId } from "../trail.js";
 import { assertNoSecrets } from "../dash/render.js";
 import { deriveDiffPreview } from "../diff-preview.js";
-import { deriveTrailSummary } from "../trail-summary.js";
+import { deriveTargetPath, deriveTrailSummary } from "../trail-summary.js";
 
 export interface WrapResult {
   readonly eval: EvalToolResult;
@@ -49,6 +49,7 @@ function recordTrail(
   const reason = evalResult.response.reasonCode ?? "";
   const toolId = evalResult.response.toolId ?? "";
   const summary = deriveTrailSummary(toolId, args);
+  const targetPath = deriveTargetPath(args);
   let diffPreview = deriveDiffPreview(toolId, args);
   if (diffPreview) {
     try {
@@ -69,6 +70,7 @@ function recordTrail(
     argsHash: evalResult.argsHash,
     ...(summary ? { summary } : {}),
     ...(diffPreview ? { diffPreview } : {}),
+    ...(targetPath ? { targetPath } : {}),
   });
 }
 

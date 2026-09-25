@@ -146,8 +146,8 @@ describe("Certify tab (4th zone)", () => {
     const gate = css.indexOf("@supports selector(body:has(*))");
     expect(gate).toBeGreaterThan(-1);
     const patterns = [
-      "#activity, #certify, #system { display: none; }",
-      "#overview:target, #activity:target, #certify:target, #system:target { display: block; }",
+      "#changes, #activity, #certify, #system { display: none; }",
+      "#overview:target, #changes:target, #activity:target, #certify:target, #system:target { display: block; }",
       "body:has(#certify:target) #overview",
       'body:has(#certify:target) .tab[href="#certify"]',
     ];
