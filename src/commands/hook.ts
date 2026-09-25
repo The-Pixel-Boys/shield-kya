@@ -8,7 +8,7 @@ import { resolveConfig } from "../config.js";
 import type { PolicyEvaluateResponse } from "../client.js";
 import { runEvalTool } from "./eval-tool.js";
 import { appendTrail, defaultSessionId, hostToProduct } from "../trail.js";
-import { deriveTrailSummary } from "../trail-summary.js";
+import { deriveTargetPath, deriveTrailSummary } from "../trail-summary.js";
 
 export interface HookInput {
   readonly host: string;
@@ -103,6 +103,7 @@ export async function runHook(input: HookInput): Promise<HookResult> {
     // payload.cwd is host-supplied and only feeds the project-basename stamp;
     // the trail path itself comes from env/KYA_HOME — no traversal risk.
     const trailCwd = payload.cwd?.trim() || input.cwd;
+    const targetPath = deriveTargetPath(payload.toolInput ?? {});
     try {
       appendTrail(trailCwd, {
         ts: new Date().toISOString(),
@@ -116,6 +117,7 @@ export async function runHook(input: HookInput): Promise<HookResult> {
         neverEvent: response.reasonCode === "NEVER_EVENT",
         argsHash: response.argsHash,
         summary: deriveTrailSummary(payload.toolName, payload.toolInput ?? {}),
+        ...(targetPath ? { targetPath } : {}),
       }, input.env);
     } catch {
       /* observe path never breaks the gate */

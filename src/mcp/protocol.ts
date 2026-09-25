@@ -14,6 +14,7 @@ import { AuthRequiredError, clientSafeError, HttpError } from "../errors.js";
 import { CLI_VERSION } from "../version.js";
 import { parseUsageRecords } from "../showback/cost-per-task.js";
 import { appendTrail, defaultSessionId } from "../trail.js";
+import { deriveTargetPath } from "../trail-summary.js";
 
 export const MCP_SERVER_INFO = {
   name: "shield-kya",
@@ -134,6 +135,7 @@ function recordMcpTrail(
     readonly verdict: string;
     readonly reasonCode: string;
     readonly argsHash?: string;
+    readonly targetPath?: string;
   },
 ): void {
   const trail = ctx.trail;
@@ -149,6 +151,7 @@ function recordMcpTrail(
       mode: trail.offline ? "offline" : trail.holdEnabled ? "hold" : "observe",
       neverEvent: event.reasonCode === "NEVER_EVENT",
       ...(event.argsHash ? { argsHash: event.argsHash } : {}),
+      ...(event.targetPath ? { targetPath: event.targetPath } : {}),
     });
   } catch {
     /* observe path is never allowed to break the gate */
@@ -193,6 +196,7 @@ async function callPolicyEvaluate(
       ? (a.args as Record<string, unknown>)
       : {};
   const argsHash = str(a.argsHash) ?? computeArgsHash(argsObj);
+  const targetPath = deriveTargetPath(argsObj);
   const irreversible = sample?.irreversible ?? true;
 
   const request = {
@@ -227,6 +231,7 @@ async function callPolicyEvaluate(
         verdict: "DENY",
         reasonCode: planeFailureReason(err),
         argsHash,
+        targetPath,
       });
       throw err;
     }
@@ -236,6 +241,7 @@ async function callPolicyEvaluate(
     verdict: response.verdict,
     reasonCode: response.reasonCode,
     argsHash,
+    targetPath,
   });
   return textResult(response);
 }

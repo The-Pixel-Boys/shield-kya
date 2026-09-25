@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  deriveTargetPath,
   deriveTrailSummary,
   scrubUrl,
   summarizeShellCommand,
@@ -115,6 +116,64 @@ describe("deriveTrailSummary", () => {
   });
 });
 
+describe("deriveTargetPath", () => {
+  it("picks every path key", () => {
+    for (const key of [
+      "path",
+      "file",
+      "filepath",
+      "file_path",
+      "filePath",
+      "target",
+      "uri",
+      "url",
+      "destination",
+      "dest",
+    ]) {
+      expect(deriveTargetPath({ [key]: "src/app.ts" }), key).toBe("src/app.ts");
+    }
+  });
+
+  it("picks nested file.path", () => {
+    expect(deriveTargetPath({ file: { path: "lib/nested.ts" } })).toBe("lib/nested.ts");
+  });
+
+  it("returns undefined when no path key exists or args is not an object", () => {
+    expect(deriveTargetPath({ command: "ls" })).toBeUndefined();
+    expect(deriveTargetPath(undefined)).toBeUndefined();
+    expect(deriveTargetPath(null)).toBeUndefined();
+    expect(deriveTargetPath("src/app.ts")).toBeUndefined();
+    expect(deriveTargetPath(["src/app.ts"])).toBeUndefined();
+    expect(deriveTargetPath(42)).toBeUndefined();
+  });
+
+  it("ignores blank path values", () => {
+    expect(deriveTargetPath({ path: "   " })).toBeUndefined();
+  });
+
+  it("scrubs query strings and credentials out of URL-shaped paths", () => {
+    const p = deriveTargetPath({
+      url: "https://user:pass@example.com/raw/f.ts?access_token=SECRETTOKEN1",
+    });
+    expect(p).toBe("https://example.com/raw/f.ts");
+    expect(p).not.toContain("SECRETTOKEN1");
+    expect(p).not.toContain("pass");
+  });
+
+  it("redacts credential assignments embedded in the path string", () => {
+    const p = deriveTargetPath({ path: "aws s3 cp --password hunter2 file.txt" });
+    expect(p).toBeDefined();
+    expect(p).not.toContain("hunter2");
+  });
+
+  it("clips long paths to the summary length", () => {
+    const p = deriveTargetPath({ path: "a/" + "b".repeat(200) + ".ts" });
+    expect(p).toBeDefined();
+    expect(p!.length).toBeLessThanOrEqual(80);
+    expect(p!.endsWith("…")).toBe(true);
+  });
+});
+
 describe("wrap trail summary", () => {
   it("records summary on trail from wrap args", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "kya-sum-"));
@@ -134,6 +193,7 @@ describe("wrap trail summary", () => {
       const trail = readTrail(cwd);
       expect(trail[0]?.summary).toContain("src/x.ts");
       expect(trail[0]?.summary).toContain("5 chars");
+      expect(trail[0]?.targetPath).toBe("src/x.ts");
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

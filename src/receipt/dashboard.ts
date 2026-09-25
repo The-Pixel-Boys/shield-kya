@@ -163,7 +163,7 @@ function computeActivity(events: readonly TrailEvent[]): DashboardActivity {
   return { granularity, buckets };
 }
 
-function worstOf(current: ToolWorst | undefined, e: TrailEvent): ToolWorst {
+export function worstOf(current: ToolWorst | undefined, e: TrailEvent): ToolWorst {
   const rank: Record<ToolWorst, number> = { never: 3, deny: 2, review: 1, allow: 0 };
   let next: ToolWorst = "allow";
   if (isNever(e)) next = "never";

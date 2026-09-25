@@ -427,7 +427,9 @@ describe("F6 — markdown renderer escapes untrusted text", () => {
     // Inline text (summary) is escaped — no raw HTML outside code fences.
     expect(md).not.toContain("<script>alert(1)");
     // Fenced diff content is verbatim: no backslash garbling, fence holds.
-    const lines = md.split("\n");
+    // (Previews appear in both ## Feed and ## Changes — scope to the Feed.)
+    const feed = md.slice(md.indexOf("## Feed"), md.indexOf("## Changes"));
+    const lines = feed.split("\n");
     const fenceIdx = lines.flatMap((l, i) => (l === "~~~~" ? [i] : []));
     expect(fenceIdx).toHaveLength(2);
     const [open, close] = fenceIdx as [number, number];
@@ -453,7 +455,9 @@ describe("F6 — markdown renderer escapes untrusted text", () => {
       3,
     );
     const md = renderReceiptMarkdown(model);
-    const lines = md.split("\n");
+    // Previews also render under ## Changes — scope fence checks to the Feed.
+    const feed = md.slice(md.indexOf("## Feed"), md.indexOf("## Changes"));
+    const lines = feed.split("\n");
     const fenceIdx = lines.flatMap((l, i) => (l === "~~~~" ? [i] : []));
     expect(fenceIdx).toHaveLength(2);
     const [open, close] = fenceIdx as [number, number];
@@ -529,7 +533,9 @@ describe("F6 — markdown renderer escapes untrusted text", () => {
       3,
     );
     const md = renderReceiptMarkdown(model);
-    const lines = md.split("\n");
+    // Previews also render under ## Changes — scope fence checks to the Feed.
+    const feed = md.slice(md.indexOf("## Feed"), md.indexOf("## Changes"));
+    const lines = feed.split("\n");
     // Fence must be one longer than the longest payload run (5 → 6 tildes).
     const fenceIdx = lines.flatMap((l, i) => (l === "~~~~~~" ? [i] : []));
     expect(fenceIdx).toHaveLength(2);
