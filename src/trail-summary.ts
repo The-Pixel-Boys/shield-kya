@@ -212,6 +212,19 @@ function pathLike(value: string): string {
 }
 
 /**
+ * Derive the redacted, clipped target file path for the Changes view.
+ * Reuses the summary's path-key extraction (incl. nested file.path) and
+ * pathLike/finalize so the output is already scrubbed and ≤ 80 chars.
+ * Returns undefined when args carry no usable path.
+ */
+export function deriveTargetPath(args: unknown): string | undefined {
+  if (!isPlainObject(args)) return undefined;
+  const path = pickString(args, PATH_KEYS);
+  if (!path) return undefined;
+  return finalize([pathLike(path)]);
+}
+
+/**
  * Derive a one-line change summary for the activity feed.
  * Returns undefined when there is nothing safe/useful to show.
  */

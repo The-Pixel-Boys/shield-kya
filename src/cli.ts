@@ -71,6 +71,7 @@ import {
   runConnect,
 } from "./commands/connect.js";
 import { appendTrail, defaultSessionId } from "./trail.js";
+import { deriveTargetPath } from "./trail-summary.js";
 import { decideIdFromArgs, runDecide } from "./commands/decide.js";
 import {
   formatInvokeHuman,
@@ -336,6 +337,7 @@ export async function runCli(
           offline: input.offline,
         });
         const result = await runEvalTool(config, input);
+        const targetPath = deriveTargetPath(input.args);
         appendTrail(config.cwd, {
           ts: new Date().toISOString(),
           sessionId: defaultSessionId(env),
@@ -346,6 +348,7 @@ export async function runCli(
           mode: result.offline ? "offline" : config.holdEnabled ? "hold" : "observe",
           neverEvent: result.response.reasonCode === "NEVER_EVENT",
           argsHash: result.argsHash,
+          ...(targetPath ? { targetPath } : {}),
         }, env);
         if (config.json) {
           io.log(

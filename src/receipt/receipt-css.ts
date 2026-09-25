@@ -7,7 +7,7 @@
  * default and light rides on prefers-color-scheme, with translucency done via
  * color-mix so both schemes share one rule set.
  *
- * Tab switching is pure CSS: nav links point at #overview/#certify/
+ * Tab switching is pure CSS: nav links point at #overview/#changes/#certify/
  * #activity/#system and :target shows the matching zone. The hide rules are
  * gated behind
  * `@supports selector(body:has(*))`, so a browser without :has() simply shows
@@ -212,13 +212,15 @@ export function receiptCss(): string {
   .zone { scroll-margin-top: 6.4rem; }
   .zone-empty { margin: 0.25rem 0 0.5rem; }
   @supports selector(body:has(*)) {
-    #activity, #certify, #system { display: none; }
-    #overview:target, #activity:target, #certify:target, #system:target { display: block; }
+    #changes, #activity, #certify, #system { display: none; }
+    #overview:target, #changes:target, #activity:target, #certify:target, #system:target { display: block; }
+    body:has(#changes:target) #overview,
     body:has(#activity:target) #overview,
     body:has(#certify:target) #overview,
     body:has(#system:target) #overview { display: none; }
     body:not(:has(.zone:target)) .tab[href="#overview"],
     body:has(#overview:target) .tab[href="#overview"],
+    body:has(#changes:target) .tab[href="#changes"],
     body:has(#certify:target) .tab[href="#certify"],
     body:has(#activity:target) .tab[href="#activity"],
     body:has(#system:target) .tab[href="#system"] {
@@ -297,6 +299,26 @@ export function receiptCss(): string {
   .db-fill.warn { background: var(--warn); }
   .db-fill.bad { background: var(--bad); }
   .db-num { text-align: right; color: var(--fg); }
+  /* Session rollup row as a filter toggle: db-item's hover/active contract
+     on the flex layout the Sessions panel already uses. */
+  .sess-item {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.45rem;
+    width: 100%; min-width: 0;
+    font-family: inherit; font-size: inherit; text-align: left;
+    color: inherit; background: transparent;
+    border: 1px solid transparent; border-radius: 8px;
+    padding: 0.14rem 0.3rem; cursor: pointer;
+    appearance: none; -webkit-appearance: none;
+  }
+  .sess-item:hover {
+    border-color: var(--line);
+    background: color-mix(in srgb, var(--bg) 55%, var(--card));
+  }
+  .sess-item[aria-pressed="true"] {
+    color: var(--fg);
+    border-color: color-mix(in srgb, var(--ok) 55%, var(--line));
+    background: color-mix(in srgb, var(--ok) 12%, var(--card));
+  }
   /* Vertical mini-bar timeline (not clickable — no time filter exists). */
   .db-tl { display: flex; align-items: stretch; gap: 2px; height: 4.6rem; }
   .db-tl .col {
@@ -519,6 +541,38 @@ export function receiptCss(): string {
     word-break: break-word;
     color: var(--fg);
   }
+  /* Changes tab: session → file groups in the same .feed card as the
+     activity feed; entries reuse the feed's .top/.verdict/.tool/.when/diff. */
+  .chg-sess-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.45rem;
+    padding: 0.55rem 0.9rem 0.35rem;
+    background: color-mix(in srgb, var(--bg) 55%, var(--card));
+    border-bottom: 1px solid var(--line);
+  }
+  .chg-sess-head .sid {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.78rem; font-weight: 650; word-break: break-all;
+  }
+  .chg-sess-head .cnt { color: var(--mute); font-size: 0.76rem; }
+  .chg-sess-head .rel {
+    margin-left: auto; color: var(--mute); font-size: 0.74rem; white-space: nowrap;
+  }
+  .chg-file { border-bottom: 1px solid var(--line); padding: 0.45rem 0.9rem 0.6rem; }
+  .chg-session:last-child .chg-file:last-child { border-bottom: none; }
+  .chg-file-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.45rem;
+  }
+  .chg-file-head .path {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8rem; font-weight: 650; word-break: break-all;
+  }
+  .chg-file-head .cnt { color: var(--mute); font-size: 0.74rem; white-space: nowrap; }
+  .chg-file-head .pill { margin-left: auto; }
+  .chg-entry { padding: 0.4rem 0 0.2rem; min-width: 0; }
+  .chg-entry.never { background: color-mix(in srgb, var(--bad) 7%, transparent); }
+  .chg-entry.ok .verdict { color: var(--ok); }
+  .chg-entry.bad .verdict { color: var(--bad); }
+  .chg-entry.warn .verdict { color: var(--warn); }
   .meta {
     margin-top: 0.18rem; color: var(--mute); font-size: 0.76rem;
     display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: baseline;
