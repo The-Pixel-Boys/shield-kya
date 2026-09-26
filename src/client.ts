@@ -28,6 +28,12 @@ export interface PolicyEvaluateRequest {
   readonly sessionRisk?: string;
   readonly approvalStatus?: string;
   readonly packId?: string | null;
+  /** Redacted one-line change summary (write/edit tools). */
+  readonly summary?: string;
+  /** Clipped, redacted change preview (≤8 lines / ≤480 chars). */
+  readonly diffPreview?: string;
+  /** Redacted target file path (≤80 chars). */
+  readonly targetPath?: string;
   readonly env?: {
     readonly host: Host;
     readonly sessionId?: string;
@@ -208,6 +214,9 @@ export class KyaHttpClient {
       sessionRisk: req.sessionRisk ?? "LOW",
       approvalStatus: req.approvalStatus ?? "NONE",
       packId: req.packId === undefined ? "generic" : req.packId,
+      summary: req.summary,
+      diffPreview: req.diffPreview,
+      targetPath: req.targetPath,
       env: req.env ?? {
         host: this.host,
         agentId: this.agentId,

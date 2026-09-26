@@ -4,6 +4,8 @@ import {
   DIFF_MAX_TOTAL_CHARS,
   clipMultiline,
   deriveDiffPreview,
+  deriveWireChangeFields,
+  sendPreviewsEnabled,
 } from "../src/diff-preview.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -210,5 +212,40 @@ describe("assertNoSecrets gaps closed", () => {
     expect(() => assertNoSecrets("password=hunter2hunter2hunter2")).toThrow(/secret/);
     expect(() => assertNoSecrets("password=hunter2")).not.toThrow();
     expect(() => assertNoSecrets("password=[redacted]")).not.toThrow();
+  });
+});
+
+describe("deriveWireChangeFields", () => {
+  it("returns summary, preview, and target path for a write", () => {
+    const fields = deriveWireChangeFields(
+      "Write",
+      { path: "src/app.ts", content: "const a = 1;" },
+      {},
+    );
+    expect(fields?.targetPath).toBe("src/app.ts");
+    expect(fields?.summary).toContain("write src/app.ts");
+    expect(fields?.diffPreview).toContain("const a = 1;");
+  });
+
+  it("returns undefined when KYA_SEND_PREVIEWS opts out", () => {
+    for (const flag of ["0", "false", "off", "no", "FALSE"]) {
+      expect(
+        deriveWireChangeFields(
+          "Write",
+          { path: "a.ts", content: "x" },
+          { KYA_SEND_PREVIEWS: flag },
+        ),
+      ).toBeUndefined();
+      expect(sendPreviewsEnabled({ KYA_SEND_PREVIEWS: flag })).toBe(false);
+    }
+    expect(sendPreviewsEnabled({})).toBe(true);
+    expect(sendPreviewsEnabled({ KYA_SEND_PREVIEWS: "1" })).toBe(true);
+  });
+
+  it("omits the preview for reads but keeps the path summary", () => {
+    const fields = deriveWireChangeFields("Read", { path: "a.ts" }, {});
+    expect(fields?.targetPath).toBe("a.ts");
+    expect(fields?.diffPreview).toBeUndefined();
+    expect(deriveWireChangeFields("Read", {}, {})).toBeUndefined();
   });
 });
