@@ -22,7 +22,7 @@ interface WiredServer {
 
 /** Read the written config the way the host would. */
 function extractServer(host: string, configPath: string): WiredServer {
-  if (host === "grok") {
+  if (host === "grok" || host === "codex") {
     return extractGrokTomlServer(configPath);
   }
   const raw = JSON.parse(readFileSync(configPath, "utf8")) as Record<

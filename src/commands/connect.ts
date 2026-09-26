@@ -41,7 +41,7 @@ export interface HostSpec {
   /** Root key holding the server map ("mcpServers" | "mcp" | "amp.mcpServers"). */
   readonly rootKey: string;
   /** Server entry dialect. */
-  readonly shape: "standard" | "opencode-local" | "grok-toml";
+  readonly shape: "standard" | "opencode-local" | "grok-toml" | "codex-toml";
   /** Set when the host has no verified auto-wire: docs/hosts page to follow. */
   readonly recipeOnly?: string;
 }
@@ -62,6 +62,28 @@ export function standardServerBlock(hostId: string): Record<string, unknown> {
       KYA_SESSION_ID: `mcp:${hostId}`,
     },
   };
+}
+
+/**
+ * Remote-server entry pointing a host at the local kya gateway listener, in
+ * the shape each host's config schema actually accepts:
+ *   cursor → bare url; qwen → httpUrl (documented hosted variant);
+ *   claude-derived schemas (claude, kimi, kiro, copilot, mastracode, amp)
+ *   require an explicit transport type for remote servers.
+ */
+export function gateServerBlock(hostId: string, url: string): Record<string, unknown> {
+  switch (hostId) {
+    case "cursor":
+      return { url };
+    case "qwen":
+      return { httpUrl: url };
+    default:
+      return { type: "http", url };
+  }
+}
+
+function opencodeGateBlock(url: string): Record<string, unknown> {
+  return { type: "remote", url, enabled: true };
 }
 
 function opencodeBlock(hostId: string): Record<string, unknown> {
@@ -90,6 +112,12 @@ export const CONNECT_REGISTRY: Readonly<Record<string, HostSpec>> = {
     globalPath: (h) => join(h, ".grok", "config.toml"),
     rootKey: "mcp_servers",
     shape: "grok-toml",
+  },
+  codex: {
+    label: "Codex CLI",
+    globalPath: (h) => join(h, ".codex", "config.toml"),
+    rootKey: "mcp_servers",
+    shape: "codex-toml",
   },
   opencode: {
     label: "OpenCode",
@@ -193,6 +221,8 @@ export interface ConnectInput {
   readonly force?: boolean;
   /** Also wire the host's PreToolUse hook (claude/grok/kimi only). */
   readonly hooks?: boolean;
+  /** Wire the "shield-kya-gate" remote entry at this URL (from a running kya gateway). */
+  readonly gateUrl?: string;
   /** Test hook: running process basenames instead of a live ps scan. */
   readonly procs?: ReadonlySet<string>;
 }
@@ -250,11 +280,12 @@ export function mergeJsonHostConfig(
   rootKey: string,
   block: Record<string, unknown>,
   force: boolean,
+  serverKey = "shield-kya",
 ): ConnectStatus {
   if (!existsSync(path)) {
     atomicWriteSync(
       createTarget(path),
-      `${JSON.stringify({ [rootKey]: { "shield-kya": block } }, null, 2)}\n`,
+      `${JSON.stringify({ [rootKey]: { [serverKey]: block } }, null, 2)}\n`,
     );
     return "created";
   }
@@ -277,62 +308,87 @@ export function mergeJsonHostConfig(
   const servers = (existing ?? {}) as Record<string, unknown>;
   // Presence of the key — even a null value — counts as wired: never touch it
   // without --force.
-  if (Object.prototype.hasOwnProperty.call(servers, "shield-kya") && !force) {
+  if (Object.prototype.hasOwnProperty.call(servers, serverKey) && !force) {
     return "skipped";
   }
-  raw[rootKey] = { ...servers, "shield-kya": block };
+  raw[rootKey] = { ...servers, [serverKey]: block };
   atomicWriteSync(target, `${JSON.stringify(raw, null, 2)}\n`);
   return "wired";
 }
 
-const GROK_TABLE_HEADER = "[mcp_servers.shield-kya]";
-// Horizontal whitespace only ([^\S\n]): \s would match newlines and let the
-// match start on a preceding blank line, mis-slicing the --force replace.
-const GROK_TABLE_RE = /^[^\S\n]*\[mcp_servers\.shield-kya\][^\S\n]*(?:#.*)?$/m;
-const GROK_QUOTED_TABLE_RE =
-  /^\s*\[\s*mcp_servers\s*\.\s*["']shield-kya["']\s*\]/m;
-const GROK_INLINE_RE = /^\s*shield-kya\s*=/m;
+function grokRegexes(serverKey: string): {
+  header: string;
+  table: RegExp;
+  quotedTable: RegExp;
+  inline: RegExp;
+} {
+  const esc = serverKey.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
+  return {
+    header: `[mcp_servers.${serverKey}]`,
+    // Horizontal whitespace only ([^\S\n]): \s would match newlines and let the
+    // match start on a preceding blank line, mis-slicing the --force replace.
+    table: new RegExp(`^[^\\S\\n]*\\[mcp_servers\\.${esc}\\][^\\S\\n]*(?:#.*)?$`, "m"),
+    quotedTable: new RegExp(`^\\s*\\[\\s*mcp_servers\\s*\\.\\s*["']${esc}["']\\s*\\]`, "m"),
+    inline: new RegExp(`^\\s*${esc}\\s*=`, "m"),
+  };
+}
 
-function grokTableBlock(hostId: string): string {
+function tomlStdioTableBlock(hostId: string, dialect: "grok-toml" | "codex-toml"): string {
   // JSON string literal syntax is valid TOML for these shapes.
   const args = [cliJsPath(), "serve-mcp", "--stdio"]
     .map((s) => JSON.stringify(s))
     .join(", ");
-  return [
-    GROK_TABLE_HEADER,
+  const lines = [
+    "[mcp_servers.shield-kya]",
     `command = ${JSON.stringify(process.execPath)}`,
     `args = [${args}]`,
     `env = { KYA_HOST = "ide", KYA_OFFLINE = "1", KYA_SESSION_ID = ${JSON.stringify(`mcp:${hostId}`)} }`,
-    "enabled = true",
-    "",
-  ].join("\n");
+  ];
+  if (dialect === "grok-toml") lines.push("enabled = true");
+  return [...lines, ""].join("\n");
+}
+
+function tomlGateTableBlock(url: string, dialect: "grok-toml" | "codex-toml"): string {
+  const lines = ["[mcp_servers.shield-kya-gate]", `url = ${JSON.stringify(url)}`];
+  if (dialect === "grok-toml") lines.push("enabled = true");
+  return [...lines, ""].join("\n");
 }
 
 /**
- * Minimal TOML wiring for Grok: append the [mcp_servers.shield-kya] table at
+ * Minimal TOML wiring for Grok/Codex: append the [mcp_servers.<key>] table at
  * EOF, skip when present, --force replaces the existing table block. An inline
- * `shield-kya = …` definition under [mcp_servers] cannot be merged safely as
+ * `<key> = …` definition under [mcp_servers] cannot be merged safely as
  * text — refuse it with a clear error.
  */
-function mergeGrokToml(path: string, hostId: string, force: boolean): ConnectStatus {
-  const block = grokTableBlock(hostId);
+function mergeTomlHostConfig(
+  path: string,
+  hostId: string,
+  force: boolean,
+  dialect: "grok-toml" | "codex-toml",
+  serverKey = "shield-kya",
+  gateUrl?: string,
+): ConnectStatus {
+  const re = grokRegexes(serverKey);
+  const block = gateUrl
+    ? tomlGateTableBlock(gateUrl, dialect)
+    : tomlStdioTableBlock(hostId, dialect);
   if (!existsSync(path)) {
     atomicWriteSync(createTarget(path), block);
     return "created";
   }
   const target = writeTarget(path);
   const text = readFileSync(target, "utf8");
-  const header = GROK_TABLE_RE.exec(text);
+  const header = re.table.exec(text);
   if (header && !force) return "skipped";
   if (!header) {
-    if (GROK_QUOTED_TABLE_RE.test(text)) {
+    if (re.quotedTable.test(text)) {
       throw new UsageError(
-        `${path} has a quoted [mcp_servers."shield-kya"] table — appending an unquoted one would duplicate it; fix the header by hand, then re-run connect`,
+        `${path} has a quoted [mcp_servers."${serverKey}"] table — appending an unquoted one would duplicate it; fix the header by hand, then re-run connect`,
       );
     }
-    if (GROK_INLINE_RE.test(text)) {
+    if (re.inline.test(text)) {
       throw new UsageError(
-        `${path} defines shield-kya inline under [mcp_servers] — remove that line by hand, then re-run connect`,
+        `${path} defines ${serverKey} inline under [mcp_servers] — remove that line by hand, then re-run connect`,
       );
     }
     const sep = text.length === 0 || text.endsWith("\n") ? "" : "\n";
@@ -356,9 +412,23 @@ function mergeHostConfig(
   hostId: string,
   spec: HostSpec,
   force: boolean,
+  serverKey = "shield-kya",
+  gateUrl?: string,
 ): ConnectStatus {
-  if (spec.shape === "grok-toml") return mergeGrokToml(path, hostId, force);
-  return mergeJsonHostConfig(path, spec.rootKey, serverBlock(hostId, spec), force);
+  if (spec.shape === "grok-toml" || spec.shape === "codex-toml") {
+    if (gateUrl && spec.shape === "grok-toml") {
+      throw new UsageError(
+        "gate wiring is not supported for grok yet — remote MCP servers in Grok's config.toml are unverified; use the stdio wiring (kya connect grok without --gate)",
+      );
+    }
+    return mergeTomlHostConfig(path, hostId, force, spec.shape, serverKey, gateUrl);
+  }
+  const block = gateUrl
+    ? spec.shape === "opencode-local"
+      ? opencodeGateBlock(gateUrl)
+      : gateServerBlock(hostId, gateUrl)
+    : serverBlock(hostId, spec);
+  return mergeJsonHostConfig(path, spec.rootKey, block, force, serverKey);
 }
 
 export interface WireHostInput {
@@ -367,6 +437,8 @@ export interface WireHostInput {
   readonly force?: boolean;
   readonly home: string;
   readonly cwd: string;
+  /** When set, wire the "shield-kya-gate" remote entry at this URL instead of the stdio gate. */
+  readonly gateUrl?: string;
 }
 
 export interface WireHostResult {
@@ -401,7 +473,14 @@ export function wireHost(input: WireHostInput): WireHostResult {
       `${spec.label} has no ${scope}-scope config — try --${scope === "project" ? "global" : "project"}`,
     );
   }
-  const status = mergeHostConfig(path, key, spec, Boolean(input.force));
+  const status = mergeHostConfig(
+    path,
+    key,
+    spec,
+    Boolean(input.force),
+    input.gateUrl ? "shield-kya-gate" : "shield-kya",
+    input.gateUrl,
+  );
   return { host: key, label: spec.label, path, status, scope };
 }
 
@@ -436,6 +515,7 @@ export async function runConnect(
     force: input.force,
     home,
     cwd: config.cwd,
+    ...(input.gateUrl ? { gateUrl: input.gateUrl } : {}),
   });
   let hooksPath: string | undefined;
   let hooksStatus: ConnectStatus | undefined;
@@ -459,12 +539,13 @@ export async function runConnect(
     ...wired,
     hooksPath,
     hooksStatus,
-    next:
-      wireNextMessage(
-        wired.host,
-        wired.label,
-        input.procs ?? listProcessNames(),
-      ) + (hooksStatus && hooksStatus !== "skipped" ? " Hooks take effect in new sessions." : ""),
+    next: input.gateUrl
+      ? `Restart ${wired.label} so the shield-kya-gate gateway endpoint (${input.gateUrl}) loads.`
+      : wireNextMessage(
+          wired.host,
+          wired.label,
+          input.procs ?? listProcessNames(),
+        ) + (hooksStatus && hooksStatus !== "skipped" ? " Hooks take effect in new sessions." : ""),
   };
 }
 

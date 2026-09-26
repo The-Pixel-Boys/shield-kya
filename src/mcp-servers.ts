@@ -277,3 +277,19 @@ export function mcpToolTier(serverId: string, toolName: string): McpToolTier | u
   }
   return entry.defaultTier;
 }
+
+/**
+ * ADMIN-tier rule patterns (regex sources) for a known server, in registry
+ * order. Undefined for unknown servers — the gate's CEL generation treats
+ * those as "no server-specific deny rules" (destructive-name deny only).
+ */
+export function mcpServerAdminPatterns(serverId: string): readonly string[] | undefined {
+  const entry = LOOKUP.get(normalizeId(serverId));
+  if (!entry) return undefined;
+  return entry.rules.filter((rule) => rule.tier === "ADMIN").map((rule) => rule.pattern.source);
+}
+
+/** Fallback tier for tools no rule matches; undefined for unknown servers. */
+export function mcpServerDefaultTier(serverId: string): McpToolTier | undefined {
+  return LOOKUP.get(normalizeId(serverId))?.defaultTier;
+}

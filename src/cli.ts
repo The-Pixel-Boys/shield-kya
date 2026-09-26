@@ -82,6 +82,17 @@ import { runSandboxCommand } from "./commands/sandbox.js";
 import { runHook } from "./commands/hook.js";
 import { formatStopHuman, runStop } from "./commands/stop.js";
 import { runReceiptServe } from "./commands/receipt-serve.js";
+import {
+  formatGateDoctorHuman,
+  gateMcpUrl,
+  gateSubcommand,
+  runGateDoctor,
+  runGateInit,
+  runGateRun,
+  runGateSetup,
+  runGateStop,
+} from "./commands/gate.js";
+import { runGateServe } from "./commands/gate-serve.js";
 import { ensureSupportedNode } from "./node-upgrade.js";
 
 const HELP = `Shield KYA light CLI — Know Your Agent (provider-agnostic)
@@ -98,6 +109,9 @@ Commands:
   connect <host>    Wire KYA MCP into a coding host config
                     (${connectableHosts().join("|")}; --project for project scope, --force to overwrite)
                     --hooks also wires the host's PreToolUse hook (claude|grok|kimi)
+                    --gate points the host at the local kya gateway (kya gate run)
+  gate              Local MCP gateway: govern + audit tool calls to any MCP server
+                    (init | setup | doctor | run | stop)
   init              Scaffold .kya/ config + sample tools + .env.example
   register-agent    POST /api/v1/kya/agents (human mint; server applies allow/break-glass/approve)
   eval-tool         Policy evaluate (HTTP plane or --offline sample)
@@ -282,16 +296,95 @@ export async function runCli(
           parsed.flags["force"] === true || parsed.flags["force"] === "true";
         const hooks =
           parsed.flags["hooks"] === true || parsed.flags["hooks"] === "true";
+        const gate = parsed.flags["gate"] === true || parsed.flags["gate"] === "true";
         const scope =
           parsed.flags["project"] === true || parsed.flags["project"] === "true"
             ? ("project" as const)
             : ("global" as const);
-        const result = await runConnect(config, { host, scope, force, hooks }, env);
+        const result = await runConnect(
+          config,
+          { host, scope, force, hooks, ...(gate ? { gateUrl: gateMcpUrl(env) } : {}) },
+          env,
+        );
         if (config.json) {
           io.log(JSON.stringify(result, null, 2));
         } else {
           io.log(formatConnectHuman(result));
         }
+        return 0;
+      }
+
+      case "gate": {
+        const sub = gateSubcommand(parsed);
+        if (sub === "init") {
+          const result = runGateInit(env);
+          if (parsed.flags["json"] === true || parsed.flags["json"] === "true") {
+            io.log(JSON.stringify(result, null, 2));
+          } else {
+            io.log(result.created ? `created: ${result.path}` : `exists: ${result.path}`);
+            io.log(`next: ${result.next}`);
+          }
+          return 0;
+        }
+        if (sub === "setup") {
+          const result = await runGateSetup(env);
+          if (parsed.flags["json"] === true || parsed.flags["json"] === "true") {
+            io.log(JSON.stringify(result, null, 2));
+          } else {
+            io.log(
+              result.installed
+                ? `installed gateway binary ${result.version}: ${result.path}`
+                : `gateway binary already present: ${result.path}`,
+            );
+          }
+          return 0;
+        }
+        if (sub === "doctor") {
+          const result = await runGateDoctor(env);
+          if (parsed.flags["json"] === true || parsed.flags["json"] === "true") {
+            io.log(JSON.stringify(result, null, 2));
+          } else {
+            io.log(formatGateDoctorHuman(result));
+          }
+          return result.binary.present ? 0 : 1;
+        }
+        if (sub === "stop") {
+          const result = await runGateStop(env);
+          if (parsed.flags["json"] === true || parsed.flags["json"] === "true") {
+            io.log(JSON.stringify(result, null, 2));
+          } else {
+            io.log(
+              result.stopped
+                ? `stopped local gateway (pid ${result.pid})`
+                : "no local gateway running",
+            );
+          }
+          return 0;
+        }
+        const config = resolveConfig({
+          cwd,
+          env,
+          flags: parsed.flags,
+          allowMissingApiKey: true,
+          requireApiKey: false,
+          offline: true,
+        });
+        const result = await runGateRun(config, { env });
+        if (parsed.flags["json"] === true || parsed.flags["json"] === "true") {
+          io.log(JSON.stringify(result, null, 2));
+        } else {
+          io.log(`kya gateway listening on ${result.url}/mcp (pid ${result.pid})`);
+          io.log(`  servers: ${result.servers.length ? result.servers.join(", ") : "(none — edit gateways.json)"}`);
+          io.log(`  config: ${result.configPath}`);
+          io.log(`  logs: ${result.logPath}`);
+          io.log(result.next);
+        }
+        return 0;
+      }
+
+      case "gate-serve": {
+        // Internal: detached supervisor child of `kya gate run`.
+        await runGateServe(cwd);
         return 0;
       }
 
