@@ -352,4 +352,32 @@ describe("receipt filter engine (inline script, shimmed DOM)", () => {
     expect(visible(partial)).toBe(1);
     expect(chip(partial, "verdict", "DENY").getAttribute("aria-pressed")).toBe("true");
   });
+
+  it("filters feed rows by MCP server via the server group", () => {
+    const MCP_EVENTS: TrailEvent[] = [
+      ev({ ts: "2026-09-11T10:00:00.000Z", sessionId: "s", toolId: "mcp__github__get_issue" }),
+      ev({ ts: "2026-09-11T09:00:00.000Z", sessionId: "s", toolId: "mcp__github__create_issue" }),
+      ev({ ts: "2026-09-11T08:00:00.000Z", sessionId: "s", toolId: "mcp__slack__post_message" }),
+      ev({ ts: "2026-09-11T07:00:00.000Z", sessionId: "s", toolId: "mcp__acme-internal__do_thing" }),
+    ];
+    const MCP_HTML = renderReceiptHtml(buildReceiptModel("s", MCP_EVENTS, {}));
+
+    // Query path: server is a KNOWN group, so ?f=server:GitHub filters rows.
+    const fromQuery = mount(MCP_HTML, { search: "?f=server:GitHub" });
+    expect(visible(fromQuery)).toBe(2);
+    expect(row(fromQuery, "data-tool", "mcp__github__get_issue").classList.contains("filtered-out")).toBe(false);
+    expect(row(fromQuery, "data-tool", "mcp__slack__post_message").classList.contains("filtered-out")).toBe(true);
+
+    // Click path: the Servers chip group toggles like any other chip.
+    const m = mount(MCP_HTML);
+    chip(m, "server", "GitHub").click();
+    expect(visible(m)).toBe(2);
+    expect(m.location.search).toBe("?f=server:GitHub");
+    chip(m, "server", "Slack").click(); // OR within the server group
+    expect(visible(m)).toBe(3);
+    // The unknown-server row has no data-server facet and never matches.
+    expect(row(m, "data-tool", "mcp__acme-internal__do_thing").classList.contains("filtered-out")).toBe(true);
+    m.clearBtn.click();
+    expect(visible(m)).toBe(4);
+  });
 });

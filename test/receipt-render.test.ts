@@ -777,4 +777,62 @@ describe("chip filters", () => {
     expect(html).not.toContain('data-project="we"ird"');
     expect(html).not.toContain('data-fvalue="we"ird"');
   });
+
+  it("stamps data-server on feed articles for recognized MCP servers", () => {
+    const html = renderReceiptHtml(
+      buildReceiptModel(
+        "s",
+        [
+          ev({ ts: iso(0), sessionId: "s", toolId: "mcp__github__get_issue" }),
+          ev({ ts: iso(1), sessionId: "s", toolId: "playwright__browser_navigate" }),
+          ev({ ts: iso(2), sessionId: "s", toolId: "mcp__acme-internal__do_thing" }),
+          ev({ ts: iso(3), sessionId: "s", toolId: "read_file" }),
+        ],
+        {},
+      ),
+    );
+    expect(html).toContain('data-server="GitHub"');
+    expect(html).toContain('data-server="Playwright"');
+    // Unknown servers and non-MCP tools get no facet.
+    expect(html).not.toContain('data-server="acme-internal"');
+    const articleWithReadFile = html
+      .split("\n")
+      .filter((l) => l.includes("<article") && l.includes("read_file"));
+    expect(articleWithReadFile.every((l) => !l.includes("data-server"))).toBe(true);
+  });
+
+  it("renders a Servers chip group with counts when ≥2 servers are present", () => {
+    const html = renderReceiptHtml(
+      buildReceiptModel(
+        "s",
+        [
+          ev({ ts: iso(0), sessionId: "s", toolId: "mcp__github__get_issue" }),
+          ev({ ts: iso(1), sessionId: "s", toolId: "mcp__github__create_issue" }),
+          ev({ ts: iso(2), sessionId: "s", toolId: "mcp__slack__post_message" }),
+        ],
+        {},
+      ),
+    );
+    expect(html).toContain('aria-label="Servers"');
+    expect(html).toContain('data-fgroup="server" data-fvalue="GitHub"');
+    expect(html).toContain('data-fgroup="server" data-fvalue="Slack"');
+    expect(html).toContain(">GitHub<b>2</b>");
+    expect(html).toContain(">Slack<b>1</b>");
+  });
+
+  it("omits the Servers chip group when fewer than 2 servers are present", () => {
+    const one = renderReceiptHtml(
+      buildReceiptModel(
+        "s",
+        [ev({ ts: iso(0), sessionId: "s", toolId: "mcp__github__get_issue" })],
+        {},
+      ),
+    );
+    expect(one).not.toContain('aria-label="Servers"');
+    expect(one).not.toContain('data-fgroup="server"');
+    const none = renderReceiptHtml(
+      buildReceiptModel("s", [ev({ ts: iso(0), sessionId: "s", toolId: "read_file" })], {}),
+    );
+    expect(none).not.toContain('aria-label="Servers"');
+  });
 });

@@ -9,6 +9,7 @@ import type {
   RequirementStatus,
 } from "../certify/evaluate.js";
 import { productLabel, readTrail, readTrailSince, type TrailEvent, type TrailProduct } from "../trail.js";
+import { mcpServerLabel, parseMcpToolId } from "../mcp-servers.js";
 import type { KyaFileConfig } from "../config.js";
 import {
   loadCertifyCard,
@@ -189,6 +190,8 @@ export interface EventAggregates {
   readonly products: readonly CountRow[];
   /** Top 8 projects by count, sorted desc then label asc. */
   readonly projects: readonly CountRow[];
+  /** Counts by recognized MCP server label, sorted desc then label asc. */
+  readonly servers: readonly CountRow[];
 }
 
 /** Pure rollup of trail events for the report's stat chips and sections. */
@@ -198,6 +201,7 @@ export function aggregateEvents(events: readonly TrailEvent[]): EventAggregates 
   const reasonCounts = new Map<string, number>();
   const productCounts = new Map<TrailProduct, number>();
   const projectCounts = new Map<string, number>();
+  const serverCounts = new Map<string, number>();
   const bySession = new Map<
     string,
     { events: number; deny: number; hold: number; never: number; lastTs: string }
@@ -214,6 +218,11 @@ export function aggregateEvents(events: readonly TrailEvent[]): EventAggregates 
     productCounts.set(pv, (productCounts.get(pv) ?? 0) + 1);
     const project = e.project?.trim();
     if (project) projectCounts.set(project, (projectCounts.get(project) ?? 0) + 1);
+    const server = parseMcpToolId(e.toolId);
+    if (server) {
+      const label = mcpServerLabel(server.server);
+      serverCounts.set(label, (serverCounts.get(label) ?? 0) + 1);
+    }
 
     const sid = e.sessionId || "unknown";
     let s = bySession.get(sid);
@@ -258,7 +267,11 @@ export function aggregateEvents(events: readonly TrailEvent[]): EventAggregates 
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
     .slice(0, 8);
 
-  return { modes, planes, sessions, reasons, products, projects };
+  const servers: CountRow[] = [...serverCounts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+
+  return { modes, planes, sessions, reasons, products, projects, servers };
 }
 
 export function buildReceiptModel(
@@ -386,8 +399,10 @@ function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean
     // Filter facets for the chip bar and dashboard: raw values (project is
     // attacker-controlled but esc() is attribute-safe); data-project is
     // omitted when there is none. data-tool is clipped to 60 chars and must
-    // match the tool filter values stamped on dashboard rows.
+    // match the tool filter values stamped on dashboard rows. data-server is
+    // the recognized MCP server label, omitted for non-MCP or unknown servers.
     const project = e.project?.trim();
+    const server = parseMcpToolId(e.toolId);
     const dataAttrs =
       `data-verdict="${esc(e.verdict.toUpperCase())}"` +
       (never ? ` data-never="1"` : "") +
@@ -396,6 +411,7 @@ function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean
       ` data-product="${esc(e.product ?? "other")}"` +
       ` data-tool="${esc(clip(e.toolId, 60))}"` +
       ` data-session="${esc(e.sessionId || "unknown")}"` +
+      (server ? ` data-server="${esc(mcpServerLabel(server.server))}"` : "") +
       (project ? ` data-project="${esc(project)}"` : "");
     parts.push(`<article class="ev ${t}${never ? " never" : ""}" ${dataAttrs}>
   <div class="rail" aria-hidden="true"><span class="tick"></span></div>
@@ -443,6 +459,7 @@ function changesPanel(changes: ChangesModel, nowMs: number): string {
             .map((e) => {
               const t = tone(e.verdict);
               const project = e.project?.trim();
+              const server = parseMcpToolId(e.toolId);
               const dataAttrs =
                 `data-verdict="${esc(e.verdict.toUpperCase())}"` +
                 (e.never ? ` data-never="1"` : "") +
@@ -451,6 +468,7 @@ function changesPanel(changes: ChangesModel, nowMs: number): string {
                 ` data-product="${esc(e.product ?? "other")}"` +
                 ` data-tool="${esc(clip(e.toolId, 60))}"` +
                 ` data-session="${esc(s.sessionId)}"` +
+                (server ? ` data-server="${esc(mcpServerLabel(server.server))}"` : "") +
                 (project ? ` data-project="${esc(project)}"` : "");
               return `      <div class="chg-entry ${t}${e.never ? " never" : ""}" ${dataAttrs}>
         <div class="top">
@@ -503,6 +521,7 @@ function statChips(agg: EventAggregates): {
   planes: string;
   products: string;
   projects: string;
+  servers: string;
 } {
   // Chips are filter toggles: native buttons keep identical styling via .stat.
   const chip = (label: string, n: number, group: string, value: string, cls = ""): string =>
@@ -528,6 +547,7 @@ function statChips(agg: EventAggregates): {
       chip("Runtime", agg.planes.runtime, "plane", "runtime"),
     products: countRowChips(agg.products, "Products", "product"),
     projects: countRowChips(agg.projects, "Projects", "project"),
+    servers: countRowChips(agg.servers, "Servers", "server"),
   };
 }
 
@@ -677,12 +697,15 @@ function dashboardPanel(db: Dashboard): string {
       .join("\n    ");
   };
   const hotspotsCard =
-    db.productHotspots.length === 0 && db.projectHotspots.length === 0
+    db.productHotspots.length === 0 &&
+    db.projectHotspots.length === 0 &&
+    db.serverHotspots.length === 0
       ? ""
       : `<div class="db-card">
     <h3>Risk hotspots <span class="mute">deny + never</span></h3>
     ${db.productHotspots.length > 0 ? `<p class="sub">Products</p>\n    ${hotspotRows(db.productHotspots, "product")}` : ""}
     ${db.projectHotspots.length > 0 ? `<p class="sub">Projects</p>\n    ${hotspotRows(db.projectHotspots, "project")}` : ""}
+    ${db.serverHotspots.length > 0 ? `<p class="sub">Servers</p>\n    ${hotspotRows(db.serverHotspots, "server")}` : ""}
   </div>`;
 
   return `<section class="panel" id="dashboard" aria-label="Analytics">
@@ -1102,7 +1125,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {  const nowMs = 
   var feed = document.getElementById('feed');
   if (!feed) return;
   var chg = document.getElementById('changes-list');
-  var KNOWN = ' verdict never mode plane product project tool session ';
+  var KNOWN = ' verdict never mode plane product project tool session server ';
   var state = Object.create(null);
   var clearBtn = document.getElementById('clear-filters');
   var chips = document.querySelectorAll('[data-fgroup]');
@@ -1294,6 +1317,7 @@ ${changesPanel(changes, nowMs)}
       </div>
       ${chips.products}
       ${chips.projects}
+      ${chips.servers}
     </div>
     <section class="feed" id="feed" aria-label="Activity feed">
 ${renderFeed(events, nowMs, model.live)}

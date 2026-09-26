@@ -8,6 +8,7 @@
 import type { Host } from "./config.js";
 import type { PolicyEvaluateRequest, PolicyEvaluateResponse } from "./client.js";
 import { findHostToolTier } from "./host-tools.js";
+import { mcpToolTier, parseMcpToolId } from "./mcp-servers.js";
 import { findSampleTool, type ActionClass, type PolicyVerdict } from "./sample-tools.js";
 
 export type SessionRisk = "LOW" | "MEDIUM" | "HIGH";
@@ -32,6 +33,13 @@ function baseTier(
     return { verdict: "ALLOW", reasonCode: "ALLOW" };
   }
 
+  // Clearly destructive admin names on a KNOWN MCP server deny outright, even
+  // when the caller declared risk signals — mirroring sample-tool NEVER.
+  const mcp = parseMcpToolId(toolId);
+  if (mcp && /drop|truncate|purge|transfer/.test(mcp.tool)) {
+    return { verdict: "DENY", reasonCode: "NEVER_EVENT" };
+  }
+
   // Advisory vocabulary only applies when the caller declared no risk signals;
   // explicit irreversible/actionClass keep their stricter paths below.
   if (!irreversible && (actionClass ?? "").trim() === "") {
@@ -44,6 +52,18 @@ function baseTier(
     }
     if (hostTier === "SHELL") {
       return { verdict: "REQUIRE_APPROVE", reasonCode: "SHELL_EXEC" };
+    }
+    if (mcp) {
+      const mcpTier = mcpToolTier(mcp.server, mcp.tool);
+      if (mcpTier === "READ") {
+        return { verdict: "ALLOW", reasonCode: "LOW_RISK_READ" };
+      }
+      if (mcpTier === "WRITE") {
+        return { verdict: "REQUIRE_APPROVE", reasonCode: "HIGH_STAKES_WRITE" };
+      }
+      if (mcpTier === "ADMIN") {
+        return { verdict: "REQUIRE_APPROVE", reasonCode: "HIGH_STAKES_ADMIN" };
+      }
     }
   }
 
