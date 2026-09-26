@@ -1,0 +1,102 @@
+name: repack upstream gateway binary
+
+# Manual repack of the upstream open-source gateway release (Apache-2.0) into
+# kya-gate-<version>-<os>-<arch>.tar.gz artifacts on THIS repo's gate-v*
+# release. The kya CLI only ever downloads from this repo's releases, never
+# from upstream. Each tarball embeds the upstream LICENSE and NOTICE for
+# Apache-2.0 attribution.
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_version:
+        description: "Upstream gateway version to repack (e.g. 1.5.0 — without the v prefix)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  repack:
+    name: repack ${{ matrix.asset.os }}-${{ matrix.asset.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        asset:
+          - { os: linux, arch: amd64, upstream: agentgateway-linux-amd64 }
+          - { os: linux, arch: arm64, upstream: agentgateway-linux-arm64 }
+          - { os: darwin, arch: arm64, upstream: agentgateway-darwin-arm64 }
+          # Upstream publishes no darwin/amd64 build in recent releases; the
+          # job below skips cleanly when the artifact 404s.
+          - { os: darwin, arch: amd64, upstream: agentgateway-darwin-amd64, optional: true }
+          - { os: windows, arch: amd64, upstream: agentgateway-windows-amd64.exe }
+    steps:
+      - name: Download upstream artifact + checksum
+        id: fetch
+        env:
+          VER: ${{ inputs.upstream_version }}
+          UPSTREAM: ${{ matrix.asset.upstream }}
+        run: |
+          set -euo pipefail
+          base="https://github.com/agentgateway/agentgateway/releases/download/v${VER}"
+          code=$(curl -sSL -o upstream.bin -w '%{http_code}' "${base}/${UPSTREAM}")
+          if [ "$code" != "200" ]; then
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+            echo "upstream artifact ${UPSTREAM} not published for v${VER} (HTTP ${code}) — skipping"
+            exit 0
+          fi
+          curl -sSL -o upstream.sha256 "${base}/${UPSTREAM}.sha256"
+          expected=$(awk '{print $1}' upstream.sha256)
+          actual=$(sha256sum upstream.bin | awk '{print $1}')
+          [ "$expected" = "$actual" ] || { echo "upstream checksum mismatch"; exit 1; }
+
+      - name: Fetch upstream LICENSE / NOTICE
+        if: steps.fetch.outputs.missing != 'true'
+        env:
+          VER: ${{ inputs.upstream_version }}
+        run: |
+          set -euo pipefail
+          raw="https://raw.githubusercontent.com/agentgateway/agentgateway/v${VER}"
+          curl -sSLf -o LICENSE "${raw}/LICENSE"
+          curl -sSL -o NOTICE "${raw}/NOTICE" || echo "no NOTICE file upstream (LICENSE alone satisfies Apache-2.0 §4)"
+
+      - name: Repack as kya-gate tarball
+        if: steps.fetch.outputs.missing != 'true'
+        env:
+          VER: ${{ inputs.upstream_version }}
+          OS: ${{ matrix.asset.os }}
+          ARCH: ${{ matrix.asset.arch }}
+        run: |
+          set -euo pipefail
+          name="kya-gate-${VER}-${OS}-${ARCH}"
+          mkdir -p "pkg"
+          if [ "$OS" = "windows" ]; then
+            cp upstream.bin "pkg/kya-gate.exe"
+          else
+            cp upstream.bin "pkg/kya-gate"
+            chmod +x "pkg/kya-gate"
+          fi
+          cp LICENSE pkg/LICENSE
+          [ -f NOTICE ] && cp NOTICE pkg/NOTICE || true
+          tar -czf "${name}.tar.gz" -C pkg .
+          sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256"
+
+      - name: Upload to gate release
+        if: steps.fetch.outputs.missing != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VER: ${{ inputs.upstream_version }}
+          OS: ${{ matrix.asset.os }}
+          ARCH: ${{ matrix.asset.arch }}
+        run: |
+          set -euo pipefail
+          tag="gate-v${VER}"
+          name="kya-gate-${VER}-${OS}-${ARCH}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "kya gateway binaries v${VER}" \
+              --notes "Repacked upstream gateway v${VER} (Apache-2.0; LICENSE/NOTICE embedded in each tarball)."
+          fi
+          gh release upload "$tag" "${name}.tar.gz" "${name}.tar.gz.sha256" --clobber
