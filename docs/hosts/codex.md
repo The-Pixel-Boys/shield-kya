@@ -2,7 +2,7 @@
 
 Wire KYA into Codex CLI / IDE so tool calls routed through MCP pass Shield's evaluate first. Allow runs, Deny stops, Hold waits for a person.
 
-There's no `kya connect codex` — Codex config is TOML with its own conventions, so copy the example by hand.
+`kya connect codex` wires the stdio entry into `~/.codex/config.toml` (TOML, merge-only); `--gate` writes a `url`-based `[mcp_servers.shield-kya-gate]` table pointing at the local kya gateway instead. To copy the richer example by hand (environment-inherited keys), see below.
 
 ## Setup
 

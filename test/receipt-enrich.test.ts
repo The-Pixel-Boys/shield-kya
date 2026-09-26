@@ -16,6 +16,7 @@ import {
   loadWiredHosts,
 } from "../src/receipt/enrich.js";
 import { parseUsageRecords as parseFromCostPerTask } from "../src/showback/cost-per-task.js";
+import { knownHosts } from "../src/commands/connect.js";
 import {
   MAX_USAGE_FILE_BYTES,
   parseUsageFilePayload,
@@ -322,7 +323,7 @@ describe("loadWiredHosts", () => {
       expect(row?.recipeOnly).toMatch(/^docs\/hosts\//);
     }
     expect(rows.filter((r) => r.recipeOnly)).toHaveLength(2);
-    expect(rows).toHaveLength(13);
+    expect(rows).toHaveLength(knownHosts().length);
   });
 
   it("running follows the injected process set", () => {
