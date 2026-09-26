@@ -71,6 +71,64 @@ describe("wrap", () => {
     expect(wrapExitCode(result)).toBe(0);
   });
 
+  it("live wrap sends derived change fields on the evaluate call", async () => {
+    let evalBody: Record<string, unknown> = {};
+    const fetchImpl = mockFetch(async (url, init) => {
+      expect(String(url)).toMatch(/\/policy\/evaluate$/);
+      evalBody = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          verdict: "ALLOW",
+          reasonCode: "OK",
+          toolId: "Write",
+        }),
+        { status: 200 },
+      );
+    });
+    const client = new KyaHttpClient({
+      baseUrl: "http://plane",
+      apiKey: "sk",
+      host: "ide",
+      agentId: base.agentId,
+      fetch: fetchImpl,
+    });
+    const result = await runWrap(
+      base,
+      {
+        toolId: "Write",
+        args: { path: "src/app.ts", content: "const a = 1;" },
+      },
+      client,
+    );
+    expect(result.eval.response.verdict).toBe("ALLOW");
+    expect(evalBody.summary).toContain("write src/app.ts");
+    expect(evalBody.targetPath).toBe("src/app.ts");
+    expect(String(evalBody.diffPreview)).toContain("const a = 1;");
+  });
+
+  it("offline wrap sends nothing (no evaluate call at all)", async () => {
+    const fetchImpl = mockFetch(async () => {
+      throw new Error("network must not be touched offline");
+    });
+    const client = new KyaHttpClient({
+      baseUrl: "http://plane",
+      apiKey: "sk",
+      host: "ide",
+      agentId: base.agentId,
+      fetch: fetchImpl,
+    });
+    const result = await runWrap(
+      base,
+      {
+        toolId: "Write",
+        args: { path: "src/app.ts", content: "const a = 1;" },
+        offline: true,
+      },
+      client,
+    );
+    expect(result.eval.offline).toBe(true);
+  });
+
   it("live REQUIRE_APPROVE opens a ticket and still does not execute", async () => {
     const fetchImpl = mockFetch(async (url, init) => {
       if (String(url).includes("/policy/evaluate")) {

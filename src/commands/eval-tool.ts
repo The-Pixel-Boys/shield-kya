@@ -6,6 +6,7 @@ import {
 } from "../client.js";
 import { UsageError } from "../errors.js";
 import { evaluateOffline } from "../offline-evaluate.js";
+import { deriveWireChangeFields } from "../diff-preview.js";
 import { findSampleTool } from "../sample-tools.js";
 import type { ParsedArgs } from "../parse-args.js";
 import { flagBool, flagString } from "../parse-args.js";
@@ -75,7 +76,10 @@ export async function runEvalTool(
       agentId: config.agentId,
     });
 
-  const response = await http.evaluatePolicy(request);
+  const changeFields = deriveWireChangeFields(toolId, input.args ?? {});
+  const response = await http.evaluatePolicy(
+    changeFields ? { ...request, ...changeFields } : request,
+  );
   return {
     response,
     toolId,

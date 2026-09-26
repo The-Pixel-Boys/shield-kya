@@ -128,6 +128,38 @@ describe("KyaHttpClient", () => {
     expect(res.reasonCode).toBe("NEVER_EVENT");
   });
 
+  it("evaluatePolicy serializes change fields and omits them when absent", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const fetchImpl = mockFetch(async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(
+        JSON.stringify({ verdict: "ALLOW", reasonCode: "OK" }),
+        { status: 200 },
+      );
+    });
+    const client = new KyaHttpClient({
+      baseUrl: "http://plane",
+      apiKey: "sk",
+      host: "ide",
+      fetch: fetchImpl,
+    });
+
+    await client.evaluatePolicy({
+      toolId: "Write",
+      summary: "write src/app.ts (12 chars)",
+      diffPreview: "  const a = 1;",
+      targetPath: "src/app.ts",
+    });
+    expect(bodies[0]?.summary).toBe("write src/app.ts (12 chars)");
+    expect(bodies[0]?.diffPreview).toBe("  const a = 1;");
+    expect(bodies[0]?.targetPath).toBe("src/app.ts");
+
+    await client.evaluatePolicy({ toolId: "org.sample.safe.read" });
+    expect("summary" in (bodies[1] ?? {})).toBe(false);
+    expect("diffPreview" in (bodies[1] ?? {})).toBe(false);
+    expect("targetPath" in (bodies[1] ?? {})).toBe(false);
+  });
+
   it("maps 401 to AuthRequiredError", async () => {
     const fetchImpl = mockFetch(async () => new Response("nope", { status: 401 }));
     const client = new KyaHttpClient({
