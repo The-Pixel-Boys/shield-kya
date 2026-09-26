@@ -12,6 +12,8 @@ import {
   readDaemonState,
   type DaemonProc,
 } from "../receipt/daemon.js";
+import { findGateBinaryPids, findGateDaemonPids } from "../gate/daemon.js";
+import { runGateStop } from "./gate.js";
 
 export interface StopResult {
   readonly stopped: boolean;
@@ -22,6 +24,9 @@ export interface StopResult {
   readonly extraStopped?: readonly number[];
   /** --all was requested but the orphan sweep is unsupported here (win32). */
   readonly sweepUnsupported?: boolean;
+  /** Local gateway supervisor stopped (kya gate run). */
+  readonly gateStopped?: boolean;
+  readonly gatePid?: number;
 }
 
 export interface StopOptions {
@@ -93,12 +98,41 @@ export async function runStop(cwd: string, options: StopOptions = {}): Promise<S
     }
   }
 
+  // --all also stops the local gateway (kya gate run) — supervisor, binary
+  // child, plus orphan sweeps of stray gate-serve supervisors and kya-gate
+  // binaries.
+  let gateStopped = false;
+  let gatePid: number | undefined;
+  if (options.all) {
+    const gateResult = await runGateStop(process.env, {
+      kill: options.kill ? (pid) => options.kill!(pid) : undefined,
+    });
+    gateStopped = gateResult.stopped;
+    gatePid = gateResult.pid;
+    if (!sweepUnsupported) {
+      const kill = options.kill ?? defaultKill;
+      const procs = options.procs ?? listOwnedProcesses(options.platform ?? process.platform);
+      const extra = [...(extraStopped ?? [])];
+      for (const pid of [...findGateDaemonPids(procs), ...findGateBinaryPids(procs)]) {
+        if (gateStopped && (pid === gatePid || pid === gateResult.childPid)) continue;
+        kill(pid);
+        for (let waited = 0; waited < 3_000 && pidAlive(pid); waited += 100) {
+          await sleep(100);
+        }
+        extra.push(pid);
+      }
+      extraStopped = extra;
+    }
+  }
+
   return {
     stopped,
     pid: state?.pid,
     stale: stale || undefined,
     extraStopped,
     sweepUnsupported: sweepUnsupported || undefined,
+    gateStopped: gateStopped || undefined,
+    gatePid,
   };
 }
 
@@ -123,6 +157,9 @@ export function formatStopHuman(r: StopResult): string {
             .join(", ")}`
         : "no other receipt daemons running",
     );
+  }
+  if (r.gateStopped) {
+    lines.push(`stopped local gateway (pid ${r.gatePid})`);
   }
   return lines.join("\n");
 }
