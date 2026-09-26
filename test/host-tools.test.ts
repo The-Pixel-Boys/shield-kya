@@ -54,10 +54,16 @@ describe("evaluateOffline host tool vocabulary", () => {
     expect(r.reasonCode).toBe("HIGH_STAKES_WRITE");
   });
 
-  it("MCP-qualified names stay UNKNOWN_TOOL", () => {
-    const r = evaluateOffline({ toolId: "mcp__linear__save" });
-    expect(r.verdict).toBe("REQUIRE_APPROVE");
-    expect(r.reasonCode).toBe("UNKNOWN_TOOL");
+  it("MCP-qualified names bypass the host vocabulary (registry decides)", () => {
+    // Unknown servers stay UNKNOWN_TOOL — the host vocabulary never claims
+    // `__`-qualified names, and the MCP registry never guesses.
+    const unknown = evaluateOffline({ toolId: "mcp__acme-internal__save" });
+    expect(unknown.verdict).toBe("REQUIRE_APPROVE");
+    expect(unknown.reasonCode).toBe("UNKNOWN_TOOL");
+    // Known servers tier via the MCP registry, not the host vocabulary.
+    const known = evaluateOffline({ toolId: "mcp__linear__save" });
+    expect(known.verdict).toBe("REQUIRE_APPROVE");
+    expect(known.reasonCode).toBe("HIGH_STAKES_WRITE");
   });
 
   it("unrecognized names stay UNKNOWN_TOOL", () => {
