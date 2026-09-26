@@ -162,4 +162,84 @@ describe("eval-tool", () => {
     ]);
     expect(evalToolInputFromArgs(p).offline).toBe(true);
   });
+
+  it("sends derived change fields on the wire for write tools", async () => {
+    let sentBody: Record<string, unknown> = {};
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      sentBody = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({ verdict: "ALLOW", reasonCode: "OK" }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+    const client = new KyaHttpClient({
+      baseUrl: baseConfig.baseUrl,
+      apiKey: baseConfig.apiKey,
+      host: "ide",
+      fetch: fetchImpl,
+    });
+
+    await runEvalTool(
+      baseConfig,
+      {
+        toolId: "Write",
+        args: { path: "src/app.ts", content: "const a = 1;" },
+      },
+      client,
+    );
+
+    expect(sentBody.summary).toContain("write src/app.ts");
+    expect(sentBody.targetPath).toBe("src/app.ts");
+    expect(String(sentBody.diffPreview)).toContain("const a = 1;");
+  });
+
+  it("KYA_SEND_PREVIEWS=0 omits change fields but still evaluates", async () => {
+    const prev = process.env.KYA_SEND_PREVIEWS;
+    process.env.KYA_SEND_PREVIEWS = "0";
+    try {
+      let sentBody: Record<string, unknown> = {};
+      const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+        sentBody = JSON.parse(String(init?.body));
+        return new Response(
+          JSON.stringify({ verdict: "ALLOW", reasonCode: "OK" }),
+          { status: 200 },
+        );
+      }) as unknown as typeof fetch;
+      const client = new KyaHttpClient({
+        baseUrl: baseConfig.baseUrl,
+        apiKey: baseConfig.apiKey,
+        host: "ide",
+        fetch: fetchImpl,
+      });
+
+      const result = await runEvalTool(
+        baseConfig,
+        {
+          toolId: "Write",
+          args: { path: "src/app.ts", content: "const a = 1;" },
+        },
+        client,
+      );
+
+      expect(result.response.verdict).toBe("ALLOW");
+      expect("summary" in sentBody).toBe(false);
+      expect("diffPreview" in sentBody).toBe(false);
+      expect("targetPath" in sentBody).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env.KYA_SEND_PREVIEWS;
+      else process.env.KYA_SEND_PREVIEWS = prev;
+    }
+  });
+
+  it("offline evaluate never derives change fields (no network anyway)", async () => {
+    const result = await runEvalTool(
+      { ...baseConfig, offline: true, apiKey: "" },
+      {
+        toolId: "Write",
+        args: { path: "src/app.ts", content: "const a = 1;" },
+        offline: true,
+      },
+    );
+    expect(result.offline).toBe(true);
+  });
 });

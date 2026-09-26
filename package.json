@@ -1,6 +1,6 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Audit trail & traceability for AI agents — local MCP gate (Allow/Review/Deny), live receipt dashboard, trust-baseline certification.",
   "license": "MIT",
   "type": "module",

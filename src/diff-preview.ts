@@ -2,7 +2,8 @@
  * Clipped, redacted change preview for the activity receipt.
  * Never persists full patches — hard caps + redaction only.
  */
-import { redactTrailText } from "./trail-summary.js";
+import { deriveTargetPath, deriveTrailSummary, redactTrailText } from "./trail-summary.js";
+import { assertNoSecrets } from "./dash/render.js";
 
 export const DIFF_MAX_LINES = 8;
 export const DIFF_MAX_LINE_CHARS = 72;
@@ -227,4 +228,47 @@ export function deriveDiffPreview(
 
   const prepared = prepareLines(rawLines);
   return prepared || undefined;
+}
+
+/** KYA_SEND_PREVIEWS=0/false/off/no keeps change fields off the wire entirely. */
+export function sendPreviewsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const flag = (env.KYA_SEND_PREVIEWS ?? "").trim().toLowerCase();
+  return !(flag === "0" || flag === "false" || flag === "off" || flag === "no");
+}
+
+export interface WireChangeFields {
+  readonly summary?: string;
+  readonly diffPreview?: string;
+  readonly targetPath?: string;
+}
+
+/**
+ * The three change fields the hosted plane persists on the tool event.
+ * Undefined when opted out or when nothing safe/useful was derivable —
+ * evaluate still happens, the fields are simply omitted from the body.
+ */
+export function deriveWireChangeFields(
+  toolId: string,
+  args?: unknown,
+  env: NodeJS.ProcessEnv = process.env,
+): WireChangeFields | undefined {
+  if (!sendPreviewsEnabled(env)) {
+    return undefined;
+  }
+  const summary = deriveTrailSummary(toolId, args);
+  const targetPath = deriveTargetPath(args);
+  let diffPreview = deriveDiffPreview(toolId, args, env);
+  if (diffPreview) {
+    try {
+      assertNoSecrets(diffPreview);
+    } catch {
+      diffPreview = "[redacted]";
+    }
+  }
+  const fields: WireChangeFields = {
+    ...(summary ? { summary } : {}),
+    ...(diffPreview ? { diffPreview } : {}),
+    ...(targetPath ? { targetPath } : {}),
+  };
+  return fields.summary || fields.diffPreview || fields.targetPath ? fields : undefined;
 }
