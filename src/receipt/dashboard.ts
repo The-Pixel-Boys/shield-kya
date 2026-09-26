@@ -3,6 +3,7 @@
  * Everything is computed from the same events array the feed renders.
  */
 import { productLabel, type TrailEvent } from "../trail.js";
+import { mcpServerLabel, parseMcpToolId } from "../mcp-servers.js";
 
 export type ToolWorst = "never" | "deny" | "review" | "allow";
 
@@ -48,6 +49,8 @@ export interface Dashboard {
   readonly productHotspots: readonly DashboardRow[];
   /** deny+never counts per project, desc, top 8. */
   readonly projectHotspots: readonly DashboardRow[];
+  /** deny+never counts per recognized MCP server label, desc, top 8. */
+  readonly serverHotspots: readonly DashboardRow[];
 }
 
 const HOUR_MS = 3_600_000;
@@ -184,6 +187,7 @@ export function computeDashboard(events: readonly TrailEvent[]): Dashboard {
   const tools = new Map<string, { count: number; worst: ToolWorst | undefined }>();
   const productHits = new Map<string, number>();
   const projectHits = new Map<string, number>();
+  const serverHits = new Map<string, number>();
 
   for (const e of events) {
     const v = e.verdict.toUpperCase();
@@ -206,6 +210,11 @@ export function computeDashboard(events: readonly TrailEvent[]): Dashboard {
       productHits.set(pv, (productHits.get(pv) ?? 0) + 1);
       const project = e.project?.trim();
       if (project) projectHits.set(project, (projectHits.get(project) ?? 0) + 1);
+      const server = parseMcpToolId(e.toolId);
+      if (server) {
+        const label = mcpServerLabel(server.server);
+        serverHits.set(label, (serverHits.get(label) ?? 0) + 1);
+      }
     }
   }
 
@@ -228,11 +237,17 @@ export function computeDashboard(events: readonly TrailEvent[]): Dashboard {
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
     .slice(0, TOP_N);
 
+  const serverHotspots: DashboardRow[] = [...serverHits.entries()]
+    .map(([label, count]) => ({ label, value: label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .slice(0, TOP_N);
+
   return {
     verdictMix: mix,
     activity: computeActivity(events),
     topTools,
     productHotspots,
     projectHotspots,
+    serverHotspots,
   };
 }

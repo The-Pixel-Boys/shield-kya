@@ -293,6 +293,27 @@ describe("computeDashboard — risk hotspots", () => {
     expect(d.projectHotspots.map((h) => h.label)).not.toContain("proj-9");
     expect(d.projectHotspots.find((h) => h.label === "proj-8")?.count).toBe(4);
   });
+
+  it("counts deny + never per recognized MCP server, excluding unknown servers", () => {
+    const d = computeDashboard([
+      ev({ ts: iso(0), sessionId: "s", toolId: "mcp__github__delete_branch", verdict: "DENY", reasonCode: "NOPE" }),
+      ev({ ts: iso(1), sessionId: "s", toolId: "mcp__github__get_issue", verdict: "DENY", reasonCode: "NOPE" }),
+      ev({
+        ts: iso(2),
+        sessionId: "s",
+        toolId: "postgres__drop_table",
+        verdict: "DENY",
+        reasonCode: "NEVER_EVENT",
+        neverEvent: true,
+      }),
+      ev({ ts: iso(3), sessionId: "s", toolId: "mcp__github__create_issue" }),
+      ev({ ts: iso(4), sessionId: "s", toolId: "mcp__acme-internal__nuke", verdict: "DENY", reasonCode: "NOPE" }),
+    ]);
+    expect(d.serverHotspots).toEqual([
+      { label: "GitHub", value: "GitHub", count: 2 },
+      { label: "PostgreSQL", value: "PostgreSQL", count: 1 },
+    ]);
+  });
 });
 
 describe("dashboard HTML", () => {
@@ -356,6 +377,29 @@ describe("dashboard HTML", () => {
     // Hotspots reuse product/project groups (raw value, display label).
     expect(html).toMatch(/class="db-item" data-fgroup="product" data-fvalue="cursor" aria-pressed="false"[^>]*>/);
     expect(html).toContain('class="db-item" data-fgroup="project" data-fvalue="web" aria-pressed="false"');
+  });
+
+  it("renders a Servers hotspot subsection for deny/never on recognized MCP servers", () => {
+    const html = renderReceiptHtml(
+      buildWindowReceiptModel(
+        [
+          ev({ ts: iso(0), sessionId: "s", toolId: "mcp__github__delete_branch", verdict: "DENY", reasonCode: "NOPE" }),
+          ev({ ts: iso(1), sessionId: "s", toolId: "mcp__github__get_issue" }),
+        ],
+        3,
+      ),
+    );
+    expect(html).toContain("Risk hotspots");
+    expect(html).toContain('<p class="sub">Servers</p>');
+    expect(html).toContain('class="db-item" data-fgroup="server" data-fvalue="GitHub" aria-pressed="false"');
+    // Clean MCP usage without deny/never renders no server hotspot rows.
+    const clean = renderReceiptHtml(
+      buildWindowReceiptModel(
+        [ev({ ts: iso(0), sessionId: "s", toolId: "mcp__github__get_issue" })],
+        3,
+      ),
+    );
+    expect(clean).not.toContain('data-fgroup="server" data-fvalue="GitHub" aria-pressed="false"');
   });
 
   it("stamps data-tool on feed rows, escaped and clipped to 60 chars", () => {
