@@ -18,9 +18,26 @@ permissions:
   contents: write
 
 jobs:
+  prepare:
+    name: ensure gate release exists
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VER: ${{ inputs.upstream_version }}
+    steps:
+      - run: |
+          set -euo pipefail
+          tag="gate-v${VER}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "kya gateway binaries v${VER}" \
+              --notes "Repacked upstream gateway v${VER} (Apache-2.0; LICENSE/NOTICE embedded in each tarball)."
+          fi
+
   repack:
     name: repack ${{ matrix.asset.os }}-${{ matrix.asset.arch }}
     runs-on: ubuntu-latest
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -95,8 +112,4 @@ jobs:
           set -euo pipefail
           tag="gate-v${VER}"
           name="kya-gate-${VER}-${OS}-${ARCH}"
-          if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "kya gateway binaries v${VER}" \
-              --notes "Repacked upstream gateway v${VER} (Apache-2.0; LICENSE/NOTICE embedded in each tarball)."
-          fi
           gh release upload "$tag" "${name}.tar.gz" "${name}.tar.gz.sha256" --clobber
