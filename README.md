@@ -165,7 +165,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.12.0", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.13.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -186,13 +186,26 @@ npx @shield-agent/kya reject --id <approval-id>
 
 `wrap` evaluates and may open a pending ticket. It never executes the side effect. `invoke` asks the live plane to authorize after Allow or APPROVED. It does not run the write on this machine. The TUI (`dash`) can `a`/`x` decide only after `y` confirm with a JWT (`sk_*` refused).
 
+## In-process SDK shims
+
+Agents built on LangGraph.js, the Vercel AI SDK, Mastra, OpenAI Agents TS, or the Claude Agent SDK can route tool calls through the same evaluate path without a gateway:
+
+```ts
+import { governed, governLangGraphTool, KyaDeniedError } from "@shield-agent/kya/sdk";
+
+const run = governed({ toolId: "write_file", server: "filesystem", fn: myWrite });
+await run({ path: "out.txt", content: "hi" }); // throws KyaDeniedError on DENY
+```
+
+Offline evaluate by default (no network, no hosted plane); an explicit config honors the live plane. `governA2aSend` gates in-process agent-to-agent sends. Python frameworks (LangGraph, CrewAI, Pydantic AI, ADK, AutoGen, smolagents) use the `shield-kya` shim (`sdks/kya-python/`), which delegates to the local kya CLI. Support matrix and recipes: `docs/sdk-integrations.md`; runnable scripts: `examples/sdk/`.
+
 ## Claude connector
 
 **Desktop / Claude Code (local stdio):**
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.12.0 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.13.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -203,7 +216,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.12.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.13.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -307,6 +320,7 @@ pnpm build
 - [OTLP metrics (OSS + hosted)](docs/otlp.md)
 - [OWASP MCP governance map](docs/owasp-mcp-governance.md)
 - [kya certify — Agent Trust Baseline gap reports](docs/certify.md)
+- [SDK & framework integrations (in-process shims)](docs/sdk-integrations.md)
 - [Hosted operator SSO / SCIM (not in OSS CLI)](docs/hosted-operator-sso.md)
 - See also `LIMITATIONS.md` in this repo
 
