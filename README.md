@@ -94,6 +94,21 @@ kya connect grok --hooks
 kya connect kimi --hooks
 ```
 
+## Gate (local MCP gateway)
+
+`kya gate` puts one loopback-only listener (`127.0.0.1`, default port `3930`) in front of any MCP server you already use. Your host talks to the gateway; the gateway fans out to the real servers. Per-tool policy is generated from the [top-20 server taxonomy](docs/mcp-servers.md) — destructive names (`drop`/`truncate`/`purge`/`transfer`) and each server's ADMIN-tier tools are denied outright (and filtered from `tools/list`), everything else runs in observe mode: allowed, and audited. Every call is traced into the local trail and the live report, and can be forwarded as OTLP to the hosted intake.
+
+```bash
+kya gate init     # scaffold .kya/gateways.json with ready-to-move recipes
+# edit gateways.json: move a recipe into "servers", fill its placeholders
+kya gate setup    # download the pinned gateway binary into .kya/bin
+kya gate run      # generate the gateway config, start the listener detached
+kya connect claude --gate   # point the host at the gateway (server key shield-kya-gate)
+kya gate doctor   # binary, config, listener health, loopback-only posture
+```
+
+`kya gate stop` stops the supervisor and the binary with it. Honest notes: `setup` downloads the gateway binary from our releases — it is the only command that fetches anything; `run` never downloads. Observe mode means allowed calls are recorded, not blocked — the deny set above is the only hard stop, and plane enforcement stays with `kya.policy_evaluate`. `kya connect <host> --gate` covers the same hosts as plain `connect` except grok: remote MCP servers in Grok's config are unverified, so `--gate` there fails closed with an error instead of writing config. Per-server tiers and recipes: [docs/mcp-servers.md](docs/mcp-servers.md).
+
 ## Longer path (optional)
 
 ```bash
@@ -317,6 +332,7 @@ pnpm build
 - [Install hub](https://shield-agent.com/install)
 - [How KYA works](https://shield-agent.com/how-kya-works)
 - [Per-host recipes (23 hosts)](docs/hosts/)
+- [Top-20 MCP server support matrix (taxonomy + gate recipes)](docs/mcp-servers.md)
 - [OTLP metrics (OSS + hosted)](docs/otlp.md)
 - [OWASP MCP governance map](docs/owasp-mcp-governance.md)
 - [kya certify — Agent Trust Baseline gap reports](docs/certify.md)
