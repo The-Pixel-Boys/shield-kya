@@ -152,7 +152,7 @@ export async function ensureGateBinary(deps: EnsureBinaryDeps = {}): Promise<Ens
     const [tgzRes, sumRes] = [await fetchFn(base), await fetchFn(`${base}.sha256`)];
     if (!tgzRes.ok || !sumRes.ok) {
       throw new KyaError(
-        `gateway artifact ${name} not available (HTTP ${!tgzRes.ok ? tgzRes.status : sumRes.status}) — run the repack workflow first or check the release tag gate-v${GATE_VERSION}`,
+        `gateway artifact ${name} not available (HTTP ${!tgzRes.ok ? tgzRes.status : sumRes.status}) — gateway binaries are published by the kya release pipeline (see legal/THIRD-PARTY.md); check the release tag gate-v${GATE_VERSION}`,
         "GATE_DOWNLOAD_FAILED",
       );
     }
