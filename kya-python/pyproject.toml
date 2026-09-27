@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shield-kya"
+version = "0.13.0"
+description = "In-process kya governance shim for Python agent frameworks (offline evaluate via the kya CLI)."
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["kya", "know-your-agent", "governance", "mcp", "agents"]
+
+[tool.setuptools]
+packages = ["shield_kya"]
