@@ -416,11 +416,6 @@ function mergeHostConfig(
   gateUrl?: string,
 ): ConnectStatus {
   if (spec.shape === "grok-toml" || spec.shape === "codex-toml") {
-    if (gateUrl && spec.shape === "grok-toml") {
-      throw new UsageError(
-        "gate wiring is not supported for grok yet — remote MCP servers in Grok's config.toml are unverified; use the stdio wiring (kya connect grok without --gate)",
-      );
-    }
     return mergeTomlHostConfig(path, hostId, force, spec.shape, serverKey, gateUrl);
   }
   const block = gateUrl

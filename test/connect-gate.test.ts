@@ -92,14 +92,30 @@ describe("kya connect --gate per-host shapes", () => {
     }
   });
 
-  it("grok refuses gate wiring explicitly (remote TOML shape unverified)", async () => {
+  it("grok writes a [mcp_servers.shield-kya-gate] url table with an enabled key, idempotent with --force replace", async () => {
     const home = tmp();
     const cwd = tmp();
     try {
-      await expect(wireGate("grok", home, cwd)).rejects.toThrow(
-        /gate wiring is not supported for grok yet/,
+      const first = await wireGate("grok", home, cwd);
+      expect(first.status).toBe("created");
+      const path = join(home, ".grok", "config.toml");
+      const text = readFileSync(path, "utf8");
+      expect(text).toContain("[mcp_servers.shield-kya-gate]");
+      expect(text).toContain(`url = "${GATE_URL}"`);
+      expect(text).toContain("enabled = true");
+
+      const second = await wireGate("grok", home, cwd);
+      expect(second.status).toBe("skipped");
+
+      const forced = await runConnect(
+        cfg(cwd),
+        { host: "grok", gateUrl: "http://127.0.0.1:4000/mcp", force: true },
+        { KYA_HOME: home },
       );
-      expect(existsSync(join(home, ".grok", "config.toml"))).toBe(false);
+      expect(forced.status).toBe("wired");
+      const replaced = readFileSync(path, "utf8");
+      expect(replaced).toContain('url = "http://127.0.0.1:4000/mcp"');
+      expect(replaced).not.toContain(GATE_URL);
     } finally {
       rmSync(home, { recursive: true, force: true });
       rmSync(cwd, { recursive: true, force: true });

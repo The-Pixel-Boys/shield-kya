@@ -29,6 +29,7 @@ import {
 } from "../showback/cost-per-task.js";
 import { computeDashboard, type Dashboard, type DashboardRow, type ToolWorst } from "./dashboard.js";
 import { buildChangesModel, type ChangesModel } from "./changes.js";
+import { loadGateCard, type GateCard } from "./gate-card.js";
 import { receiptCss } from "./receipt-css.js";
 
 export interface ReceiptModel {
@@ -51,6 +52,8 @@ export interface ReceiptModel {
   readonly sandboxes?: SandboxCard;
   /** Per-host wiring status across the connect registry. */
   readonly wiredHosts?: readonly WiredHostRow[];
+  /** Local gateway state + per-server activity in the window. */
+  readonly gate?: GateCard;
   /** Slim ORR card from orr-report/report.json. */
   readonly orr?: OrrCard;
   /** Live Agent Trust Baseline card, recomputed on every model load. */
@@ -292,6 +295,7 @@ export function buildReceiptModel(
     identity: extras?.identity,
     sandboxes: extras?.sandboxes,
     wiredHosts: extras?.wiredHosts,
+    gate: extras?.gate,
     orr: extras?.orr,
     certify: extras?.certify,
     showback: extras?.showback,
@@ -316,6 +320,7 @@ export function buildWindowReceiptModel(
     identity: extras?.identity,
     sandboxes: extras?.sandboxes,
     wiredHosts: extras?.wiredHosts,
+    gate: extras?.gate,
     orr: extras?.orr,
     certify: extras?.certify,
     showback: extras?.showback,
@@ -332,12 +337,16 @@ export function loadReceiptModel(input: {
 }): ReceiptModel {
   const days = input.days > 0 ? Math.floor(input.days) : 3;
   const showback = loadShowbackCard(input.cwd);
+  const events = input.sessionId
+    ? readTrail(input.cwd)
+    : readTrailSince(input.cwd, new Date(Date.now() - days * 24 * 60 * 60 * 1000));
   const extras = {
     live: input.live,
     liveToken: input.liveToken,
     identity: loadIdentity(input.cwd),
     sandboxes: loadSandboxes(input.cwd),
     wiredHosts: loadWiredHosts(input.cwd),
+    gate: loadGateCard(events),
     orr: loadOrrCard(input.cwd),
     certify: loadCertifyCard(input.cwd),
     showback,
@@ -349,10 +358,9 @@ export function loadReceiptModel(input: {
       : undefined,
   };
   if (input.sessionId) {
-    return buildReceiptModel(input.sessionId, readTrail(input.cwd), extras);
+    return buildReceiptModel(input.sessionId, events, extras);
   }
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  return buildWindowReceiptModel(readTrailSince(input.cwd, since), days, extras);
+  return buildWindowReceiptModel(events, days, extras);
 }
 
 function modeBadge(mode: TrailEvent["mode"] | undefined): string {
@@ -747,6 +755,78 @@ function wiredHostsPanel(hosts: readonly WiredHostRow[] | undefined): string {
 </section>`;
 }
 
+/**
+ * Gateway panel: always rendered (the gateway is a primary feature — an
+ * absent panel read as "nothing to say", hiding the not-set-up state).
+ * Per-server rows carry the Servers facet value as data-server so they line
+ * up with the feed's data-server stamps; ids come from gateways.json and are
+ * always escaped.
+ */
+function gatePanel(card: GateCard | undefined, nowMs: number): string {
+  if (!card) return "";
+  if (card.state === "not-set-up") {
+    return `<section class="panel gate" aria-label="Gateway">
+  <h2>Gateway</h2>
+  <div class="orrline">
+    <span class="pill">not set up</span>
+  </div>
+  <p class="line">Gateway not set up — <code>kya gate init</code> to put a governed gateway in front of any MCP server: every tool call proxied, evaluated, and on this trail.</p>
+  <ol class="steps">
+    <li><code>kya gate init</code> — scaffold .kya/gateways.json with ready-to-move recipes</li>
+    <li><code>kya gate setup</code> — install the pinned gateway binary</li>
+    <li><code>kya gate run</code> — start the listener, then <code>kya connect &lt;host&gt; --gate</code></li>
+  </ol>
+</section>`;
+  }
+  const rows = card.servers
+    .map((s) => {
+      const dot =
+        s.worst === "none"
+          ? ""
+          : `<span class="wdot ${s.worst}" title="worst verdict: ${s.worst}"></span>`;
+      return `    <li data-server="${esc(s.serverFacet)}">${dot}<code>${esc(s.id)}</code> — ${esc(s.transport)} · ${s.events} event${s.events === 1 ? "" : "s"}</li>`;
+    })
+    .join("\n");
+  const binary = card.binaryPresent
+    ? `binary ${card.binaryVersion ? esc(clip(card.binaryVersion, 40)) : "installed"}`
+    : "binary missing — kya gate setup";
+  if (card.state === "configured-stopped") {
+    return `<section class="panel gate" aria-label="Gateway">
+  <h2>Gateway</h2>
+  <div class="orrline">
+    <span class="pill">stopped</span>
+    <span class="mute">${card.servers.length} server${card.servers.length === 1 ? "" : "s"} configured · ${binary}</span>
+  </div>
+  <ul class="rows">
+${rows}
+  </ul>
+  <p class="mute small">stopped — <code>kya gate run</code> to start the listener</p>
+</section>`;
+  }
+  const uptime = card.startedAt ? ` · up since ${esc(relativeTime(card.startedAt, nowMs))}` : "";
+  if (card.servers.length === 0) {
+    return `<section class="panel gate" aria-label="Gateway">
+  <h2>Gateway</h2>
+  <div class="orrline">
+    <span class="pill ok">running</span>
+    <span class="mute">${card.url ? `<code>${esc(clip(card.url, 60))}</code>` : ""}${uptime} · ${binary}</span>
+  </div>
+  <p class="line">running, no servers configured — add servers to .kya/gateways.json and restart (<code>kya gate stop</code>, then <code>kya gate run</code>)</p>
+</section>`;
+  }
+  return `<section class="panel gate" aria-label="Gateway">
+  <h2>Gateway</h2>
+  <div class="orrline">
+    <span class="pill ok">running</span>
+    <span class="mute">${card.url ? `<code>${esc(clip(card.url, 60))}</code>` : ""}${uptime} · ${binary}</span>
+  </div>
+  <ul class="rows">
+${rows}
+  </ul>
+  <p class="mute small">${card.events} gateway event${card.events === 1 ? "" : "s"} in this window · <code>kya gate stop</code> stops everything</p>
+</section>`;
+}
+
 function sandboxesPanel(card: SandboxCard | undefined, nowMs: number): string {
   if (!card) return "";
   if (card.sandboxes.length === 0 && !card.backend) return "";
@@ -1047,6 +1127,33 @@ ${topRuns
 }
 
 /**
+ * Compact Overview status card for the gateway, rendered in every state so
+ * the feature is discoverable before setup; the System tab carries the full
+ * panel (server rows, quickstart).
+ */
+function gateHeroCard(card: GateCard | undefined): string {
+  if (!card) return "";
+  const detail =
+    card.state === "running"
+      ? `${card.url ? `<code>${esc(clip(card.url, 48))}</code> · ` : ""}${card.servers.length} server${card.servers.length === 1 ? "" : "s"} · ${card.events} event${card.events === 1 ? "" : "s"}`
+      : card.state === "configured-stopped"
+        ? `${card.servers.length} server${card.servers.length === 1 ? "" : "s"} configured — <code>kya gate run</code>`
+        : `<code>kya gate init</code> to govern any MCP server`;
+  const pill =
+    card.state === "running"
+      ? `<span class="pill ok">running</span>`
+      : `<span class="pill">${card.state === "configured-stopped" ? "stopped" : "not set up"}</span>`;
+  return `<section class="panel hero-gate" aria-label="Gateway">
+  <h2>Gateway</h2>
+  <div class="orrline">
+    ${pill}
+  </div>
+  <p class="mute small">${detail}</p>
+  <p class="mute small">server rows + quickstart: <a href="#system">System tab</a></p>
+</section>`;
+}
+
+/**
  * Defensive normalization for untrusted trail fields before rendering.
  * clip() flattens newlines (single-line contexts: code spans, headers);
  * diffPreview keeps them via clipMultiline so <pre>/fenced diffs survive.
@@ -1253,6 +1360,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {  const nowMs = 
   );
   const systemBody = zoneBody(
     [
+      gatePanel(model.gate, nowMs),
       wiredHostsPanel(model.wiredHosts),
       sandboxesPanel(model.sandboxes, nowMs),
       orrPanel(model.orr, nowMs),
@@ -1292,6 +1400,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {  const nowMs = 
     ${heroCertifyPanel(model.certify)}
     ${verdictsHeroCard(c, events.length)}
     ${activityHeroCard(agg, dashboard, events.length)}
+    ${gateHeroCard(model.gate)}
     ${showbackHeroCard(model.showback)}
   </div>
   <section class="zone" id="overview" aria-labelledby="tab-overview">
@@ -1522,6 +1631,34 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
       ...agg.reasons.map((r) => `- ${mdText(r.label)} × ${r.count}`),
       "",
     );
+  }
+
+  if (model.gate) {
+    const g = model.gate;
+    lines.push("## Gateway");
+    if (g.state === "not-set-up") {
+      lines.push(
+        "not set up — `kya gate init` to put a governed gateway in front of any MCP server, then `kya gate setup` + `kya gate run`",
+      );
+    } else {
+      const binary = g.binaryPresent
+        ? `binary ${g.binaryVersion ? mdInline(clip(g.binaryVersion, 40)) : "installed"}`
+        : "binary missing — kya gate setup";
+      lines.push(
+        g.state === "running"
+          ? `running — \`${mdInline(clip(g.url ?? "", 60))}\` · ${binary} · ${g.events} event${g.events === 1 ? "" : "s"} in window`
+          : `stopped — \`kya gate run\` · ${binary}`,
+      );
+      if (g.state === "running" && g.servers.length === 0) {
+        lines.push("running, no servers configured — add servers to .kya/gateways.json and restart");
+      }
+      for (const s of g.servers) {
+        lines.push(
+          `- \`${mdInline(s.id)}\` — ${mdText(s.transport)} · ${s.events} event${s.events === 1 ? "" : "s"}${s.worst === "none" ? "" : `, worst: ${s.worst}`}`,
+        );
+      }
+    }
+    lines.push("");
   }
 
   const hosts = model.wiredHosts ?? [];
