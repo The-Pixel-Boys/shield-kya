@@ -4,3 +4,5 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 .kya/
+*.egg-info/
+__pycache__/
