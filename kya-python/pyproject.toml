@@ -6,9 +6,24 @@ build-backend = "setuptools.build_meta"
 name = "shield-kya"
 version = "0.13.0"
 description = "In-process kya governance shim for Python agent frameworks (offline evaluate via the kya CLI)."
+readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
+authors = [{ name = "The Pixel Boys / Shield Agent" }]
 keywords = ["kya", "know-your-agent", "governance", "mcp", "agents"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.urls]
+Homepage = "https://github.com/The-Pixel-Boys/shield-kya"
+Repository = "https://github.com/The-Pixel-Boys/shield-kya"
 
 [tool.setuptools]
 packages = ["shield_kya"]
