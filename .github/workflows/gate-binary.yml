@@ -148,10 +148,15 @@ jobs:
         with:
           node-version-file: ui/.nvmrc
 
-      - name: Install Rust + x86_64-apple-darwin target
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-apple-darwin
+      - name: Install Rust toolchain + x86_64-apple-darwin target
+        run: |
+          set -euo pipefail
+          # Upstream pins channel = "1.98" via rust-toolchain.toml, so cargo
+          # inside the checkout uses THAT toolchain — the target must be added
+          # to it explicitly (adding it to the runner's default stable has no
+          # effect on the build).
+          rustup toolchain install 1.98 --profile minimal
+          rustup target add x86_64-apple-darwin --toolchain 1.98
 
       - name: Build from source
         run: make build
