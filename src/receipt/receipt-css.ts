@@ -125,6 +125,12 @@ export function receiptCss(): string {
     flex-basis: 100%; color: var(--mute); font-size: 0.74rem;
     overflow-wrap: break-word;
   }
+  /* Gateway quickstart: compact numbered steps under the not-set-up line. */
+  .gate .steps {
+    margin: 0.4rem 0 0; padding-left: 1.25rem;
+    font-size: 0.78rem; color: var(--mute);
+    display: flex; flex-direction: column; gap: 0.15rem;
+  }
   @media (max-width: 1100px) {
     .hero { grid-template-columns: repeat(2, 1fr); }
   }
