@@ -46,7 +46,9 @@ jobs:
           - { os: linux, arch: arm64, upstream: agentgateway-linux-arm64 }
           - { os: darwin, arch: arm64, upstream: agentgateway-darwin-arm64 }
           # Upstream publishes no darwin/amd64 build in recent releases; the
-          # job below skips cleanly when the artifact 404s.
+          # job below skips cleanly when the artifact 404s. That gap is covered
+          # by the build-darwin-amd64 source-build job at the bottom of this
+          # file.
           - { os: darwin, arch: amd64, upstream: agentgateway-darwin-amd64, optional: true }
           - { os: windows, arch: amd64, upstream: agentgateway-windows-amd64.exe }
     steps:
@@ -112,4 +114,68 @@ jobs:
           set -euo pipefail
           tag="gate-v${VER}"
           name="kya-gate-${VER}-${OS}-${ARCH}"
+          gh release upload "$tag" "${name}.tar.gz" "${name}.tar.gz.sha256" --clobber
+
+  # Upstream publishes no darwin/amd64 artifact, so this leg builds the
+  # gateway from SOURCE for x86_64-apple-darwin and repacks it exactly like
+  # the repack matrix above (same tarball layout, LICENSE/NOTICE embedded,
+  # sha256 sidecar, --clobber upload).
+  #
+  # Runner choice: macos-13 (Intel) is retired, so this runs on macos-15 (arm)
+  # and cross-compiles via the x86_64-apple-darwin rustup target — clang on
+  # macOS carries both arch slices in one SDK, so this is reliable.
+  #
+  # Build recipe mirrors upstream's own release workflow: `make build` with
+  # CARGO_BUILD_ARGS="--target <target>" (which builds the embedded UI first
+  # via corepack pnpm, hence the setup-node step against ui/.nvmrc), producing
+  # target/<target>/release/agentgateway.
+  build-darwin-amd64:
+    name: source-build darwin-amd64
+    runs-on: macos-15
+    needs: prepare
+    env:
+      VER: ${{ inputs.upstream_version }}
+    steps:
+      - name: Checkout upstream at pinned tag
+        uses: actions/checkout@v4
+        with:
+          repository: agentgateway/agentgateway
+          ref: v${{ inputs.upstream_version }}
+          persist-credentials: false
+
+      - name: Set up Node (for the embedded UI build)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ui/.nvmrc
+
+      - name: Install Rust + x86_64-apple-darwin target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - name: Build from source
+        run: make build
+        env:
+          CARGO_BUILD_ARGS: --target x86_64-apple-darwin
+
+      - name: Repack as kya-gate tarball
+        run: |
+          set -euo pipefail
+          name="kya-gate-${VER}-darwin-amd64"
+          mkdir -p pkg
+          cp "target/x86_64-apple-darwin/release/agentgateway" "pkg/kya-gate"
+          chmod +x "pkg/kya-gate"
+          cp LICENSE pkg/LICENSE
+          [ -f NOTICE ] && cp NOTICE pkg/NOTICE || true
+          tar -czf "${name}.tar.gz" -C pkg .
+          shasum -a 256 "${name}.tar.gz" > "${name}.tar.gz.sha256"
+
+      - name: Upload to gate release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="gate-v${VER}"
+          name="kya-gate-${VER}-darwin-amd64"
           gh release upload "$tag" "${name}.tar.gz" "${name}.tar.gz.sha256" --clobber
