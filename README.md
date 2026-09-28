@@ -107,7 +107,7 @@ kya connect claude --gate   # point the host at the gateway (server key shield-k
 kya gate doctor   # binary, config, listener health, loopback-only posture
 ```
 
-`kya gate stop` stops the supervisor and the binary with it. Honest notes: `setup` downloads the gateway binary from our releases — it is the only command that fetches anything; `run` never downloads. Observe mode means allowed calls are recorded, not blocked — the deny set above is the only hard stop, and plane enforcement stays with `kya.policy_evaluate`. `kya connect <host> --gate` covers the same hosts as plain `connect` except grok: remote MCP servers in Grok's config are unverified, so `--gate` there fails closed with an error instead of writing config. Per-server tiers and recipes: [docs/mcp-servers.md](docs/mcp-servers.md).
+`kya gate stop` stops the supervisor and the binary with it. Honest notes: `setup` downloads the gateway binary from our releases — it is the only command that fetches anything; `run` never downloads. Observe mode means allowed calls are recorded, not blocked — the deny set above is the only hard stop, and plane enforcement stays with `kya.policy_evaluate`. `kya connect <host> --gate` covers the same hosts as plain `connect` — grok gets a `[mcp_servers.shield-kya-gate]` url table in its config.toml (Grok supports remote MCP servers over HTTP). Per-server tiers and recipes: [docs/mcp-servers.md](docs/mcp-servers.md).
 
 ## Longer path (optional)
 
@@ -180,7 +180,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.13.0", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.14.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -220,7 +220,7 @@ Offline evaluate by default (no network, no hosted plane); an explicit config ho
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.13.0 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.14.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -231,7 +231,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.13.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.14.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
