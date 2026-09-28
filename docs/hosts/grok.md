@@ -67,7 +67,7 @@ Connect appends and never rewrites unrelated TOML. An inline `shield-kya = …` 
 
 ## Uninstall
 
-Grok CLI: delete the `[mcp_servers.shield-kya]` table from `~/.grok/config.toml` (or rewire later with `kya connect grok --force`). grok.com: delete the connector in connector settings; xAI SDK: remove the `mcp(...)` tool from your code. Nothing else is installed — no daemon, no background process.
+Grok CLI: delete the `[mcp_servers.shield-kya]` table from `~/.grok/config.toml` (or rewire later with `kya connect grok --force`); if you wired the gateway with `kya connect grok --gate`, delete the `[mcp_servers.shield-kya-gate]` table too. grok.com: delete the connector in connector settings; xAI SDK: remove the `mcp(...)` tool from your code. Nothing else is installed — no daemon, no background process.
 
 ## Troubleshooting
 

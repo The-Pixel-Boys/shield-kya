@@ -27,7 +27,8 @@ export interface GateDaemonState {
   readonly url: string;
   readonly port: number;
   readonly otlpPort: number;
-  readonly startedAt: string;
+  /** Uptime anchor; dropped when the state file carries a non-string value. */
+  readonly startedAt?: string;
 }
 
 export function gateStatePath(env: NodeJS.ProcessEnv = process.env): string {
@@ -55,7 +56,14 @@ export function readGateState(
       typeof raw.port === "number" &&
       typeof raw.otlpPort === "number"
     ) {
-      return raw as GateDaemonState;
+      return {
+        pid: raw.pid,
+        ...(typeof raw.childPid === "number" ? { childPid: raw.childPid } : {}),
+        url: raw.url,
+        port: raw.port,
+        otlpPort: raw.otlpPort,
+        ...(typeof raw.startedAt === "string" ? { startedAt: raw.startedAt } : {}),
+      };
     }
   } catch {
     /* corrupt state — treat as absent */

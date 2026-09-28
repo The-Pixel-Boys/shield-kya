@@ -343,10 +343,51 @@ describe("doctor bind scope", () => {
   });
 });
 
-describe("e2e with the real gateway binary", () => {  const real = process.env.KYA_GATE_E2E === "1" && existsSync(join(process.env.KYA_HOME ?? "", ".kya/bin/kya-gate"));
-  it.skipIf(!real)("starts the real binary and answers on the listener", () => {
-    // Manual verification path: KYA_GATE_E2E=1 with a binary installed via
-    // `kya gate setup`. CI never runs this (no binary, flag unset).
-    expect(real).toBe(true);
-  });
+describe("e2e with the real gateway binary", () => {
+  // Binary lookup: KYA_GATE_BINARY (CI installs to a temp dir), else the
+  // standard `kya gate setup` location under KYA_HOME.
+  const binary =
+    process.env.KYA_GATE_BINARY ?? join(process.env.KYA_HOME ?? "", ".kya/bin/kya-gate");
+  const real = process.env.KYA_GATE_E2E === "1" && existsSync(binary);
+  it.skipIf(!real)(
+    "starts the real binary and answers on the listener",
+    async () => {
+      const home = tmp();
+      try {
+        writeGateways2(home, []);
+        const e = env(home);
+        writeFileSync(gateYamlPath(e), generateGatewayYaml(readGateways(e)), "utf8");
+        const handle = await startGateSupervisor({
+          cwd: home,
+          env: e,
+          binaryPath: binary,
+        });
+
+        // Not "listening" until the listener answers (a bare GET gets a 406
+        // from the real gateway — any HTTP answer means it is up).
+        let answered = false;
+        for (let waited = 0; waited < 10_000 && !answered; waited += 200) {
+          try {
+            const res = await fetch(`${handle.url}/mcp`, {
+              signal: AbortSignal.timeout(1000),
+              redirect: "error",
+            });
+            res.body?.cancel().catch(() => undefined);
+            answered = true;
+          } catch {
+            await new Promise((r) => setTimeout(r, 200));
+          }
+        }
+        expect(answered).toBe(true);
+        expect(pidAlive(handle.childPid!)).toBe(true);
+
+        handle.stop();
+        await handle.waitUntilClosed;
+        expect(readGateState(e)).toBeUndefined();
+      } finally {
+        rmSync(home, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
 });
