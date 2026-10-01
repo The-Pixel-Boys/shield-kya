@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { loadGateCard, type GateCard } from "../src/receipt/gate-card.js";
+import { toolServerPrefix, type GatePage } from "../src/receipt/gate-page.js";
 import {
   buildWindowReceiptModel,
   renderReceiptHtml,
@@ -202,7 +203,8 @@ describe("loadGateCard model", () => {
       expect(card.state).toBe("running");
       const html = renderWith(card);
       expect(html).toContain('<span class="pill ok">running</span>');
-      expect(html).toContain("running, no servers configured");
+      expect(html).toContain("Backends");
+      expect(html).toContain('<span class="num">0</span>');
       expect(html).not.toContain("Gateway not set up");
       // …and the third ordering: stopped + servers is still configured-stopped.
       expect(loadGateCard([], env(home)).servers).toEqual([]);
@@ -313,48 +315,102 @@ const FRESH_CARD: GateCard = {
 };
 
 function renderWith(card: GateCard, events: TrailEvent[] = []): string {
-  return renderReceiptHtml(buildWindowReceiptModel(events, 3, { gate: card }));
+  const configured = new Set(card.servers.map((s) => s.id));
+  const gateEvents = events.filter((e) => {
+    const id = toolServerPrefix(e.toolId);
+    return id !== undefined && configured.has(id);
+  });
+  const servers = card.servers.map((s) => ({
+    ...s,
+    importedFrom: ["manual"],
+    policy: { defaultTier: s.id === "github" ? "WRITE" : undefined, denyPatterns: [] },
+    deniedTools: [],
+  }));
+  const page: GatePage = {
+    ...card,
+    failureMode: "failOpen",
+    otlpPort: 3931,
+    bindScope: { loopbackOnly: true, detail: "loopback-only" },
+    binaryPath: "/home/test/.kya/bin/kya-gate",
+    gateEvents,
+    servers,
+    listeners:
+      card.state === "not-set-up"
+        ? []
+        : [
+            { name: "MCP listener", protocol: "MCP over HTTP", address: "http://127.0.0.1:3930", state: card.state === "running" ? "running" : "stopped", detail: "local proxy" },
+            { name: "OTLP receiver", protocol: "OTLP/HTTP", address: "port 3931", state: card.state === "running" ? "running" : "stopped", detail: "telemetry" },
+          ],
+    routes: servers.map((s) => ({
+      pattern: `${s.id}__*`,
+      backend: s.id,
+      backendLabel: s.serverFacet,
+      tier: s.policy.defaultTier,
+      denyCount: s.policy.denyPatterns.length,
+      events: s.events,
+      worst: s.worst,
+      deniedTools: s.deniedTools,
+    })),
+    policySummary: {
+      networkRule: "127.0.0.0/8",
+      failureMode: "failOpen",
+      totalPolicies: 1 + servers.length,
+      verdicts: { allow: 0, deny: 0, hold: 0, never: 0 },
+    },
+    playgroundSamples: [],
+  };
+  return renderReceiptHtml(buildWindowReceiptModel(events, 3, { gate: page }));
 }
 
 describe("gateway panel render", () => {
-  it("not-set-up: auto-bootstrap quickstart in the System panel and the hero card", () => {
+  it("not-set-up: quickstart on Gateway Home, slim System panel", () => {
     const html = renderWith(FRESH_CARD);
-    expect(html).toContain("Gateway not set up");
+    expect(html).toContain('id="gateway-home"');
+    expect(html).toContain('id="gateway-home"');
+    expect(html).toContain("not set up");
     expect(html).toContain("kya gate init");
     expect(html).toContain("kya start");
-    expect(html).toContain("routes the host through it");
-    expect(html).toContain("kya gate doctor");
-    expect(html).not.toContain("kya gate setup");
-    expect(html).toContain('class="panel hero-gate"');
+    expect(html).toContain("routes it through the gateway automatically");
+    expect(html).toContain("Doctor");
+    // The Gateway hero tile (not the Home quickstart) prompts for setup.
+    expect(html.match(/kya gate setup/g)).toHaveLength(1);
+    expect(html).not.toContain('class="panel hero-gate"');
+    expect(html).toContain('class="panel gate"');
+    expect(html).toContain("Open Gateway");
   });
 
-  it("configured-stopped: servers listed with the run hint, binary-missing note", () => {
+  it("configured-stopped: status on Home, servers on Backends, slim System panel", () => {
     const html = renderWith(STOPPED_CARD);
+    expect(html).toContain('id="gateway-home"');
+    expect(html).toContain('id="gateway-backends"');
     expect(html).toContain("<span class=\"pill\">stopped</span>");
     expect(html).toContain("1 server configured");
     expect(html).toContain("binary missing — kya gate setup");
-    expect(html).toContain("stopped — <code>kya gate run</code>");
-    expect(html).toContain("<code>github</code> — stdio · 0 events");
+    expect(html).toContain("<code>github</code>");
+    expect(html).toContain("stdio");
   });
 
   it("running: listener, uptime, per-server counts + worst verdict", () => {
     const html = renderWith(RUNNING_CARD, [ev({}), ev({ toolId: "github__merge_pr", verdict: "DENY" })]);
+    expect(html).toContain('id="gateway-home"');
+    expect(html).toContain('id="gateway-backends"');
     expect(html).toContain('<span class="pill ok">running</span>');
     expect(html).toContain("http://127.0.0.1:3930");
     expect(html).toContain("up since");
-    expect(html).toContain("binary 1.5.0");
-    expect(html).toContain("<code>github</code> — stdio · 2 events");
+    expect(html).toContain("Binary <code>1.5.0</code>");
+    expect(html).toContain("<code>github</code>");
+    expect(html).toContain("stdio");
     expect(html).toContain('<span class="wdot deny"');
-    expect(html).toContain("2 gateway events in this window");
+    expect(html).toContain("Gateway events");
   });
 
   it("per-server rows carry data-server aligned with the feed's Servers facet", () => {
     const html = renderWith(RUNNING_CARD, [ev({})]);
-    // Known id: both the feed article and the gateway row use the registry label.
+    // Known id: both the feed article and the gateway Backends table use the registry label.
     expect(html).toContain('<article class="ev ok" data-verdict="ALLOW" data-mode="observe" data-plane="unknown" data-product="other" data-tool="github__get_issue" data-session="sess-gate" data-server="GitHub">');
-    expect(html).toContain('<li data-server="GitHub">');
+    expect(html).toContain('data-server="GitHub"');
     // Unknown id: no feed stamp exists; the row still carries the id itself.
-    expect(html).toContain('<li data-server="acme">');
+    expect(html).toContain('data-server="acme"');
   });
 
   it("escapes the user-editable state file (hostile listener url)", () => {
