@@ -53,7 +53,9 @@ That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/m
 
 ![Changes tab — what actually changed per session: files touched with redacted diff previews](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-changes.png)
 
-<!-- Local paths kept in package for offline viewers: assets/report-overview.png, assets/report-certify.png, assets/report-activity.png, assets/report-changes.png (legacy: assets/activity-receipt.png) -->
+![Gateway section — local MCP gate with listeners, routes, backends, policies, and a dry-run playground](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-gateway.png)
+
+<!-- Local paths kept in package for offline viewers: assets/report-overview.png, assets/report-certify.png, assets/report-activity.png, assets/report-changes.png, assets/report-gateway.png (legacy: assets/activity-receipt.png) -->
 
 ```bash
 kya start --no-open   # wire only
@@ -98,6 +100,8 @@ kya connect kimi --hooks
 
 `kya gate` puts one loopback-only listener (`127.0.0.1`, default port `3930`) in front of any MCP server you already use. Your host talks to the gateway; the gateway fans out to the real servers. Per-tool policy is generated from the [top-20 server taxonomy](docs/mcp-servers.md) — destructive names (`drop`/`truncate`/`purge`/`transfer`) and each server's ADMIN-tier tools are denied outright (and filtered from `tools/list`), everything else runs in observe mode: allowed, and audited. Every call is traced into the local trail and the live report, and can be forwarded as OTLP to the hosted intake.
 
+**Zero-touch:** `kya start` already does this for you. It scans your detected host configs for third-party MCP servers, imports them into `.kya/gateways.json` (recorded with an `importedFrom` provenance field), installs the gateway binary, starts the listener, and rewrites each source host so the imported servers route through the gateway — the original host config is preserved under `.kya/backups/` before anything is removed. Nothing found → nothing downloaded, no listener. Opt out with `kya start --no-gate` or `KYA_GATE=off`. If the binary download fails (offline, no network), `kya start` warns once and continues without the gateway — host configs stay untouched. The manual path below is still there when you want full control:
+
 ```bash
 kya gate init     # scaffold .kya/gateways.json with ready-to-move recipes
 # edit gateways.json: move a recipe into "servers", fill its placeholders
@@ -107,7 +111,7 @@ kya connect claude --gate   # point the host at the gateway (server key shield-k
 kya gate doctor   # binary, config, listener health, loopback-only posture
 ```
 
-`kya gate stop` stops the supervisor and the binary with it. Honest notes: `setup` downloads the gateway binary from our releases — it is the only command that fetches anything; `run` never downloads. Observe mode means allowed calls are recorded, not blocked — the deny set above is the only hard stop, and plane enforcement stays with `kya.policy_evaluate`. `kya connect <host> --gate` covers the same hosts as plain `connect` — grok gets a `[mcp_servers.shield-kya-gate]` url table in its config.toml (Grok supports remote MCP servers over HTTP). Per-server tiers and recipes: [docs/mcp-servers.md](docs/mcp-servers.md).
+`kya gate stop` stops the supervisor and the binary with it. Honest notes: `kya gate setup` (and `kya start`'s auto-bootstrap, only when it found servers to govern) downloads the pinned gateway binary from our releases — nothing else fetches anything; `run` never downloads. Observe mode means allowed calls are recorded, not blocked — the deny set above is the only hard stop, and plane enforcement stays with `kya.policy_evaluate`. `kya connect <host> --gate` covers the same hosts as plain `connect` — grok gets a `[mcp_servers.shield-kya-gate]` url table in its config.toml (Grok supports remote MCP servers over HTTP). Per-server tiers and recipes: [docs/mcp-servers.md](docs/mcp-servers.md).
 
 ## Longer path (optional)
 
@@ -180,7 +184,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.15.0", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.18.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -220,7 +224,7 @@ Offline evaluate by default (no network, no hosted plane); an explicit config ho
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.15.0 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.18.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -231,7 +235,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.15.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.18.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 

@@ -141,11 +141,12 @@ describe("changes tab rendering", () => {
   ];
   const html = renderReceiptHtml(buildWindowReceiptModel(events, 3));
 
-  it("renders the Changes tab after Overview with a matching zone", () => {
-    const nav = html.slice(html.indexOf('<nav class="tabs"'), html.indexOf("</nav>"));
-    expect(nav.indexOf('href="#overview"')).toBeLessThan(nav.indexOf('href="#changes"'));
+  it("renders the Changes nav item after Activity with a matching zone", () => {
+    const nav = html.slice(html.indexOf('<nav class="sidebar-nav"'), html.indexOf("</nav>"));
+    expect(nav.indexOf('href="#overview"')).toBeLessThan(nav.indexOf('href="#activity"'));
+    expect(nav.indexOf('href="#activity"')).toBeLessThan(nav.indexOf('href="#changes"'));
     expect(nav.indexOf('href="#changes"')).toBeLessThan(nav.indexOf('href="#certify"'));
-    expect(html).toContain('<a class="tab" id="tab-changes" href="#changes">Changes</a>');
+    expect(html).toContain('<a class="nav-link" id="tab-changes" href="#changes">');
     expect(html).toContain('<section class="zone" id="changes" aria-labelledby="tab-changes">');
   });
 

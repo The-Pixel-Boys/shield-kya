@@ -146,7 +146,9 @@ const EVENTS: TrailEvent[] = [
   ev({ ts: "2026-09-10T08:00:00.000Z", sessionId: "s", toolId: "E", product: "cursor", verdict: "REQUIRE_APPROVE", reasonCode: "SHELL_EXEC", project: "__proto__" }),
 ];
 
-const HTML = renderReceiptHtml(buildReceiptModel("s", EVENTS, {}));
+const HTML = renderReceiptHtml(
+  buildReceiptModel("s", EVENTS, { live: true, liveToken: "test-token" }),
+);
 
 const visible = (m: Mount): number => m.rows.filter((r) => !r.classList.contains("filtered-out")).length;
 const fullUrl = (m: Mount): string =>
@@ -309,7 +311,9 @@ describe("receipt filter engine (inline script, shimmed DOM)", () => {
       ev({ ts: "2026-09-11T09:00:00.000Z", sessionId: "s", toolId: "P2", project: "a:b" }),
       ev({ ts: "2026-09-11T08:00:00.000Z", sessionId: "s", toolId: "P3", project: "plain" }),
     ];
-    const ENC_HTML = renderReceiptHtml(buildReceiptModel("s", ENC_EVENTS, {}));
+    const ENC_HTML = renderReceiptHtml(
+      buildReceiptModel("s", ENC_EVENTS, { live: true, liveToken: "test-token" }),
+    );
 
     // %2C decodes to a comma INSIDE the value — it must not split segments.
     const comma = mount(ENC_HTML, { search: "?f=project:foo%2Cbar" });
@@ -360,7 +364,9 @@ describe("receipt filter engine (inline script, shimmed DOM)", () => {
       ev({ ts: "2026-09-11T08:00:00.000Z", sessionId: "s", toolId: "mcp__slack__post_message" }),
       ev({ ts: "2026-09-11T07:00:00.000Z", sessionId: "s", toolId: "mcp__acme-internal__do_thing" }),
     ];
-    const MCP_HTML = renderReceiptHtml(buildReceiptModel("s", MCP_EVENTS, {}));
+    const MCP_HTML = renderReceiptHtml(
+      buildReceiptModel("s", MCP_EVENTS, { live: true, liveToken: "test-token" }),
+    );
 
     // Query path: server is a KNOWN group, so ?f=server:GitHub filters rows.
     const fromQuery = mount(MCP_HTML, { search: "?f=server:GitHub" });

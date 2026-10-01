@@ -4,12 +4,13 @@
  * The page must stay fully offline/standalone: system font stacks only, no
  * external URLs of any kind. Colors come from the --bg/--fg/--mute/--line/
  * --card base tokens plus the --ok/--warn/--bad tone family; dark is the
- * default and light rides on prefers-color-scheme, with translucency done via
- * color-mix so both schemes share one rule set.
+ * default and light rides on prefers-color-scheme or an explicit
+ * html[data-theme="light"] attribute, with translucency done via color-mix so
+ * both schemes share one rule set.
  *
- * Tab switching is pure CSS: nav links point at #overview/#changes/#certify/
- * #activity/#system and :target shows the matching zone. The hide rules are
- * gated behind
+ * Zone switching is pure CSS: nav links point at
+ * #overview/#activity/#changes/#certify/#gateway/#system and :target shows the
+ * matching zone. The hide rules are gated behind
  * `@supports selector(body:has(*))`, so a browser without :has() simply shows
  * every zone stacked — degraded, but nothing is ever hidden unreachable.
  */
@@ -17,6 +18,7 @@ export function receiptCss(): string {
   return `
   :root {
     color-scheme: dark;
+    --sidebar-width: 15rem;
     --bg: #0a0c10;
     --fg: #eef2f7;
     --mute: #8b95a8;
@@ -28,8 +30,21 @@ export function receiptCss(): string {
     --rail: #2a3344;
     --day: #6b7280;
   }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f3f5f8;
+    --fg: #0f172a;
+    --mute: #64748b;
+    --line: #e2e8f0;
+    --card: #ffffff;
+    --ok: #059669;
+    --bad: #dc2626;
+    --warn: #d97706;
+    --rail: #cbd5e1;
+    --day: #64748b;
+  }
   @media (prefers-color-scheme: light) {
-    :root {
+    :root:not([data-theme]) {
       color-scheme: light;
       --bg: #f3f5f8;
       --fg: #0f172a;
@@ -51,20 +66,102 @@ export function receiptCss(): string {
     color: var(--fg);
     line-height: 1.4;
   }
-  main { max-width: 74rem; margin: 0 auto; padding: 1.35rem 1.25rem 3.5rem; }
-  /* Sticky top zone: header + tab nav stay pinned as one unit, so a fragment
-     jump to a zone never strands the nav behind the header. */
-  .topstick {
-    position: sticky; top: 0; z-index: 6;
-    background: color-mix(in srgb, var(--bg) 88%, transparent);
-    -webkit-backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
+  /* Fixed left sidebar: brand, vertical nav, footer actions. */
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-width);
+    display: flex; flex-direction: column;
+    background: var(--card);
+    border-right: 1px solid var(--line);
+    z-index: 10;
+  }
+  .sidebar-header {
+    padding: 1.1rem 1.25rem;
     border-bottom: 1px solid var(--line);
-    margin-bottom: 1rem;
   }
-  header.bar {
-    padding: 0.85rem 0 0.4rem;
+  .brand {
+    display: inline-flex; align-items: center; gap: 0.55rem;
+    font-weight: 800; font-size: 1.1rem; letter-spacing: -0.02em;
   }
+  .mark {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.6rem; height: 1.6rem; border-radius: 6px;
+    background: var(--fg); color: var(--card);
+    font-size: 1rem; line-height: 1;
+  }
+  .wordmark { color: var(--fg); }
+  .sidebar-nav {
+    flex: 1 1 auto; overflow-y: auto;
+    padding: 0.75rem; display: flex; flex-direction: column; gap: 0.15rem;
+  }
+  .nav-link {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.82rem; font-weight: 600; color: var(--mute);
+    text-decoration: none; border-radius: 8px;
+    border: 1px solid transparent;
+  }
+  .nav-link:hover { color: var(--fg); background: color-mix(in srgb, var(--bg) 55%, var(--card)); }
+  .nav-link:focus-visible {
+    outline: 2px solid var(--ok);
+    outline-offset: 2px;
+    color: var(--fg);
+  }
+  .nav-label { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .nav-group { display: flex; flex-direction: column; gap: 0.05rem; margin-top: 0.35rem; }
+  .nav-group-label {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.45rem 0.75rem 0.25rem;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--day);
+  }
+  .nav-sub { margin-left: 0.75rem; font-size: 0.78rem; font-weight: 500; }
+  .nav-count {
+    font-size: 0.72rem; font-variant-numeric: tabular-nums; font-weight: 650;
+    color: var(--mute); background: color-mix(in srgb, var(--bg) 55%, var(--card));
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: 0.08rem 0.45rem;
+  }
+  .status-dot {
+    width: 0.45rem; height: 0.45rem; border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 22%, transparent);
+  }
+  .sidebar-footer {
+    padding: 0.9rem 1.25rem;
+    border-top: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  }
+  .theme-toggle {
+    font-family: inherit; font-size: 0.75rem; font-weight: 600;
+    color: var(--fg); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 0.35rem 0.7rem; cursor: pointer;
+    appearance: none; -webkit-appearance: none;
+  }
+  .theme-toggle:hover { border-color: var(--mute); }
+  .theme-toggle:focus-visible {
+    outline: 2px solid var(--ok);
+    outline-offset: 2px;
+  }
+  .sidebar-footer a {
+    font-size: 0.75rem; font-weight: 600; color: var(--mute);
+    text-decoration: none;
+  }
+  .sidebar-footer a:hover { color: var(--fg); }
+  .sidebar-footer a:focus-visible {
+    outline: 2px solid var(--ok);
+    outline-offset: 2px;
+    color: var(--fg);
+  }
+  main {
+    margin-left: var(--sidebar-width);
+    max-width: 74rem;
+    margin-right: auto;
+    padding: 1.35rem 1.25rem 3.5rem;
+  }
+  .page-header { margin-bottom: 1.25rem; }
   .title-row {
     display: flex; align-items: baseline; justify-content: space-between;
     gap: 0.75rem; flex-wrap: wrap;
@@ -95,14 +192,48 @@ export function receiptCss(): string {
   @media (prefers-reduced-motion: reduce) {
     .live::before { animation: none; }
   }
-  /* Hero KPI grid: Certify spans two columns on wide layouts, 4→2→1. Every
-     hero card is a direct .panel child — one chrome, no wrapper special-cases. */
   .hero {
-    display: grid; grid-template-columns: repeat(4, 1fr);
-    gap: 1rem; margin-bottom: 1.25rem; align-items: stretch;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
   }
-  .hero > .panel { margin-bottom: 0; height: 100%; }
-  .hero-certify { grid-column: span 2; min-width: 0; }
+  .hero > .panel { margin-bottom: 0; }
+  .hero-tiles {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+  }
+  .hero-tiles > .panel { margin-bottom: 0; height: 100%; }
+  @media (max-width: 1100px) {
+    .hero-tiles { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 900px) {
+    .sidebar {
+      position: sticky; top: 0;
+      width: 100%; height: auto; flex-direction: row; flex-wrap: wrap;
+      border-right: none; border-bottom: 1px solid var(--line);
+    }
+    .sidebar-header {
+      border-bottom: none; border-right: 1px solid var(--line);
+      padding: 0.75rem 1rem;
+    }
+    .sidebar-nav {
+      flex-direction: row; flex-wrap: wrap; overflow-x: auto;
+      flex: 1 1 auto; padding: 0.6rem;
+    }
+    .sidebar-footer {
+      border-top: none; border-left: 1px solid var(--line);
+      padding: 0.75rem 1rem;
+    }
+    main { margin-left: 0; padding-top: 1rem; }
+  }
+  @media (max-width: 720px) {
+    main { padding: 1.1rem 0.85rem 3rem; }
+  }
+  @media (max-width: 480px) {
+    .hero-tiles { grid-template-columns: 1fr; }
+  }
   /* Result-tone accent: inset bar so the border box never shifts. */
   .hero-certify.pass {
     border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
@@ -114,32 +245,15 @@ export function receiptCss(): string {
   }
   /* Hero result pill reads larger than inline status pills. */
   .hero-certify .pill { font-size: 0.82rem; padding: 0.22rem 0.75rem; }
-  /* Status legend + attested summary: small muted single lines under the
-     count tiles; allowed to wrap on narrow viewports. */
+  /* Status legend + attested summary: small muted single lines under the count tiles. */
   .hero-certify .legend, .hero-certify .att-line {
     margin: 0.3rem 0 0; font-size: 0.72rem; color: var(--mute);
     overflow-wrap: break-word;
   }
-  /* Evidence one-liner sits beneath its gap row (the row is a flex-wrap). */
+  /* Evidence one-liner sits beneath its gap row. */
   .hero-certify .rows .gap-ev {
     flex-basis: 100%; color: var(--mute); font-size: 0.74rem;
     overflow-wrap: break-word;
-  }
-  /* Gateway quickstart: compact numbered steps under the not-set-up line. */
-  .gate .steps {
-    margin: 0.4rem 0 0; padding-left: 1.25rem;
-    font-size: 0.78rem; color: var(--mute);
-    display: flex; flex-direction: column; gap: 0.15rem;
-  }
-  @media (max-width: 1100px) {
-    .hero { grid-template-columns: repeat(2, 1fr); }
-  }
-  @media (max-width: 720px) {
-    main { padding: 1.1rem 0.85rem 3rem; }
-  }
-  @media (max-width: 480px) {
-    .hero { grid-template-columns: 1fr; }
-    .hero-certify { grid-column: span 1; }
   }
   .kpi-row { display: flex; flex-wrap: wrap; gap: 0.8rem 1.2rem; }
   .kpi { display: flex; flex-direction: column; gap: 0.1rem; min-width: 2.8rem; }
@@ -187,51 +301,42 @@ export function receiptCss(): string {
   .sev.high { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
   .sev.medium { color: var(--day); }
   .sev.low { color: var(--mute); }
-  /* Tabs: pure-CSS :target switching, no JS. Without :has() support the hide
-     rules never apply and every zone stays visible (degraded but complete). */
-  .tabs {
-    display: flex; gap: 0.25rem; flex-wrap: wrap;
-  }
-  .tab {
-    padding: 0.45rem 0.85rem; margin-bottom: -1px;
-    font-size: 0.8rem; font-weight: 600; color: var(--mute);
-    text-decoration: none;
-    border: 1px solid transparent; border-bottom: none;
-    border-radius: 8px 8px 0 0;
-  }
-  .tab:hover { color: var(--fg); }
-  .tab:focus-visible {
-    outline: 2px solid var(--ok);
-    outline-offset: 2px;
-    color: var(--fg);
-  }
-  /* Narrow screens: tabs stop wrapping and scroll horizontally instead.
-     Padding keeps the focus outline (2px + 2px offset) inside the scrollport. */
-  @media (max-width: 480px) {
-    .tabs {
-      flex-wrap: nowrap; overflow-x: auto;
-      scrollbar-width: thin;
-      padding: 4px;
-    }
-    .tab { flex: none; }
-  }
+  /* Sidebar nav: pure-CSS :target switching, no JS. Without :has() support
+     the hide rules never apply and every zone stays visible (degraded but complete). */
   .zone { scroll-margin-top: 6.4rem; }
   .zone-empty { margin: 0.25rem 0 0.5rem; }
   @supports selector(body:has(*)) {
-    #changes, #activity, #certify, #system { display: none; }
-    #overview:target, #changes:target, #activity:target, #certify:target, #system:target { display: block; }
-    body:has(#changes:target) #overview,
+    #activity, #changes, #certify,
+    #gateway-home, #gateway-listeners, #gateway-routes, #gateway-backends, #gateway-policies, #gateway-playground,
+    #system { display: none; }
+    #overview:target,
+    #activity:target, #changes:target, #certify:target,
+    #gateway-home:target, #gateway-listeners:target, #gateway-routes:target, #gateway-backends:target, #gateway-policies:target, #gateway-playground:target,
+    #system:target { display: block; }
     body:has(#activity:target) #overview,
+    body:has(#changes:target) #overview,
     body:has(#certify:target) #overview,
+    body:has(#gateway-home:target) #overview,
+    body:has(#gateway-listeners:target) #overview,
+    body:has(#gateway-routes:target) #overview,
+    body:has(#gateway-backends:target) #overview,
+    body:has(#gateway-policies:target) #overview,
+    body:has(#gateway-playground:target) #overview,
     body:has(#system:target) #overview { display: none; }
-    body:not(:has(.zone:target)) .tab[href="#overview"],
-    body:has(#overview:target) .tab[href="#overview"],
-    body:has(#changes:target) .tab[href="#changes"],
-    body:has(#certify:target) .tab[href="#certify"],
-    body:has(#activity:target) .tab[href="#activity"],
-    body:has(#system:target) .tab[href="#system"] {
+    body:not(:has(.zone:target)) .nav-link[href="#overview"],
+    body:has(#overview:target) .nav-link[href="#overview"],
+    body:has(#activity:target) .nav-link[href="#activity"],
+    body:has(#changes:target) .nav-link[href="#changes"],
+    body:has(#certify:target) .nav-link[href="#certify"],
+    body:has(#system:target) .nav-link[href="#system"],
+    body:has(#gateway-home:target) .nav-link[href="#gateway-home"],
+    body:has(#gateway-listeners:target) .nav-link[href="#gateway-listeners"],
+    body:has(#gateway-routes:target) .nav-link[href="#gateway-routes"],
+    body:has(#gateway-backends:target) .nav-link[href="#gateway-backends"],
+    body:has(#gateway-policies:target) .nav-link[href="#gateway-policies"],
+    body:has(#gateway-playground:target) .nav-link[href="#gateway-playground"] {
       color: var(--fg);
-      background: var(--card);
+      background: var(--bg);
       border-color: var(--line);
     }
   }
@@ -597,5 +702,150 @@ export function receiptCss(): string {
     font-size: 0.72rem; color: var(--mute);
     background: var(--card); border: 1px solid var(--line);
     border-radius: 6px; padding: 0.18rem 0.4rem;
-  }`;
+  }
+  /* Gateway zone dashboard */
+  .gate-zone { display: flex; flex-direction: column; gap: 1rem; }
+  .gate-zone h2 { margin: 0 0 0.15rem; }
+  .gate-zone > .sub,
+  .page-sub {
+    margin: 0 0 0.9rem; color: var(--mute); font-size: 0.82rem;
+  }
+  .page-title {
+    margin: 0 0 0.15rem; font-size: 1.1rem; font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .gate-status-header {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.55rem;
+  }
+  .gate-status-title {
+    font-size: 1.25rem; font-weight: 600; letter-spacing: -0.025em;
+  }
+  .gate-status-meta {
+    display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.45rem;
+    color: var(--mute); font-size: 0.84rem;
+  }
+  .gate-status-meta .pill { font-size: 0.68rem; }
+  .stat-cards {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 0.7rem 0.9rem;
+    display: flex; flex-direction: column; gap: 0.35rem;
+  }
+  .stat-card .lab {
+    font-size: 0.66rem; font-weight: 700; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--mute);
+  }
+  .stat-card .num {
+    font-size: 1.6rem; font-weight: 700; line-height: 1.15;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+    color: var(--fg);
+  }
+  .stat-card .num.bad { color: var(--bad); }
+  .stat-card .val { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+  .card-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 0.7rem 0.9rem 0.8rem;
+  }
+  .card h3 {
+    margin: 0 0 0.55rem; font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.07em; text-transform: uppercase; color: var(--day);
+  }
+  .card h3 .mute { text-transform: none; letter-spacing: 0.02em; font-weight: 600; }
+  .card .sub {
+    margin: 0.6rem 0 0.3rem; font-size: 0.66rem; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase; color: var(--mute);
+  }
+  .card .line { margin: 0.25rem 0; font-size: 0.82rem; word-break: break-word; }
+  .card pre {
+    background: color-mix(in srgb, var(--bg) 55%, var(--card));
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 0.45rem 0.55rem; margin: 0.3rem 0 0.6rem;
+    font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.74rem; white-space: pre-wrap; word-break: break-word;
+    color: var(--fg);
+  }
+  .card details { margin: 0.25rem 0; }
+  .card details summary {
+    font-size: 0.8rem; cursor: pointer; color: var(--fg);
+    list-style: none;
+  }
+  .card details summary::-webkit-details-marker { display: none; }
+  .targets-table { margin-top: 0.35rem; }
+  .chip.bad {
+    color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent);
+    background: color-mix(in srgb, var(--bad) 10%, var(--card));
+  }
+  .playground-form {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: stretch;
+    margin: 0.5rem 0;
+  }
+  .playground-form select,
+  .playground-form input {
+    font-family: inherit; font-size: 0.8rem; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 0.35rem 0.55rem;
+    appearance: none; -webkit-appearance: none;
+  }
+  .playground-form select { min-width: 8rem; }
+  .playground-form input { flex: 1 1 10rem; min-width: 8rem; }
+  .quick-actions {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+    margin: 0.5rem 0;
+  }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
+  @media (max-width: 900px) {
+    .stat-cards { grid-template-columns: repeat(2, 1fr); }
+    .card-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 480px) {
+    .stat-cards { grid-template-columns: 1fr; }
+  }
+  /* Gateway interactive result areas (playground + doctor/quick actions). */
+  .gate-result {
+    margin-top: 0.5rem;
+    padding: 0.45rem 0.6rem;
+    font-size: 0.8rem;
+    background: color-mix(in srgb, var(--bg) 55%, var(--card));
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    word-break: break-word;
+  }
+  .gate-result p { margin: 0.15rem 0; }
+  .gate-result pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.74rem;
+  }
+  .gate-result.error {
+    background: color-mix(in srgb, var(--bad) 10%, var(--card));
+    border-color: color-mix(in srgb, var(--bad) 35%, var(--line));
+  }
+  button[disabled], .stat[disabled] {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .pagination-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-top: 0.9rem;
+  }
+  .pagination-bar .stat.active {
+    color: var(--fg);
+    border-color: color-mix(in srgb, var(--ok) 55%, var(--line));
+    background: color-mix(in srgb, var(--ok) 12%, var(--card));
+  }`
 }

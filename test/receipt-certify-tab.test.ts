@@ -108,48 +108,57 @@ function htmlWith(card: CertifyCard | undefined): string {
   );
 }
 
-/** The Certify zone markup only (from its section tag to the Activity zone). */
+/** The Certify zone markup only (from its section tag to the Gateway zone). */
 function certifyZone(html: string): string {
   const start = html.indexOf('<section class="zone" id="certify"');
   expect(start).toBeGreaterThan(-1);
-  const end = html.indexOf('<section class="zone" id="activity"');
+  const end = html.indexOf('id="gateway-home"');
   expect(end).toBeGreaterThan(start);
   return html.slice(start, end);
 }
 
-describe("Certify tab (4th zone)", () => {
-  it("(a) ships a Certify tab between Overview and Activity with aria wiring", () => {
+describe("Certify tab (5th zone)", () => {
+  it("(a) ships a Certify nav item between Changes and Gateway with aria wiring", () => {
     const html = htmlWith(FULL_CARD);
-    expect(html).toContain('<a class="tab" id="tab-certify" href="#certify">Certify</a>');
+    expect(html).toContain('<a class="nav-link" id="tab-certify" href="#certify">');
     expect(html).toContain('<section class="zone" id="certify" aria-labelledby="tab-certify">');
-    // Nav order: Overview / Certify / Activity / System.
-    const nav = html.slice(html.indexOf('<nav class="tabs"'), html.indexOf("</nav>"));
+    // Nav order: Overview / Activity / Changes / Certify / Gateway / System.
+    const nav = html.slice(html.indexOf('<nav class="sidebar-nav"'), html.indexOf("</nav>"));
     const iOverview = nav.indexOf('href="#overview"');
-    const iCertify = nav.indexOf('href="#certify"');
     const iActivity = nav.indexOf('href="#activity"');
+    const iChanges = nav.indexOf('href="#changes"');
+    const iCertify = nav.indexOf('href="#certify"');
+    const iGateway = nav.indexOf('href="#gateway-home"');
     const iSystem = nav.indexOf('href="#system"');
     expect(iOverview).toBeGreaterThan(-1);
-    expect(iCertify).toBeGreaterThan(iOverview);
-    expect(iActivity).toBeGreaterThan(iCertify);
-    expect(iSystem).toBeGreaterThan(iActivity);
-    // Zone order matches: the Certify zone sits between Overview and Activity.
-    expect(html.indexOf('<section class="zone" id="overview"')).toBeLessThan(
+    expect(iActivity).toBeGreaterThan(iOverview);
+    expect(iChanges).toBeGreaterThan(iActivity);
+    expect(iCertify).toBeGreaterThan(iChanges);
+    expect(iGateway).toBeGreaterThan(iCertify);
+    expect(iSystem).toBeGreaterThan(iGateway);
+    // Zone order matches: Certify sits between Changes and Gateway.
+    expect(html.indexOf('<section class="zone" id="changes"')).toBeLessThan(
       html.indexOf('<section class="zone" id="certify"'),
     );
     expect(html.indexOf('<section class="zone" id="certify"')).toBeLessThan(
-      html.indexOf('<section class="zone" id="activity"'),
+      html.indexOf('id="gateway-home"'),
     );
   });
 
-  it("(b) extends EVERY tab-switch selector to #certify inside the :has() gate", () => {
+  it("(b) extends EVERY zone-switch selector to #certify inside the :has() gate", () => {
     const css = receiptCss();
     const gate = css.indexOf("@supports selector(body:has(*))");
     expect(gate).toBeGreaterThan(-1);
     const patterns = [
-      "#changes, #activity, #certify, #system { display: none; }",
-      "#overview:target, #changes:target, #activity:target, #certify:target, #system:target { display: block; }",
+      "#activity, #changes, #certify,",
+      "#gateway-home, #gateway-listeners, #gateway-routes, #gateway-backends, #gateway-policies, #gateway-playground,",
+      "#system { display: none; }",
+      "#overview:target,",
+      "#activity:target, #changes:target, #certify:target,",
+      "#gateway-home:target, #gateway-listeners:target, #gateway-routes:target, #gateway-backends:target, #gateway-policies:target, #gateway-playground:target,",
+      "#system:target { display: block; }",
       "body:has(#certify:target) #overview",
-      'body:has(#certify:target) .tab[href="#certify"]',
+      'body:has(#certify:target) .nav-link[href="#certify"]',
     ];
     for (const p of patterns) {
       const i = css.indexOf(p);

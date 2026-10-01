@@ -29,8 +29,23 @@ import {
 } from "../showback/cost-per-task.js";
 import { computeDashboard, type Dashboard, type DashboardRow, type ToolWorst } from "./dashboard.js";
 import { buildChangesModel, type ChangesModel } from "./changes.js";
-import { GATE_NOT_SETUP_QUICKSTART, loadGateCard, type GateCard } from "./gate-card.js";
+import {
+  GATE_NOT_SETUP_QUICKSTART,
+  loadGatePage,
+  toolNameFromToolId,
+  toolServerPrefix,
+  type GateCard,
+  type GatePage,
+} from "./gate-page.js";
 import { receiptCss } from "./receipt-css.js";
+
+export const PAGE_SIZE = 50;
+
+export function clampPage(page: number, total: number): number {
+  if (total === 0) return 1;
+  const p = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+  return Math.min(p, total);
+}
 
 export interface ReceiptModel {
   readonly title: string;
@@ -46,6 +61,8 @@ export interface ReceiptModel {
   readonly live?: boolean;
   /** Loopback SSE token — set only by the live server, never in static renders. */
   readonly liveToken?: string;
+  /** Page number for the Activity feed (1-based). */
+  readonly page: number;
   /** Local identity from .kya/config.json (inert text; never a link). */
   readonly identity?: KyaFileConfig;
   /** Sandbox state + configured KYA_SANDBOX backend. */
@@ -53,7 +70,7 @@ export interface ReceiptModel {
   /** Per-host wiring status across the connect registry. */
   readonly wiredHosts?: readonly WiredHostRow[];
   /** Local gateway state + per-server activity in the window. */
-  readonly gate?: GateCard;
+  readonly gate?: GatePage;
   /** Slim ORR card from orr-report/report.json. */
   readonly orr?: OrrCard;
   /** Live Agent Trust Baseline card, recomputed on every model load. */
@@ -288,6 +305,7 @@ export function buildReceiptModel(
     rangeLabel: `session ${sessionId}`,
     generatedAt: new Date().toISOString(),
     events: filtered,
+    page: extras?.page ?? 1,
     spend: extras?.spend,
     mcpSeen: extras?.mcpSeen,
     live: extras?.live,
@@ -313,6 +331,7 @@ export function buildWindowReceiptModel(
     rangeLabel: `last ${n} day${n === 1 ? "" : "s"}`,
     generatedAt: new Date().toISOString(),
     events,
+    page: extras?.page ?? 1,
     spend: extras?.spend,
     mcpSeen: extras?.mcpSeen,
     live: extras?.live,
@@ -334,6 +353,7 @@ export function loadReceiptModel(input: {
   readonly days: number;
   readonly live?: boolean;
   readonly liveToken?: string;
+  readonly page?: number;
 }): ReceiptModel {
   const days = input.days > 0 ? Math.floor(input.days) : 3;
   const showback = loadShowbackCard(input.cwd);
@@ -341,12 +361,13 @@ export function loadReceiptModel(input: {
     ? readTrail(input.cwd)
     : readTrailSince(input.cwd, new Date(Date.now() - days * 24 * 60 * 60 * 1000));
   const extras = {
+    page: input.page ?? 1,
     live: input.live,
     liveToken: input.liveToken,
     identity: loadIdentity(input.cwd),
     sandboxes: loadSandboxes(input.cwd),
     wiredHosts: loadWiredHosts(input.cwd),
-    gate: loadGateCard(events),
+    gate: loadGatePage(events),
     orr: loadOrrCard(input.cwd),
     certify: loadCertifyCard(input.cwd),
     showback,
@@ -361,6 +382,39 @@ export function loadReceiptModel(input: {
     return buildReceiptModel(input.sessionId, events, extras);
   }
   return buildWindowReceiptModel(events, days, extras);
+}
+
+interface FilterFacetEvent {
+  readonly verdict: string;
+  readonly neverEvent?: boolean;
+  readonly reasonCode?: string;
+  readonly mode: TrailEvent["mode"];
+  readonly host?: string;
+  readonly product?: string;
+  readonly project?: string;
+  readonly toolId: string;
+}
+
+/**
+ * Build the data-* filter facet attribute string shared by feed articles and
+ * change entries. `sessionId` is passed explicitly because change entries roll
+ * up under their session heading.
+ */
+function filterDataAttrs(e: FilterFacetEvent, sessionId: string): string {
+  const never = e.neverEvent || e.reasonCode === "NEVER_EVENT";
+  const project = e.project?.trim();
+  const server = parseMcpToolId(e.toolId);
+  return (
+    `data-verdict="${esc(e.verdict.toUpperCase())}"` +
+    (never ? ` data-never="1"` : "") +
+    ` data-mode="${esc(e.mode)}"` +
+    ` data-plane="${esc(e.host?.trim() || "unknown")}"` +
+    ` data-product="${esc(e.product ?? "other")}"` +
+    ` data-tool="${esc(clip(e.toolId, 60))}"` +
+    ` data-session="${esc(sessionId)}"` +
+    (server ? ` data-server="${esc(mcpServerLabel(server.server))}"` : "") +
+    (project ? ` data-project="${esc(project)}"` : "")
+  );
 }
 
 function modeBadge(mode: TrailEvent["mode"] | undefined): string {
@@ -409,18 +463,7 @@ function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean
     // omitted when there is none. data-tool is clipped to 60 chars and must
     // match the tool filter values stamped on dashboard rows. data-server is
     // the recognized MCP server label, omitted for non-MCP or unknown servers.
-    const project = e.project?.trim();
-    const server = parseMcpToolId(e.toolId);
-    const dataAttrs =
-      `data-verdict="${esc(e.verdict.toUpperCase())}"` +
-      (never ? ` data-never="1"` : "") +
-      ` data-mode="${esc(e.mode)}"` +
-      ` data-plane="${esc(e.host?.trim() || "unknown")}"` +
-      ` data-product="${esc(e.product ?? "other")}"` +
-      ` data-tool="${esc(clip(e.toolId, 60))}"` +
-      ` data-session="${esc(e.sessionId || "unknown")}"` +
-      (server ? ` data-server="${esc(mcpServerLabel(server.server))}"` : "") +
-      (project ? ` data-project="${esc(project)}"` : "");
+    const dataAttrs = filterDataAttrs(e, e.sessionId || "unknown");
     parts.push(`<article class="ev ${t}${never ? " never" : ""}" ${dataAttrs}>
   <div class="rail" aria-hidden="true"><span class="tick"></span></div>
   <div class="main">
@@ -466,18 +509,7 @@ function changesPanel(changes: ChangesModel, nowMs: number): string {
           const entries = f.entries
             .map((e) => {
               const t = tone(e.verdict);
-              const project = e.project?.trim();
-              const server = parseMcpToolId(e.toolId);
-              const dataAttrs =
-                `data-verdict="${esc(e.verdict.toUpperCase())}"` +
-                (e.never ? ` data-never="1"` : "") +
-                ` data-mode="${esc(e.mode)}"` +
-                ` data-plane="${esc(e.host?.trim() || "unknown")}"` +
-                ` data-product="${esc(e.product ?? "other")}"` +
-                ` data-tool="${esc(clip(e.toolId, 60))}"` +
-                ` data-session="${esc(s.sessionId)}"` +
-                (server ? ` data-server="${esc(mcpServerLabel(server.server))}"` : "") +
-                (project ? ` data-project="${esc(project)}"` : "");
+              const dataAttrs = filterDataAttrs(e, s.sessionId);
               return `      <div class="chg-entry ${t}${e.never ? " never" : ""}" ${dataAttrs}>
         <div class="top">
           <span class="verdict">${esc(verdictWord(e.verdict))}</span>${modeBadge(e.mode)}
@@ -522,6 +554,35 @@ function identityLine(identity: KyaFileConfig | undefined): string {
   if (bits.length === 0) return "";
   // baseUrl is inert text here — never an anchor.
   return `<div class="identity">${esc(clip(bits.join(" · "), 160))}</div>`;
+}
+
+function navItem(
+  href: string,
+  label: string,
+  count: number | undefined,
+  runningDot?: boolean,
+): string {
+  const countSpan = count !== undefined ? `<span class="nav-count">${count}</span>` : "";
+  const dot = runningDot ? '<span class="status-dot" aria-hidden="true"></span>' : "";
+  return `<a class="nav-link" id="tab-${href.slice(1)}" href="${href}">
+  <span class="nav-label">${dot}${esc(label)}</span>
+  ${countSpan}
+</a>`;
+}
+
+function navGroup(label: string, runningDot?: boolean): string {
+  const dot = runningDot ? '<span class="status-dot" aria-hidden="true"></span>' : "";
+  return `<div class="nav-group">
+  <span class="nav-group-label">${dot}${esc(label)}</span>
+</div>`;
+}
+
+function navSubItem(href: string, label: string, count: number | undefined): string {
+  const countSpan = count !== undefined ? `<span class="nav-count">${count}</span>` : "";
+  return `<a class="nav-link nav-sub" id="tab-${href.slice(1)}" href="${href}">
+  <span class="nav-label">${esc(label)}</span>
+  ${countSpan}
+</a>`;
 }
 
 function statChips(agg: EventAggregates): {
@@ -756,11 +817,9 @@ function wiredHostsPanel(hosts: readonly WiredHostRow[] | undefined): string {
 }
 
 /**
- * Gateway panel: always rendered (the gateway is a primary feature — an
- * absent panel read as "nothing to say", hiding the not-set-up state).
- * Per-server rows carry the Servers facet value as data-server so they line
- * up with the feed's data-server stamps; ids come from gateways.json and are
- * always escaped.
+ * System-tab gateway summary: a single status row that links to the dedicated
+ * Gateway section. Detail lives in the Gateway pages so the System tab stays
+ * focused on host/runtime state.
  */
 function gatePanel(card: GateCard | undefined, nowMs: number): string {
   if (!card) return "";
@@ -769,62 +828,367 @@ function gatePanel(card: GateCard | undefined, nowMs: number): string {
   <h2>Gateway</h2>
   <div class="orrline">
     <span class="pill">not set up</span>
+    <span class="mute"><a href="#gateway-home">Open Gateway</a> to configure</span>
   </div>
-  <p class="line">Gateway not set up — <code>kya start</code> puts a governed gateway in front of any MCP server automatically: every tool call proxied, evaluated, and on this trail.</p>
-  <ol class="steps">
-    <li>Add any MCP server to a host config (or <code>kya gate init</code> to pick from recipes)</li>
-    <li><code>kya start</code> — imports it, installs the gateway, and routes the host through it (originals backed up under .kya/backups)</li>
-    <li><code>kya gate doctor</code> — binary, config, listener health, loopback-only posture</li>
-  </ol>
 </section>`;
   }
-  const rows = card.servers
-    .map((s) => {
-      const dot =
-        s.worst === "none"
-          ? ""
-          : `<span class="wdot ${s.worst}" title="worst verdict: ${s.worst}"></span>`;
-      return `    <li data-server="${esc(s.serverFacet)}">${dot}<code>${esc(s.id)}</code> — ${esc(s.transport)} · ${s.events} event${s.events === 1 ? "" : "s"}</li>`;
-    })
-    .join("\n");
   const binary = card.binaryPresent
     ? `binary ${card.binaryVersion ? esc(clip(card.binaryVersion, 40)) : "installed"}`
     : "binary missing — kya gate setup";
-  if (card.state === "configured-stopped") {
-    return `<section class="panel gate" aria-label="Gateway">
-  <h2>Gateway</h2>
-  <div class="orrline">
-    <span class="pill">stopped</span>
-    <span class="mute">${card.servers.length} server${card.servers.length === 1 ? "" : "s"} configured · ${binary}</span>
-  </div>
-  <ul class="rows">
-${rows}
-  </ul>
-  <p class="mute small">stopped — <code>kya gate run</code> to start the listener</p>
-</section>`;
-  }
   const uptime = card.startedAt ? ` · up since ${esc(relativeTime(card.startedAt, nowMs))}` : "";
-  if (card.servers.length === 0) {
-    return `<section class="panel gate" aria-label="Gateway">
-  <h2>Gateway</h2>
-  <div class="orrline">
-    <span class="pill ok">running</span>
-    <span class="mute">${card.url ? `<code>${esc(clip(card.url, 60))}</code>` : ""}${uptime} · ${binary}</span>
-  </div>
-  <p class="line">running, no servers configured — add servers to .kya/gateways.json and restart (<code>kya gate stop</code>, then <code>kya gate run</code>)</p>
-</section>`;
-  }
+  const pill =
+    card.state === "running"
+      ? `<span class="pill ok">running</span>`
+      : `<span class="pill">stopped</span>`;
+  const detail =
+    card.state === "running"
+      ? `${card.url ? `<code>${esc(clip(card.url, 60))}</code>` : ""}${uptime} · ${card.servers.length} server${card.servers.length === 1 ? "" : "s"} · ${card.events} event${card.events === 1 ? "" : "s"}`
+      : `${card.servers.length} server${card.servers.length === 1 ? "" : "s"} configured · ${binary}`;
   return `<section class="panel gate" aria-label="Gateway">
   <h2>Gateway</h2>
   <div class="orrline">
-    <span class="pill ok">running</span>
-    <span class="mute">${card.url ? `<code>${esc(clip(card.url, 60))}</code>` : ""}${uptime} · ${binary}</span>
+    ${pill}
+    <span class="mute">${detail}</span>
+    <span class="mute"><a href="#gateway-home">Open Gateway</a></span>
   </div>
-  <ul class="rows">
-${rows}
-  </ul>
-  <p class="mute small">${card.events} gateway event${card.events === 1 ? "" : "s"} in this window · <code>kya gate stop</code> stops everything</p>
 </section>`;
+}
+
+/**
+ * Full Gateway dashboard for the #gateway zone. Extends the compact System-tab
+ * panel with stat cards, listener details, targets table, policy cards, a dry-run
+ * playground, quick actions, and a gateway-native events table. All user-controlled
+ * values (server ids, commands, urls, tool names) are escaped.
+ */
+function gateStatusHeader(page: GatePage, nowMs: number): string {
+  const listenerStatus =
+    page.state === "running"
+      ? `<span class="pill ok">running</span>`
+      : `<span class="pill">stopped</span>`;
+  const bindBadge = page.bindScope.loopbackOnly
+    ? `<span class="pill ok" title="${esc(page.bindScope.detail)}">loopback-only</span>`
+    : `<span class="pill warn" title="${esc(page.bindScope.detail)}">not loopback-only</span>`;
+  const uptime = page.startedAt
+    ? ` · up since <time datetime="${esc(page.startedAt)}">${esc(relativeTime(page.startedAt, nowMs))}</time>`
+    : "";
+  const urlLine = page.url ? ` <code>${esc(clip(page.url, 80))}</code>` : "";
+  return `<div class="gate-status-header">
+  <span class="gate-status-title">Gateway</span>
+  <span class="gate-status-meta">${listenerStatus}${urlLine}${uptime} · ${bindBadge}</span>
+</div>`;
+}
+
+function gateQuickActions(page: GatePage): string {
+  const buttons =
+    page.state === "not-set-up"
+      ? `<button type="button" class="stat" data-action="doctor">Doctor</button>`
+      : page.state === "configured-stopped"
+        ? `<button type="button" class="stat ok" data-action="start">Start</button>
+  <button type="button" class="stat" data-action="doctor">Doctor</button>`
+        : `<button type="button" class="stat bad" data-action="stop">Stop</button>
+  <button type="button" class="stat warn" data-action="restart">Restart</button>
+  <button type="button" class="stat" data-action="doctor">Doctor</button>`;
+  return `<div class="quick-actions">${buttons}</div><div id="gate-doctor-result"></div>`;
+}
+
+function gateStatCards(page: GatePage): string {
+  const denyCount = page.gateEvents.filter(
+    (e) => e.verdict.toUpperCase() === "DENY" || e.neverEvent || e.reasonCode === "NEVER_EVENT",
+  ).length;
+  return `<div class="stat-cards">
+  <div class="stat-card">
+    <span class="lab">Listeners</span>
+    <span class="num">${page.listeners.length}</span>
+  </div>
+  <div class="stat-card">
+    <span class="lab">Backends</span>
+    <span class="num">${page.servers.length}</span>
+  </div>
+  <div class="stat-card">
+    <span class="lab">Events</span>
+    <span class="num">${page.gateEvents.length}</span>
+  </div>
+  <div class="stat-card">
+    <span class="lab">Denies</span>
+    <span class="num${denyCount > 0 ? " bad" : ""}">${denyCount}</span>
+  </div>
+</div>`;
+}
+
+function gateEventsTable(events: readonly TrailEvent[], nowMs: number): string {
+  if (events.length === 0) {
+    return `<div class="card">
+  <h3>Gateway events</h3>
+  <p class="empty small">No gateway events in this window.</p>
+</div>`;
+  }
+  const rows = [...events]
+    .sort((a, b) => b.ts.localeCompare(a.ts))
+    .slice(0, 25)
+    .map((e) => {
+      const server = toolServerPrefix(e.toolId) ?? "";
+      const tool = toolNameFromToolId(e.toolId) ?? e.toolId;
+      const t = tone(e.verdict);
+      const never = e.neverEvent || e.reasonCode === "NEVER_EVENT";
+      return `      <tr>
+        <td><time datetime="${esc(e.ts)}" title="${esc(e.ts)}">${esc(clock(e.ts))} <span class="rel">${esc(relativeTime(e.ts, nowMs))}</span></time></td>
+        <td><a href="?f=server:${esc(mcpServerLabel(server))}#activity">${esc(server)}</a></td>
+        <td><code>${esc(tool)}</code></td>
+        <td><span class="pill ${t}${never ? " orr-red" : ""}">${esc(verdictWord(e.verdict))}${never ? " · never" : ""}</span></td>
+      </tr>`;
+    })
+    .join("\n");
+  return `<div class="card">
+  <h3>Gateway events <span class="mute">latest 25</span></h3>
+  <table class="tbl">
+    <thead><tr><th>Time</th><th>Server</th><th>Tool</th><th>Verdict</th></tr></thead>
+    <tbody>
+${rows}
+    </tbody>
+  </table>
+</div>`;
+}
+
+function gateHomePage(page: GatePage, nowMs: number): string {
+  if (page.state === "not-set-up") {
+    return `<section class="zone gate-zone" id="gateway-home" aria-labelledby="tab-gateway-home">
+  ${gateStatusHeader(page, nowMs)}
+  <p class="page-sub">Local MCP gate — every proxied tool call is evaluated and audited.</p>
+  <div class="card">
+    <span class="pill">not set up</span>
+    <p class="line">${esc(GATE_NOT_SETUP_QUICKSTART)}</p>
+    ${gateQuickActions(page)}
+  </div>
+</section>`;
+  }
+  return `<section class="zone gate-zone" id="gateway-home" aria-labelledby="tab-gateway-home">
+  ${gateStatusHeader(page, nowMs)}
+  <p class="page-sub">Local MCP gate — every proxied tool call is evaluated and audited.</p>
+  ${gateStatCards(page)}
+  <div class="card-grid">
+    <div class="card">
+      <h3>Listener</h3>
+      <p class="line">${page.url ? `<code>${esc(clip(page.url, 80))}</code>` : `Listener port ${page.port ?? 3930}`} · ${page.state}</p>
+      <p class="line">OTLP receiver port ${page.otlpPort}</p>
+      <p class="line">Failure mode <span class="pill">${esc(page.failureMode)}</span></p>
+      ${page.binaryPresent ? `<p class="line">Binary <code>${page.binaryVersion ? esc(clip(page.binaryVersion, 40)) : "installed"}</code></p>` : `<p class="line">Binary missing — <code>kya gate setup</code></p>`}
+    </div>
+    <div class="card">
+      <h3>Quick actions</h3>
+      ${gateQuickActions(page)}
+    </div>
+  </div>
+  ${gateEventsTable(page.gateEvents, nowMs)}
+</section>`;
+}
+
+function gateListenersPage(page: GatePage): string {
+  const rows = page.listeners
+    .map(
+      (l) =>
+        `      <tr>
+        <td><span class="pill ${l.state === "running" ? "ok" : ""}">${esc(l.state)}</span></td>
+        <td>${esc(l.name)}</td>
+        <td>${esc(l.protocol)}</td>
+        <td><code>${esc(l.address)}</code></td>
+        <td>${l.uptime ? `<time datetime="${esc(l.uptime)}">${esc(relativeTime(l.uptime, Date.now()))}</time>` : '<span class="mute">—</span>'}</td>
+        <td>${esc(l.detail ?? "")}</td>
+      </tr>`,
+    )
+    .join("\n");
+  return `<section class="zone gate-zone" id="gateway-listeners" aria-labelledby="tab-gateway-listeners">
+  <h2 class="page-title">Listeners</h2>
+  <p class="page-sub">MCP listener and OTLP receiver configured by the gateway.</p>
+  <div class="card">
+    <table class="tbl">
+      <thead><tr><th>State</th><th>Name</th><th>Protocol</th><th>Address</th><th>Since</th><th>Detail</th></tr></thead>
+      <tbody>
+${rows}
+      </tbody>
+    </table>
+  </div>
+</section>`;
+}
+
+function gateRoutesPage(page: GatePage): string {
+  if (page.routes.length === 0) {
+    return `<section class="zone gate-zone" id="gateway-routes" aria-labelledby="tab-gateway-routes">
+  <h2 class="page-title">Routes</h2>
+  <p class="page-sub">One route per configured backend server.</p>
+  <div class="card">
+    <p class="empty small">No servers configured — add one to .kya/gateways.json or run <code>kya gate init</code>.</p>
+  </div>
+</section>`;
+  }
+  const rows = page.routes
+    .map((r) => {
+      const dot = r.worst === "none" ? "" : `<span class="wdot ${r.worst}"></span>`;
+      const denied =
+        r.deniedTools.length === 0
+          ? '<span class="mute">—</span>'
+          : r.deniedTools.map((t) => `<span class="chip bad">${esc(t)}</span>`).join("");
+      return `      <tr data-server="${esc(r.backendLabel)}">
+        <td><code>${esc(r.pattern)}</code></td>
+        <td>${esc(r.backendLabel)}</td>
+        <td><span class="pill">${esc(r.tier ?? "unknown")}</span></td>
+        <td>${r.denyCount}</td>
+        <td>${dot} ${r.events}</td>
+        <td>${denied}</td>
+      </tr>`;
+    })
+    .join("\n");
+  return `<section class="zone gate-zone" id="gateway-routes" aria-labelledby="tab-gateway-routes">
+  <h2 class="page-title">Routes</h2>
+  <p class="page-sub">One route per configured backend server. Pattern matches proxied tool calls.</p>
+  <div class="card">
+    <table class="tbl">
+      <thead><tr><th>Pattern</th><th>Backend</th><th>Tier</th><th>Deny patterns</th><th>Events</th><th>Denied tools</th></tr></thead>
+      <tbody>
+${rows}
+      </tbody>
+    </table>
+  </div>
+</section>`;
+}
+
+function gateBackendsPage(page: GatePage): string {
+  if (page.servers.length === 0) {
+    return `<section class="zone gate-zone" id="gateway-backends" aria-labelledby="tab-gateway-backends">
+  <h2 class="page-title">Backends</h2>
+  <p class="page-sub">Configured upstream MCP servers.</p>
+  <div class="card">
+    <p class="empty small">No servers configured — add one to .kya/gateways.json or run <code>kya gate init</code>.</p>
+  </div>
+</section>`;
+  }
+  const rows = page.servers
+    .map((s) => {
+      const transport =
+        s.transport === "stdio"
+          ? `<code title="${esc(s.cmd?.join(" ") ?? "")}">${esc(clip(s.cmd?.join(" ") ?? s.transport, 60))}</code>`
+          : `<code title="${esc(s.url ?? "")}">${esc(clip(s.url ?? s.transport, 60))}</code>`;
+      const provenance = s.importedFrom.map((h) => `<span class="chip">${esc(h)}</span>`).join("");
+      const dot = s.worst === "none" ? "" : `<span class="wdot ${s.worst}"></span>`;
+      const denied =
+        s.deniedTools.length === 0
+          ? '<span class="mute">—</span>'
+          : s.deniedTools.map((t) => `<span class="chip bad">${esc(t)}</span>`).join("");
+      return `      <tr data-server="${esc(s.serverFacet)}">
+        <td><span class="wdot ${s.worst === "none" ? "mute" : s.worst}"></span> <code>${esc(s.id)}</code></td>
+        <td>${esc(s.transport)}</td>
+        <td>${transport}</td>
+        <td>${provenance}</td>
+        <td><span class="pill">${esc(s.policy.defaultTier ?? "unknown")}</span></td>
+        <td>${dot} ${s.events}</td>
+        <td>${denied}</td>
+      </tr>`;
+    })
+    .join("\n");
+  return `<section class="zone gate-zone" id="gateway-backends" aria-labelledby="tab-gateway-backends">
+  <h2 class="page-title">Backends</h2>
+  <p class="page-sub">Configured upstream MCP servers and their connection details.</p>
+  <div class="card">
+    <table class="tbl targets-table">
+      <thead><tr><th>Server</th><th>Transport</th><th>Target</th><th>Provenance</th><th>Policy</th><th>Events</th><th>Denied tools</th></tr></thead>
+      <tbody>
+${rows}
+      </tbody>
+    </table>
+  </div>
+</section>`;
+}
+
+function gatePoliciesPage(page: GatePage): string {
+  const { policySummary } = page;
+  const mixTotal =
+    policySummary.verdicts.allow +
+    policySummary.verdicts.deny +
+    policySummary.verdicts.hold +
+    policySummary.verdicts.never;
+  const pct = (n: number): number => (mixTotal > 0 ? Math.round((n / mixTotal) * 100) : 0);
+  const mixRow = (label: string, n: number, fill: "ok" | "warn" | "bad") =>
+    n > 0
+      ? `<div class="mix-row"><span class="mix-lab">${esc(label)}</span><span class="mix-bar"><span class="mix-fill ${fill}" style="width:${pct(n)}%"></span></span><span class="mix-num">${n}</span></div>`
+      : "";
+  const verdictMix = `<div class="card">
+  <h3>Verdict mix</h3>
+  ${mixRow("Allow", policySummary.verdicts.allow, "ok")}
+  ${mixRow("Review", policySummary.verdicts.hold, "warn")}
+  ${mixRow("Deny", policySummary.verdicts.deny, "bad")}
+  ${mixRow("Never", policySummary.verdicts.never, "bad")}
+  <p class="mute small">${mixTotal} gateway event${mixTotal === 1 ? "" : "s"} in this window</p>
+</div>`;
+  const denyCards =
+    page.servers.length === 0
+      ? '<div class="card"><h3>Per-server deny patterns</h3><p class="mute small">No servers configured.</p></div>'
+      : page.servers
+          .map(
+            (s) =>
+              `<div class="card">
+  <h3><code>${esc(s.id)}</code> · ${s.policy.denyPatterns.length} pattern${s.policy.denyPatterns.length === 1 ? "" : "s"}</h3>
+  ${s.policy.denyPatterns.length === 0 ? '<p class="mute small">No deny patterns — all tools observed.</p>' : `<pre><code>${esc(s.policy.denyPatterns.join("\n"))}</code></pre>`}
+</div>`,
+          )
+          .join("\n");
+  return `<section class="zone gate-zone" id="gateway-policies" aria-labelledby="tab-gateway-policies">
+  <h2 class="page-title">Policies</h2>
+  <p class="page-sub">Network rule, failure mode, and per-server deny patterns.</p>
+  <div class="card-grid">
+    <div class="card">
+      <h3>Network rule</h3>
+      <pre><code>${esc(policySummary.networkRule)}</code></pre>
+      <h3>Failure mode</h3>
+      <p class="line"><span class="pill">${esc(policySummary.failureMode)}</span></p>
+      <p class="mute small">Total policies evaluated: ${policySummary.totalPolicies}</p>
+    </div>
+    ${verdictMix}
+  </div>
+  ${denyCards}
+</section>`;
+}
+
+function gatePlaygroundPage(page: GatePage): string {
+  const serverOptions = page.servers
+    .map((s) => `<option value="${esc(s.id)}">${esc(s.id)}</option>`)
+    .join("");
+  const samples =
+    page.playgroundSamples.length === 0
+      ? ""
+      : `<p class="mute small">Recent tools: ${page.playgroundSamples.map((t) => `<code>${esc(t)}</code>`).join(" ")}</p>`;
+  return `<section class="zone gate-zone" id="gateway-playground" aria-labelledby="tab-gateway-playground">
+  <h2 class="page-title">Playground</h2>
+  <p class="page-sub">Dry-run a tool call against the generated policy — no tool is executed.</p>
+  <div class="card">
+    <form class="playground-form" id="gate-play-form">
+      <label class="sr-only" for="gate-play-server">Server</label>
+      <select id="gate-play-server" name="server" required>
+        <option value="" disabled selected>Server</option>
+        ${serverOptions}
+      </select>
+      <label class="sr-only" for="gate-play-tool">Tool</label>
+      <input id="gate-play-tool" name="tool" type="text" placeholder="tool_name" required />
+      <button type="submit" class="stat">Evaluate</button>
+    </form>
+    ${samples}
+    <div id="gate-play-result"></div>
+  </div>
+</section>`;
+}
+
+function gatePagePanel(page: GatePage | undefined, nowMs: number): string {
+  if (!page) {
+    return `<section class="zone" id="gateway-home" aria-labelledby="tab-gateway-home">
+    <p class="mute small zone-empty">Gateway details will appear here after setup.</p>
+  </section>`;
+  }
+  return [
+    gateHomePage(page, nowMs),
+    page.state === "not-set-up" ? "" : gateListenersPage(page),
+    page.state === "not-set-up" ? "" : gateRoutesPage(page),
+    page.state === "not-set-up" ? "" : gateBackendsPage(page),
+    page.state === "not-set-up" ? "" : gatePoliciesPage(page),
+    page.state === "not-set-up" ? "" : gatePlaygroundPage(page),
+  ].join("\n");
 }
 
 function sandboxesPanel(card: SandboxCard | undefined, nowMs: number): string {
@@ -1126,30 +1490,42 @@ ${topRuns
 </section>`;
 }
 
-/**
- * Compact Overview status card for the gateway, rendered in every state so
- * the feature is discoverable before setup; the System tab carries the full
- * panel (server rows, quickstart).
- */
-function gateHeroCard(card: GateCard | undefined): string {
-  if (!card) return "";
-  const detail =
-    card.state === "running"
-      ? `${card.url ? `<code>${esc(clip(card.url, 48))}</code> · ` : ""}${card.servers.length} server${card.servers.length === 1 ? "" : "s"} · ${card.events} event${card.events === 1 ? "" : "s"}`
-      : card.state === "configured-stopped"
-        ? `${card.servers.length} server${card.servers.length === 1 ? "" : "s"} configured — <code>kya gate run</code>`
-        : `add an MCP server to a host config — <code>kya start</code> governs it`;
-  const pill =
-    card.state === "running"
+export function gatewayHeroCard(page: GatePage | undefined, _nowMs: number): string {
+  if (!page) return "";
+
+  const statePill =
+    page.state === "running"
       ? `<span class="pill ok">running</span>`
-      : `<span class="pill">${card.state === "configured-stopped" ? "stopped" : "not set up"}</span>`;
-  return `<section class="panel hero-gate" aria-label="Gateway">
+      : page.state === "not-set-up"
+        ? `<span class="pill">not set up</span>`
+        : `<span class="pill">stopped</span>`;
+
+  const binary = page.binaryPresent
+    ? `binary ${page.binaryVersion ? esc(clip(page.binaryVersion, 40)) : "installed"}`
+    : "binary missing — kya gate setup";
+
+  const detail =
+    page.state === "running"
+      ? `${page.url ? `<code>${esc(clip(page.url, 60))}</code>` : `port ${page.port ?? 3930}`} · ${page.listeners.length} listener${page.listeners.length === 1 ? "" : "s"} · ${page.servers.length} backend${page.servers.length === 1 ? "" : "s"}`
+      : `${page.servers.length} backend${page.servers.length === 1 ? "" : "s"} configured · ${binary}`;
+
+  const denyCount = page.gateEvents.filter(
+    (e) => e.verdict.toUpperCase() === "DENY" || e.neverEvent || e.reasonCode === "NEVER_EVENT",
+  ).length;
+
+  return `<section class="panel" aria-label="Gateway">
   <h2>Gateway</h2>
   <div class="orrline">
-    ${pill}
+    ${statePill}
+    <span class="mute">${detail}</span>
   </div>
-  <p class="mute small">${detail}</p>
-  <p class="mute small">server rows + quickstart: <a href="#system">System tab</a></p>
+  <div class="kpi-row">
+    ${kpiTile("Listeners", page.listeners.length)}
+    ${kpiTile("Backends", page.servers.length)}
+    ${kpiTile("Events", page.gateEvents.length)}
+    ${kpiTile("Denies", denyCount, denyCount > 0 ? "bad" : "")}
+  </div>
+  <p class="mute small"><a href="#gateway-home">Open Gateway</a></p>
 </section>`;
 }
 
@@ -1169,8 +1545,126 @@ function normalizeTrailEvents(events: readonly TrailEvent[]): TrailEvent[] {
   }));
 }
 
-export function renderReceiptHtml(model: ReceiptModel): string {  const nowMs = Date.now();
+export interface FeedFilters {
+  readonly [group: string]: readonly string[];
+}
+
+function eventMatchesFilter(e: TrailEvent, group: string, value: string): boolean {
+  switch (group) {
+    case "verdict":
+      return e.verdict.toUpperCase() === value;
+    case "never":
+      return (e.neverEvent || e.reasonCode === "NEVER_EVENT") && value === "1";
+    case "mode":
+      return e.mode === value;
+    case "plane":
+      return (e.host?.trim() || "unknown") === value;
+    case "product":
+      return (e.product ?? "other") === value;
+    case "project":
+      if (value === "") return false;
+      return (e.project?.trim() ?? "") === value;
+    case "tool":
+      return clip(e.toolId, 60) === value;
+    case "session":
+      return (e.sessionId || "unknown") === value;
+    case "server": {
+      const parsed = parseMcpToolId(e.toolId);
+      return parsed != null && mcpServerLabel(parsed.server) === value;
+    }
+    default:
+      return false;
+  }
+}
+
+function applyFeedFilters(events: readonly TrailEvent[], filters: FeedFilters): TrailEvent[] {
+  const groups = Object.entries(filters)
+    .map(([group, vals]) => [group, vals.filter((v) => v !== "")] as const)
+    .filter(([, vals]) => vals.length > 0);
+  if (groups.length === 0) return [...events];
+  return events.filter((e) =>
+    groups.every(([group, vals]) => vals.some((v) => eventMatchesFilter(e, group, v))),
+  );
+}
+
+export interface FeedPageResult {
+  readonly feedHtml: string;
+  readonly paginationHtml: string;
+  readonly total: number;
+  readonly page: number;
+  readonly pages: number;
+}
+
+export function renderFeedPage(
+  events: readonly TrailEvent[],
+  filters: FeedFilters,
+  page: number,
+  nowMs: number,
+  live: boolean,
+): FeedPageResult {
+  const sorted = [...events].sort((a, b) => b.ts.localeCompare(a.ts));
+  const filtered = applyFeedFilters(sorted, filters);
+  const total = filtered.length;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const p = clampPage(page, pages);
+  const start = (p - 1) * PAGE_SIZE;
+  const pageEvents = filtered.slice(start, start + PAGE_SIZE);
+
+  return {
+    feedHtml: renderFeed(pageEvents, nowMs, live),
+    paginationHtml: paginationBar(total, p, pages),
+    total,
+    page: p,
+    pages,
+  };
+}
+
+function paginationBar(total: number, page: number, pages: number): string {
+  if (pages <= 1 && total === 0) {
+    return `<div class="pagination-bar"><span class="mute">${total} events</span></div>`;
+  }
+  if (pages <= 1) {
+    return `<div class="pagination-bar"><span class="mute">Page ${page} of ${pages} · ${total} event${total === 1 ? "" : "s"}</span></div>`;
+  }
+
+  const prev = `<button type="button" class="stat" data-page="prev" ${page <= 1 ? "disabled" : ""}>Previous</button>`;
+  const next = `<button type="button" class="stat" data-page="next" ${page >= pages ? "disabled" : ""}>Next</button>`;
+
+  const maxWindow = 7;
+  let startPage = Math.max(1, page - Math.floor(maxWindow / 2));
+  let endPage = Math.min(pages, startPage + maxWindow - 1);
+  if (endPage - startPage + 1 < maxWindow) {
+    startPage = Math.max(1, endPage - maxWindow + 1);
+  }
+
+  const numbers: string[] = [];
+  for (let i = startPage; i <= endPage; i++) {
+    const active = i === page ? " active" : "";
+    numbers.push(`<button type="button" class="stat${active}" data-page="${i}" ${i === page ? "disabled" : ""}>${i}</button>`);
+  }
+
+  return `<div class="pagination-bar">\n  ${prev}\n  ${numbers.join("\n  ")}\n  ${next}\n  <span class="mute">Page ${page} of ${pages} · ${total} event${total === 1 ? "" : "s"}</span>\n</div>`;
+}
+
+export function renderReceiptHtml(model: ReceiptModel): string {
+  const nowMs = Date.now();
   const events = normalizeTrailEvents(model.events);
+  // Pagination + live filtering are only meaningful when the report is served
+  // by the loopback live server (liveToken present). Static on-disk artifacts
+  // render the full event list so nothing is hidden behind inactive buttons.
+  const livePaged = !!model.liveToken;
+  const currentPage = livePaged
+    ? clampPage(model.page ?? 1, Math.max(1, Math.ceil(events.length / PAGE_SIZE)))
+    : 1;
+  const initialFeed = livePaged
+    ? renderFeedPage(events, {}, currentPage, nowMs, model.live ?? false)
+    : {
+        feedHtml: renderFeed(events, nowMs, model.live ?? false),
+        paginationHtml: `<div class="pagination-bar"><span class="mute">${events.length} event${events.length === 1 ? "" : "s"}</span></div>`,
+        total: events.length,
+        page: 1,
+        pages: 1,
+      };
 
   const c = countVerdicts(events);
   const agg = aggregateEvents(events);
@@ -1201,7 +1695,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {  const nowMs = 
 
   // liveToken is minted base64url by the live server — safe in a JS string
   // literal; static renders omit it. No post-hoc html.replace (spoofable).
-  const eventsUrl = model.liveToken ? `/events?t=${model.liveToken}` : "/events";
+  const eventsUrl = model.liveToken ? `/events?t=${encodeURIComponent(model.liveToken)}` : "/events";
   const liveScript = model.live
     ? `<script>
 (function(){
@@ -1215,8 +1709,8 @@ export function renderReceiptHtml(model: ReceiptModel): string {  const nowMs = 
 </script>`
     : "";
 
-  // Client-side chip filters: static and live renders both get this. It runs
-  // standalone (no live token needed) and never touches the EventSource block.
+  // Client-side chip filters and pagination: only emitted for live reports
+  // (liveToken present). Static receipts render page 1 without interactivity.
   // State maps are null-prototype: attacker-controlled values (project names)
   // must never resolve via Object.prototype. The id lets tests extract just
   // this script. KNOWN is space-delimited so `indexOf(' '+g+' ')` doubles as a
@@ -1227,23 +1721,43 @@ export function renderReceiptHtml(model: ReceiptModel): string {  const nowMs = 
   // chip toggle and every tab click would wipe the filter. Legacy #f= hashes
   // are still parsed on load (read-only); the next save writes the ?f= form
   // and drops the legacy fragment.
-  const filterScript = `<script id="kya-filters">
+  const filterScript = model.liveToken
+    ? `<script id="kya-filters">
 (function(){
   var feed = document.getElementById('feed');
   if (!feed) return;
   var chg = document.getElementById('changes-list');
+  var bar = document.getElementById('pagination-bar');
   var KNOWN = ' verdict never mode plane product project tool session server ';
   var state = Object.create(null);
+  var page = 1;
+  var LIVE = !!(document.querySelectorAll && document.querySelectorAll('main[data-live-token]').length);
   var clearBtn = document.getElementById('clear-filters');
   var chips = document.querySelectorAll('[data-fgroup]');
+  function readToken(){
+    var s = location.search;
+    if (s.indexOf('?') !== 0) return '';
+    var params = s.slice(1).split('&');
+    for (var i = 0; i < params.length; i++) {
+      if (params[i].indexOf('t=') === 0) {
+        try { return decodeURIComponent(params[i].slice(2)); } catch(e){ return params[i].slice(2); }
+      }
+    }
+    return '';
+  }
   function parse(){
     state = Object.create(null);
+    page = 1;
     var raw = null;
     var s = location.search;
     if (s.indexOf('?') === 0) {
       var params = s.slice(1).split('&');
       for (var i = 0; i < params.length; i++) {
-        if (params[i].indexOf('f=') === 0) { raw = params[i].slice(2); break; }
+        if (raw === null && params[i].indexOf('f=') === 0) { raw = params[i].slice(2); }
+        else if (params[i].indexOf('page=') === 0) {
+          var p = parseInt(params[i].slice(5), 10);
+          if (p > 0) page = p;
+        }
       }
     }
     if (raw === null) {
@@ -1274,10 +1788,11 @@ export function renderReceiptHtml(model: ReceiptModel): string {  const nowMs = 
     if (s.indexOf('?') === 0) {
       var params = s.slice(1).split('&');
       for (var i = 0; i < params.length; i++) {
-        if (params[i] && params[i].indexOf('f=') !== 0) kept.push(params[i]);
+        if (params[i] && params[i].indexOf('f=') !== 0 && params[i].indexOf('page=') !== 0) kept.push(params[i]);
       }
     }
     if (parts.length) kept.push('f=' + parts.join(','));
+    if (page > 1) kept.push('page=' + page);
     var q = kept.length ? '?' + kept.join('&') : '';
     // The tab hash rides along untouched; a legacy #f= fragment is not a tab
     // hash and is dropped now that the state lives in the query.
@@ -1298,17 +1813,21 @@ export function renderReceiptHtml(model: ReceiptModel): string {  const nowMs = 
   }
   function apply(){
     var on = active();
-    feed.querySelectorAll('.ev').forEach(function(row){
-      row.classList.toggle('filtered-out', !rowVisible(row, on));
-    });
-    var day = null, dayHasRows = false;
-    function flush(){ if (day) day.classList.toggle('filtered-out', on && !dayHasRows); }
-    for (var i = 0; i < feed.children.length; i++) {
-      var el = feed.children[i];
-      if (el.classList.contains('day')) { flush(); day = el; dayHasRows = false; }
-      else if (el.classList.contains('ev') && !el.classList.contains('filtered-out')) dayHasRows = true;
+    // Guard: the script is only emitted for live reports, so the feed is
+    // always server-rendered; changes entries still filter client-side.
+    if (!LIVE) {
+      feed.querySelectorAll('.ev').forEach(function(row){
+        row.classList.toggle('filtered-out', !rowVisible(row, on));
+      });
+      var day = null, dayHasRows = false;
+      function flush(){ if (day) day.classList.toggle('filtered-out', on && !dayHasRows); }
+      for (var i = 0; i < feed.children.length; i++) {
+        var el = feed.children[i];
+        if (el.classList.contains('day')) { flush(); day = el; dayHasRows = false; }
+        else if (el.classList.contains('ev') && !el.classList.contains('filtered-out')) dayHasRows = true;
+      }
+      flush();
     }
-    flush();
     // Changes tab: entries filter individually; file/session groups collapse
     // when no entry inside survives.
     if (chg) {
@@ -1326,6 +1845,21 @@ export function renderReceiptHtml(model: ReceiptModel): string {  const nowMs = 
     });
     if (clearBtn) clearBtn.hidden = !on;
   }
+  function feedUpdate(){
+    var T = readToken();
+    if (!T) return;
+    fetch('/feed?t=' + encodeURIComponent(T), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filters: state, page: page })
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (feed && data.feedHtml) feed.innerHTML = data.feedHtml;
+      if (bar && data.paginationHtml) bar.innerHTML = data.paginationHtml;
+    })
+    .catch(function(err){ console.error('KYA feed update failed', err); });
+  }
   chips.forEach(function(chip){
     chip.addEventListener('click', function(){
       var g = chip.dataset.fgroup, v = chip.dataset.fvalue;
@@ -1335,15 +1869,175 @@ export function renderReceiptHtml(model: ReceiptModel): string {  const nowMs = 
       } else {
         (state[g] || (state[g] = Object.create(null)))[v] = true;
       }
+      page = 1;
       save(); apply();
+      if (LIVE) feedUpdate();
     });
   });
-  if (clearBtn) clearBtn.addEventListener('click', function(){ state = Object.create(null); save(); apply(); });
+  if (LIVE && bar) {
+    bar.addEventListener('click', function(e){
+      var btn = e.target.closest('button[data-page]');
+      if (!btn) return;
+      var dp = btn.getAttribute('data-page');
+      if (dp === 'prev') page = Math.max(1, page - 1);
+      else if (dp === 'next') page = page + 1;
+      else {
+        var np = parseInt(dp, 10);
+        if (np > 0) page = np;
+      }
+      save(); apply();
+      feedUpdate();
+    });
+  }
+  if (clearBtn) clearBtn.addEventListener('click', function(){ state = Object.create(null); page = 1; save(); apply(); if (LIVE) feedUpdate(); });
   parse(); apply();
+  if (LIVE && (active() || page !== 1)) feedUpdate();
+})();
+</script>`
+    : "";
+
+  const livePill = model.live ? `<span class="live" title="Watching trail.jsonl">Live</span>` : "";
+
+  const themeScript = `<script>
+(function(){
+  var root = document.documentElement;
+  var btn = document.getElementById('theme-toggle');
+  function apply(theme){ root.setAttribute('data-theme', theme); }
+  var explicit = root.getAttribute('data-theme');
+  var stored = null;
+  try { stored = localStorage.getItem('kya-theme'); } catch(e){}
+  if (explicit) {
+    // honor an explicit theme set on the static artifact (e.g. screenshots)
+  } else if (stored) apply(stored);
+  else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) apply('light');
+  else apply('dark');
+  if (btn) btn.addEventListener('click', function(){
+    apply(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    try { localStorage.setItem('kya-theme', root.getAttribute('data-theme')); } catch(e){}
+  });
 })();
 </script>`;
 
-  const livePill = model.live ? `<span class="live" title="Watching trail.jsonl">Live</span>` : "";
+  // Gateway interactive controls: playground evaluator, quick actions, and the
+  // sidebar stop-report link. Only wired when the page is served by the live
+  // loopback server (token present). Token is read from the query string so it
+  // matches the same origin as the SSE endpoint; all user-controlled output is
+  // escaped before DOM insertion.
+  const gateScript = model.liveToken
+    ? `<script>
+(function(){
+  var T = '';
+  var s = location.search;
+  if (s.indexOf('?') === 0) {
+    var params = s.slice(1).split('&');
+    for (var i = 0; i < params.length; i++) {
+      if (params[i].indexOf('t=') === 0) {
+        try { T = decodeURIComponent(params[i].slice(2)); } catch(e){ T = params[i].slice(2); }
+        break;
+      }
+    }
+  }
+  if (!T) return;
+  function esc(str){
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function setResult(el, html, isError){
+    if (!el) return;
+    el.innerHTML = '<div class="gate-result' + (isError ? ' error' : '') + '">' + html + '</div>';
+  }
+  function post(path, body){
+    return fetch(path + '?t=' + encodeURIComponent(T), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+  function parseJson(res){ return res.json(); }
+
+  var form = document.getElementById('gate-play-form');
+  if (form) {
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      var server = form.elements.server.value.trim();
+      var tool = form.elements.tool.value.trim();
+      var resultEl = document.getElementById('gate-play-result');
+      var btn = form.querySelector('button[type="submit"]');
+      if (btn) btn.disabled = true;
+      setResult(resultEl, 'Evaluating...', false);
+      post('/gate/playground', { server: server, tool: tool })
+        .then(parseJson)
+        .then(function(data){
+          if (data && data.ok) {
+            var pill = '<span class="pill ' + (data.verdict === 'allow' ? 'ok' : 'bad') + '">' + esc(data.verdict.toUpperCase()) + '</span>';
+            setResult(resultEl, pill + '<p>' + esc(data.reason) + '</p>', false);
+          } else {
+            setResult(resultEl, '<p>Error: ' + esc(data && data.error ? data.error : 'unknown') + '</p>', true);
+          }
+        })
+        .catch(function(err){
+          setResult(resultEl, '<p>Error: ' + esc(err.message) + '</p>', true);
+        })
+        .finally(function(){
+          if (btn) btn.disabled = false;
+        });
+    });
+  }
+
+  document.querySelectorAll('.gate-zone [data-action]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var action = btn.getAttribute('data-action');
+      var resultEl = document.getElementById('gate-doctor-result');
+      btn.disabled = true;
+      if (action === 'doctor') setResult(resultEl, 'Running doctor...', false);
+      post('/gate/action', { action: action })
+        .then(parseJson)
+        .then(function(data){
+          if (data && data.ok) {
+            if (action === 'doctor') {
+              setResult(resultEl, '<pre>' + esc(JSON.stringify(data.report, null, 2)) + '</pre>', false);
+              btn.disabled = false;
+            } else {
+              setTimeout(function(){ location.reload(); }, 800);
+            }
+          } else {
+            setResult(resultEl, '<p>Error: ' + esc(data && data.error ? data.error : 'unknown') + '</p>', true);
+            btn.disabled = false;
+          }
+        })
+        .catch(function(err){
+          setResult(resultEl, '<p>Error: ' + esc(err.message) + '</p>', true);
+          btn.disabled = false;
+        });
+    });
+  });
+
+  var stopLink = document.getElementById('stop-report');
+  if (stopLink) {
+    stopLink.addEventListener('click', function(e){
+      e.preventDefault();
+      stopLink.textContent = 'Stopping...';
+      post('/stop', {})
+        .then(parseJson)
+        .then(function(data){
+          if (data && data.ok) {
+            stopLink.textContent = 'Report stopped';
+            stopLink.setAttribute('aria-disabled', 'true');
+            stopLink.style.pointerEvents = 'none';
+            stopLink.style.opacity = '0.6';
+          } else {
+            stopLink.textContent = 'Stop failed';
+            window.alert('Failed to stop report: ' + esc(data && data.error ? data.error : 'unknown'));
+          }
+        })
+        .catch(function(err){
+          stopLink.textContent = 'Stop failed';
+          window.alert('Failed to stop report: ' + esc(err.message));
+        });
+    });
+  }
+})();
+</script>`
+    : "";
 
   // Zones never render as bare whitespace: with no panels they get a hint.
   const zoneBody = (parts: readonly string[], empty: string): string =>
@@ -1378,41 +2072,53 @@ export function renderReceiptHtml(model: ReceiptModel): string {  const nowMs = 
 <style>${receiptCss()}</style>
 </head>
 <body>
-<main>
-  <div class="topstick">
-    <header class="bar">
-      <div class="title-row">
-        <h1>${esc(model.title)}</h1>
-        <div class="range">${esc(model.rangeLabel)}${livePill}</div>
-      </div>
-      ${identityLine(model.identity)}
-    </header>
-    <nav class="tabs" aria-label="Report sections">
-      <a class="tab" id="tab-overview" href="#overview">Overview</a>
-      <a class="tab" id="tab-changes" href="#changes">Changes</a>
-      <a class="tab" id="tab-certify" href="#certify">Certify</a>
-      <a class="tab" id="tab-activity" href="#activity">Activity</a>
-      <a class="tab" id="tab-system" href="#system">System</a>
-    </nav>
-  </div>
+<aside class="sidebar">
+  <header class="sidebar-header">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">k</span>
+      <span class="wordmark">kya</span>
+    </div>
+  </header>
+  <nav class="sidebar-nav" aria-label="Report sections">
+    ${navItem("#overview", "Overview", events.length)}
+    ${navItem("#activity", "Activity", events.length)}
+    ${navItem("#changes", "Changes", changes.fileCount)}
+    ${navItem("#certify", "Certify", model.certify?.gap ?? 0)}
+    ${navGroup("Gateway", model.gate?.state === "running")}
+    ${navSubItem("#gateway-home", "Home", model.gate?.servers.length ?? 0)}
+    ${navSubItem("#gateway-listeners", "Listeners", model.gate?.listeners?.length ?? 0)}
+    ${navSubItem("#gateway-routes", "Routes", model.gate?.routes?.length ?? 0)}
+    ${navSubItem("#gateway-backends", "Backends", model.gate?.servers.length ?? 0)}
+    ${navSubItem("#gateway-policies", "Policies", model.gate?.policySummary?.totalPolicies ?? 0)}
+    ${navSubItem("#gateway-playground", "Playground", model.gate?.playgroundSamples?.length ?? 0)}
+    ${navItem("#system", "System", undefined)}
+  </nav>
+  <footer class="sidebar-footer">
+    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">Theme</button>
+    <!-- Stop-report action is wired by the live-server POST handler. -->
+    <a href="#" id="stop-report">Stop report</a>
+  </footer>
+</aside>
+${model.liveToken ? '<main data-live-token="1">' : '<main>'}
+  <header class="page-header">
+    <div class="title-row">
+      <h1>${esc(model.title)}</h1>
+      <div class="range">${esc(model.rangeLabel)}${livePill}</div>
+    </div>
+    ${identityLine(model.identity)}
+  </header>
   ${blockedBanner}
-  <div class="hero">
-    ${heroCertifyPanel(model.certify)}
-    ${verdictsHeroCard(c, events.length)}
-    ${activityHeroCard(agg, dashboard, events.length)}
-    ${gateHeroCard(model.gate)}
-    ${showbackHeroCard(model.showback)}
-  </div>
   <section class="zone" id="overview" aria-labelledby="tab-overview">
+    <div class="hero">
+      ${heroCertifyPanel(model.certify)}
+      <div class="hero-tiles">
+        ${verdictsHeroCard(c, events.length)}
+        ${activityHeroCard(agg, dashboard, events.length)}
+        ${gatewayHeroCard(model.gate, nowMs)}
+        ${showbackHeroCard(model.showback)}
+      </div>
+    </div>
     ${overviewBody}
-  </section>
-  <section class="zone" id="changes" aria-labelledby="tab-changes">
-    <section class="feed chg" id="changes-list" aria-label="Changes by session and file">
-${changesPanel(changes, nowMs)}
-    </section>
-  </section>
-  <section class="zone" id="certify" aria-labelledby="tab-certify">
-    ${certifyBody}
   </section>
   <section class="zone" id="activity" aria-labelledby="tab-activity">
     <div class="feed-head">
@@ -1429,14 +2135,28 @@ ${changesPanel(changes, nowMs)}
       ${chips.servers}
     </div>
     <section class="feed" id="feed" aria-label="Activity feed">
-${renderFeed(events, nowMs, model.live)}
+${initialFeed.feedHtml}
+    </section>
+    <div id="pagination-bar" aria-label="Activity pagination">
+${initialFeed.paginationHtml}
+    </div>
+  </section>
+  <section class="zone" id="changes" aria-labelledby="tab-changes">
+    <section class="feed chg" id="changes-list" aria-label="Changes by session and file">
+${changesPanel(changes, nowMs)}
     </section>
   </section>
+  <section class="zone" id="certify" aria-labelledby="tab-certify">
+    ${certifyBody}
+  </section>
+  ${gatePagePanel(model.gate, nowMs)}
   <section class="zone" id="system" aria-labelledby="tab-system">
     ${systemBody}
   </section>
 </main>
 ${filterScript}
+${themeScript}
+${gateScript}
 ${liveScript}
 </body>
 </html>`;

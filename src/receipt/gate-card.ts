@@ -45,7 +45,7 @@ export interface GateCard {
 }
 
 /** Gateway target ids are `<id>__<tool>` prefixes on trail toolIds. */
-function toolServerPrefix(toolId: string): string | undefined {
+export function toolServerPrefix(toolId: string): string | undefined {
   const m = /^([a-z0-9][a-z0-9-]*)__/i.exec(toolId.trim());
   return m ? m[1]!.toLowerCase() : undefined;
 }

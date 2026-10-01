@@ -24,6 +24,7 @@ import {
   buildShowback,
   type ShowbackReport,
 } from "../showback/cost-per-task.js";
+export { loadGatePage, type GatePage, type GatePageServerRow } from "./gate-page.js";
 import {
   MAX_USAGE_FILE_BYTES,
   parseUsageFilePayload,
