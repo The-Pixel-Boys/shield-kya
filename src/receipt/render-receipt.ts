@@ -29,7 +29,7 @@ import {
 } from "../showback/cost-per-task.js";
 import { computeDashboard, type Dashboard, type DashboardRow, type ToolWorst } from "./dashboard.js";
 import { buildChangesModel, type ChangesModel } from "./changes.js";
-import { loadGateCard, type GateCard } from "./gate-card.js";
+import { GATE_NOT_SETUP_QUICKSTART, loadGateCard, type GateCard } from "./gate-card.js";
 import { receiptCss } from "./receipt-css.js";
 
 export interface ReceiptModel {
@@ -770,11 +770,11 @@ function gatePanel(card: GateCard | undefined, nowMs: number): string {
   <div class="orrline">
     <span class="pill">not set up</span>
   </div>
-  <p class="line">Gateway not set up — <code>kya gate init</code> to put a governed gateway in front of any MCP server: every tool call proxied, evaluated, and on this trail.</p>
+  <p class="line">Gateway not set up — <code>kya start</code> puts a governed gateway in front of any MCP server automatically: every tool call proxied, evaluated, and on this trail.</p>
   <ol class="steps">
-    <li><code>kya gate init</code> — scaffold .kya/gateways.json with ready-to-move recipes</li>
-    <li><code>kya gate setup</code> — install the pinned gateway binary</li>
-    <li><code>kya gate run</code> — start the listener, then <code>kya connect &lt;host&gt; --gate</code></li>
+    <li>Add any MCP server to a host config (or <code>kya gate init</code> to pick from recipes)</li>
+    <li><code>kya start</code> — imports it, installs the gateway, and routes the host through it (originals backed up under .kya/backups)</li>
+    <li><code>kya gate doctor</code> — binary, config, listener health, loopback-only posture</li>
   </ol>
 </section>`;
   }
@@ -1138,7 +1138,7 @@ function gateHeroCard(card: GateCard | undefined): string {
       ? `${card.url ? `<code>${esc(clip(card.url, 48))}</code> · ` : ""}${card.servers.length} server${card.servers.length === 1 ? "" : "s"} · ${card.events} event${card.events === 1 ? "" : "s"}`
       : card.state === "configured-stopped"
         ? `${card.servers.length} server${card.servers.length === 1 ? "" : "s"} configured — <code>kya gate run</code>`
-        : `<code>kya gate init</code> to govern any MCP server`;
+        : `add an MCP server to a host config — <code>kya start</code> governs it`;
   const pill =
     card.state === "running"
       ? `<span class="pill ok">running</span>`
@@ -1637,9 +1637,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     const g = model.gate;
     lines.push("## Gateway");
     if (g.state === "not-set-up") {
-      lines.push(
-        "not set up — `kya gate init` to put a governed gateway in front of any MCP server, then `kya gate setup` + `kya gate run`",
-      );
+      lines.push(`not set up — ${GATE_NOT_SETUP_QUICKSTART}`);
     } else {
       const binary = g.binaryPresent
         ? `binary ${g.binaryVersion ? mdInline(clip(g.binaryVersion, 40)) : "installed"}`
