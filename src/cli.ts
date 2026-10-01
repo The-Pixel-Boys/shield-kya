@@ -103,6 +103,8 @@ Usage:
 Commands:
   start             ONE LINER: init + wire local MCP + open live report
                     (report runs in the background — returns your terminal)
+                    Auto-bootstraps the gateway for third-party MCP servers
+                    found in host configs (--no-gate or KYA_GATE=off skips)
   stop              Stop the background report server started by kya start
                     (--all also stops orphaned report daemons from other
                     directories or older installs)
@@ -239,7 +241,9 @@ export async function runCli(
           parsed.flags["force"] === true || parsed.flags["force"] === "true";
         const noOpen =
           parsed.flags["no-open"] === true || parsed.flags["no-open"] === "true";
-        const result = await runStart(config, { force, open: !noOpen });
+        const noGate =
+          parsed.flags["no-gate"] === true || parsed.flags["no-gate"] === "true";
+        const result = await runStart(config, { force, open: !noOpen, gate: !noGate });
         if (config.json) {
           io.log(JSON.stringify(result, null, 2));
         } else {

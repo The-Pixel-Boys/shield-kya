@@ -317,13 +317,14 @@ function renderWith(card: GateCard, events: TrailEvent[] = []): string {
 }
 
 describe("gateway panel render", () => {
-  it("not-set-up: quickstart + init CTA in the System panel and the hero card", () => {
+  it("not-set-up: auto-bootstrap quickstart in the System panel and the hero card", () => {
     const html = renderWith(FRESH_CARD);
     expect(html).toContain("Gateway not set up");
     expect(html).toContain("kya gate init");
-    expect(html).toContain("kya gate setup");
-    expect(html).toContain("kya gate run");
-    expect(html).toContain("kya connect &lt;host&gt; --gate");
+    expect(html).toContain("kya start");
+    expect(html).toContain("routes the host through it");
+    expect(html).toContain("kya gate doctor");
+    expect(html).not.toContain("kya gate setup");
     expect(html).toContain('class="panel hero-gate"');
   });
 
@@ -369,7 +370,8 @@ describe("gateway panel render", () => {
   it("markdown artifact carries the gateway section in every state", () => {
     const fresh = renderReceiptMarkdown(buildWindowReceiptModel([], 3, { gate: FRESH_CARD }));
     expect(fresh).toContain("## Gateway");
-    expect(fresh).toContain("not set up — `kya gate init`");
+    expect(fresh).toContain("not set up — Add any MCP server to a host config");
+    expect(fresh).toContain("`kya start` routes it through the gateway automatically");
     const running = renderReceiptMarkdown(buildWindowReceiptModel([], 3, { gate: RUNNING_CARD }));
     expect(running).toContain("running — `http://127.0.0.1:3930`");
     expect(running).toContain("`github` — stdio · 2 events, worst: deny");

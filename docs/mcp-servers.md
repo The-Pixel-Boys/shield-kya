@@ -30,7 +30,9 @@ destructive/ADMIN deny on top.
 ## Gateway recipes
 
 `kya gate init` scaffolds `.kya/gateways.json` with an empty `servers` list
-plus a `recipes` catalog containing every entry below. To enable a server,
+plus a `recipes` catalog containing every entry below. Usually you do none of
+this by hand: `kya start` discovers third-party MCP servers already in your
+host configs and imports them automatically. To enable a server manually,
 **move its recipe object into `servers`** and fill the `<…>` placeholders
 (your own install, tokens, connection strings). Two transports:
 

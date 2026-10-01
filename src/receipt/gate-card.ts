@@ -13,6 +13,10 @@ import type { TrailEvent } from "../trail.js";
 
 export type GateState = "not-set-up" | "configured-stopped" | "running";
 
+/** not-set-up quickstart line, shared by the HTML panel and the markdown artifact. */
+export const GATE_NOT_SETUP_QUICKSTART =
+  "Add any MCP server to a host config (or run `kya gate init` to pick from recipes) — `kya start` routes it through the gateway automatically.";
+
 export type GateServerWorst = "never" | "deny" | "hold" | "allow" | "none";
 
 export interface GateServerRow {

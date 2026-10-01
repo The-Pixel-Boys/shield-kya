@@ -18,6 +18,8 @@ export interface GatewayServer {
   readonly env?: Readonly<Record<string, string>>;
   /** http only: request headers for the remote server (auth tokens go here). */
   readonly headers?: Readonly<Record<string, string>>;
+  /** Host ids this entry was auto-imported from by `kya start` discovery. */
+  readonly importedFrom?: readonly string[];
 }
 
 export type GateFailureMode = "failOpen" | "failClosed";
@@ -117,6 +119,16 @@ function parseServer(raw: unknown, index: number): GatewayServer {
   if (transport === "stdio" && headers) {
     throw new UsageError(`${where}: "headers" only applies to transport "http"`);
   }
+  let importedFrom: readonly string[] | undefined;
+  if (raw.importedFrom !== undefined) {
+    if (
+      !Array.isArray(raw.importedFrom) ||
+      raw.importedFrom.some((h) => typeof h !== "string" || h.length === 0)
+    ) {
+      throw new UsageError(`${where}.importedFrom must be an array of host-id strings`);
+    }
+    importedFrom = raw.importedFrom as readonly string[];
+  }
   return {
     id,
     transport,
@@ -124,6 +136,7 @@ function parseServer(raw: unknown, index: number): GatewayServer {
     ...(url ? { url } : {}),
     ...(env ? { env } : {}),
     ...(headers ? { headers } : {}),
+    ...(importedFrom ? { importedFrom } : {}),
   };
 }
 
