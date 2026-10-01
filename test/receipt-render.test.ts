@@ -741,22 +741,22 @@ describe("chip filters", () => {
     expect(html).toContain("Clear filters");
   });
 
-  it("ships the filter script in static and live renders without touching EventSource", () => {
+  it("ships the filter script only in live-token renders without touching EventSource", () => {
     const events = [ev({ ts: iso(0), sessionId: "s" })];
     const staticHtml = renderReceiptHtml(buildReceiptModel("s", events, {}));
     const liveHtml = renderReceiptHtml(
       buildReceiptModel("s", events, { live: true, liveToken: "tok-abc123" }),
     );
-    for (const html of [staticHtml, liveHtml]) {
-      // Hash persistence + hide class + clear control wiring.
-      expect(html).toContain("replaceState");
-      expect(html).toContain("filtered-out");
-      expect(html).toContain("clear-filters");
-      // The hide rule must beat .ev's display:grid in the cascade.
-      expect(html).toContain(".filtered-out { display: none !important; }");
-    }
+    // Static renders are page-1-only and omit the interactivity script.
+    expect(staticHtml).not.toContain('id="kya-filters"');
+    expect(staticHtml).not.toContain("replaceState");
     expect(staticHtml).not.toContain("EventSource(");
-    // The live block is byte-for-byte the pre-existing one.
+    // Live renders include the filter/pagination script + SSE refresh block.
+    expect(liveHtml).toContain('id="kya-filters"');
+    expect(liveHtml).toContain("replaceState");
+    expect(liveHtml).toContain("filtered-out");
+    expect(liveHtml).toContain("clear-filters");
+    expect(liveHtml).toContain(".filtered-out { display: none !important; }");
     expect(liveHtml).toContain("new EventSource('/events?t=tok-abc123')");
     expect(liveHtml).toContain("es.onmessage = function(){ location.reload(); };");
   });

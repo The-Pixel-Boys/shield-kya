@@ -6,6 +6,7 @@ import {
   renderReceiptHtml,
 } from "../src/receipt/render-receipt.js";
 import { SHOWBACK_DISCLAIMER, type ShowbackReport } from "../src/showback/cost-per-task.js";
+import { minimalGatePage } from "./fixtures/gate-page.js";
 import type { TrailEvent } from "../src/trail.js";
 
 /**
@@ -451,12 +452,14 @@ describe("activity hero card — 7-bucket sparkline", () => {
 describe("showback hero card", () => {
   it("renders inside the hero grid when model.showback is present", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3, { showback: SHOWBACK }));
-    const iHero = html.indexOf('class="hero"');
     const iOverview = html.indexOf('id="overview"');
+    const iHero = html.indexOf('class="hero"');
+    const iTiles = html.indexOf('class="hero-tiles"');
     const iShowback = html.indexOf('aria-label="Showback"');
-    expect(iHero).toBeGreaterThan(-1);
-    expect(iShowback).toBeGreaterThan(iHero);
-    expect(iShowback).toBeLessThan(iOverview);
+    expect(iOverview).toBeGreaterThan(-1);
+    expect(iHero).toBeGreaterThan(iOverview);
+    expect(iTiles).toBeGreaterThan(iHero);
+    expect(iShowback).toBeGreaterThan(iTiles);
     const hero = section(html, "Showback");
     expect(hero).toContain('<span class="kpi-num">1000</span><span class="kpi-lab">Tokens in</span>');
     expect(hero).toContain('<span class="kpi-num">200</span><span class="kpi-lab">Tokens out</span>');
@@ -467,6 +470,31 @@ describe("showback hero card", () => {
   it("is omitted entirely when model.showback is absent", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3));
     expect(html).not.toContain('aria-label="Showback"');
+  });
+});
+
+describe("gateway hero card", () => {
+  it("renders inside the hero tiles when model.gate is provided", () => {
+    const html = renderReceiptHtml(
+      buildWindowReceiptModel([], 3, { gate: minimalGatePage("not-set-up") }),
+    );
+    const iOverview = html.indexOf('id="overview"');
+    const iHero = html.indexOf('class="hero"');
+    const iTiles = html.indexOf('class="hero-tiles"');
+    const iGateway = html.indexOf('aria-label="Gateway"');
+    expect(iOverview).toBeGreaterThan(-1);
+    expect(iHero).toBeGreaterThan(iOverview);
+    expect(iTiles).toBeGreaterThan(iHero);
+    expect(iGateway).toBeGreaterThan(iTiles);
+    const hero = section(html, "Gateway");
+    expect(hero).toContain('<span class="pill">not set up</span>');
+    expect(hero).toContain("0 backends configured");
+    expect(hero).toContain("binary missing — kya gate setup");
+  });
+
+  it("is omitted entirely when model.gate is absent", () => {
+    const html = renderReceiptHtml(buildWindowReceiptModel([], 3));
+    expect(html).not.toContain('aria-label="Gateway"');
   });
 });
 

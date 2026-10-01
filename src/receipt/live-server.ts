@@ -4,11 +4,24 @@
  */
 import { randomBytes } from "node:crypto";
 import { mkdirSync, watch, type FSWatcher } from "node:fs";
-import { createServer, type Server, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingHttpHeaders,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 import { dirname } from "node:path";
 import type { ResolvedConfig } from "../config.js";
+import { runGateDoctor, runGateRun, runGateStop } from "../commands/gate.js";
 import { CLI_VERSION } from "../version.js";
-import { loadReceiptModel, renderReceiptHtml } from "./render-receipt.js";
+import { evaluateGatewayTool } from "./gate-page.js";
+import {
+  loadReceiptModel,
+  renderReceiptHtml,
+  renderFeedPage,
+  type FeedFilters,
+} from "./render-receipt.js";
 import { trailPath } from "../trail.js";
 
 const LOOPBACK = "127.0.0.1";
@@ -47,6 +60,24 @@ function tokenOk(reqUrl: URL, req: { headers: { authorization?: string } }, toke
   return false;
 }
 
+/** Exported for tests: every request handler must reject non-loopback clients. */
+export function isLoopbackClient(req: {
+  socket?: { remoteAddress?: string };
+  headers: IncomingHttpHeaders;
+}): boolean {
+  // Any proxy-forwarded header means the request did not arrive directly from
+  // the local browser; the report server is never behind a proxy.
+  if (
+    req.headers["x-forwarded-for"] ||
+    req.headers["x-real-ip"] ||
+    req.headers["forwarded"]
+  ) {
+    return false;
+  }
+  const addr = req.socket?.remoteAddress ?? "";
+  return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1";
+}
+
 export function startLiveReceiptServer(
   options: LiveReceiptOptions,
 ): Promise<LiveReceiptServer> {
@@ -79,12 +110,183 @@ export function startLiveReceiptServer(
     res.end("unauthorized\n");
   };
 
+  const forbidden = (res: ServerResponse, body: object): void => {
+    res.writeHead(403, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(`${JSON.stringify(body)}\n`);
+  };
+
+  const badRequest = (res: ServerResponse, body: object): void => {
+    res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(`${JSON.stringify(body)}\n`);
+  };
+
+  const jsonOk = (res: ServerResponse, body: object): void => {
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(`${JSON.stringify(body)}\n`);
+  };
+
+  const readJsonBody = (req: IncomingMessage): Promise<unknown> =>
+    new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", () => {
+        const raw = Buffer.concat(chunks).toString("utf8");
+        if (!raw) return resolve(undefined);
+        try {
+          resolve(JSON.parse(raw));
+        } catch (err) {
+          reject(err);
+        }
+      });
+      req.on("error", reject);
+    });
+
+  function isFeedFilters(value: unknown): value is FeedFilters {
+    if (typeof value !== "object" || value === null) return false;
+    for (const [k, v] of Object.entries(value)) {
+      if (typeof k !== "string") return false;
+      if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) return false;
+    }
+    return true;
+  }
+
   const server: Server = createServer((req, res) => {
     try {
       const url = new URL(req.url ?? "/", `http://${LOOPBACK}`);
+      const isPostAction =
+        req.method === "POST" &&
+        (url.pathname === "/gate/playground" ||
+          url.pathname === "/gate/action" ||
+          url.pathname === "/stop" ||
+          url.pathname === "/feed");
+      if (isPostAction && !isLoopbackClient(req)) {
+        return forbidden(res, { ok: false, error: "loopback only" });
+      }
       if (!tokenOk(url, req, token)) {
         return unauthorized(res);
       }
+
+      if (req.method === "POST" && url.pathname === "/gate/playground") {
+        void (async () => {
+          try {
+            const body = (await readJsonBody(req)) as Record<string, unknown> | undefined;
+            const serverId = typeof body?.server === "string" ? body.server.trim() : "";
+            const toolName = typeof body?.tool === "string" ? body.tool.trim() : "";
+            if (!/^[a-z0-9][a-z0-9-]*$/i.test(serverId)) {
+              return badRequest(res, { ok: false, error: "invalid server id" });
+            }
+            if (!toolName) {
+              return badRequest(res, { ok: false, error: "tool name required" });
+            }
+            const result = evaluateGatewayTool(serverId, toolName);
+            return jsonOk(res, { ok: true, verdict: result.verdict, reason: result.reason });
+          } catch {
+            return badRequest(res, { ok: false, error: "invalid JSON body" });
+          }
+        })();
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/gate/action") {
+        void (async () => {
+          try {
+            const body = (await readJsonBody(req)) as Record<string, unknown> | undefined;
+            const action = body?.action;
+            if (action !== "start" && action !== "stop" && action !== "restart" && action !== "doctor") {
+              return badRequest(res, { ok: false, error: "invalid action" });
+            }
+            if (action === "start" || action === "restart") {
+              try {
+                const result = await runGateRun(options.config);
+                return jsonOk(res, {
+                  ok: true,
+                  action,
+                  state: "running",
+                  url: result.url,
+                  servers: result.servers.length,
+                });
+              } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+                res.end(`${JSON.stringify({ ok: false, action, error: message })}\n`);
+                return;
+              }
+            }
+            if (action === "stop") {
+              try {
+                const result = await runGateStop();
+                return jsonOk(res, { ok: true, action, state: "stopped", stopped: result.stopped });
+              } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+                res.end(`${JSON.stringify({ ok: false, action, error: message })}\n`);
+                return;
+              }
+            }
+            // doctor
+            try {
+              const result = await runGateDoctor();
+              return jsonOk(res, { ok: true, action, state: "doctor", report: result });
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+              res.end(`${JSON.stringify({ ok: false, action, error: message })}\n`);
+              return;
+            }
+          } catch {
+            return badRequest(res, { ok: false, error: "invalid JSON body" });
+          }
+        })();
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/stop") {
+        jsonOk(res, { ok: true, stopped: true });
+        res.on("finish", () => {
+          void closeAll();
+        });
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/feed") {
+        void (async () => {
+          try {
+            const body = (await readJsonBody(req)) as Record<string, unknown> | undefined;
+            const filters = isFeedFilters(body?.filters) ? body.filters : {};
+            const requestedPage = typeof body?.page === "number" && body.page > 0 ? Math.floor(body.page) : 1;
+            const model = loadReceiptModel({
+              cwd,
+              sessionId: options.sessionId,
+              days: options.days,
+            });
+            const result = renderFeedPage(
+              model.events,
+              filters,
+              requestedPage,
+              Date.now(),
+              true,
+            );
+            return jsonOk(res, {
+              ok: true,
+              feedHtml: result.feedHtml,
+              paginationHtml: result.paginationHtml,
+              total: result.total,
+              page: result.page,
+              pages: result.pages,
+            });
+          } catch (err) {
+            if (err instanceof SyntaxError) {
+              return badRequest(res, { ok: false, error: "invalid JSON body" });
+            }
+            const message = err instanceof Error ? err.message : String(err);
+            res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(`${JSON.stringify({ ok: false, error: message })}\n`);
+            return;
+          }
+        })();
+        return;
+      }
+
       if (req.method === "GET" && url.pathname === "/healthz") {
         // Cheap liveness + version handshake for daemon reuse — never renders,
         // so a render-time failure (e.g. assertNoSecrets) cannot wedge it. The
