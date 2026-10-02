@@ -17,6 +17,12 @@ import { pidAlive } from "../receipt/daemon.js";
 import { writeFileSync } from "node:fs";
 import { scaffoldGateways, readGateways, gatewaysPath } from "../gate/config.js";
 import { generateGatewayYaml } from "../gate/config-gen.js";
+import {
+  syncGatewayToHosted,
+  triggerHostedSyncFromEnv,
+  type GatewayHostedState,
+  lastHostedSyncResult,
+} from "../gate/hosted-sync.js";
 import { ensureGateBinary, inspectGateBinary, gateBinaryPath } from "../gate/binary.js";
 import {
   clearGateState,
@@ -71,6 +77,11 @@ export interface GateDoctorResult {
   readonly listener: { readonly running: boolean; readonly url?: string; readonly healthy?: boolean };
   /** Loopback-only posture of the generated config (verified from gate.yaml on disk). */
   readonly bindScope: { readonly loopbackOnly: boolean; readonly detail: string };
+  /** Hosted-platform sync status (never includes the API key). */
+  readonly hostedSync: {
+    readonly configured: boolean;
+    readonly lastSync?: { readonly ok: boolean; readonly at: string; readonly error?: string };
+  };
 }
 
 /**
@@ -120,11 +131,17 @@ export async function runGateDoctor(env: NodeJS.ProcessEnv = process.env): Promi
   const state = readGateState(env);
   const running = Boolean(state && pidAlive(state.pid));
   const healthy = running && state ? await probeListener(state) : undefined;
+  const apiKey = (env.KYA_API_KEY ?? env.SHIELD_API_KEY ?? "").trim();
+  const baseUrl = (env.KYA_BASE_URL ?? "").trim();
   return {
     binary: { present: bin.present, path: bin.path, ...(bin.version ? { version: bin.version } : {}) },
     config: { path: gatewaysPath(env), servers: cfg.servers.length },
     listener: { running, ...(state ? { url: state.url } : {}), ...(healthy !== undefined ? { healthy } : {}) },
     bindScope: bindScopeFromYaml(env),
+    hostedSync: {
+      configured: Boolean(apiKey && baseUrl),
+      lastSync: lastHostedSyncResult(),
+    },
   };
 }
 
@@ -164,6 +181,23 @@ export async function runGateRun(
   const gateways = readGateways(env);
   const yaml = generateGatewayYaml(gateways);
 
+  const syncRunning = (supervisorState: {
+    url: string;
+    port: number;
+    startedAt?: string;
+    binaryVersion?: string;
+  }): void => {
+    void syncGatewayToHosted({
+      cwd: config.cwd,
+      env,
+      gatewaysConfig: gateways,
+      supervisorState: { state: "running" as GatewayHostedState, ...supervisorState },
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      force: true,
+    });
+  };
+
   const existing = readGateState(env);
   if (existing && pidAlive(existing.pid) && isGateDaemonProcess(existing.pid)) {
     // Never rewrite gate.yaml under a live process — the gateway watches the
@@ -174,6 +208,12 @@ export async function runGateRun(
     } catch {
       drift = false;
     }
+    syncRunning({
+      url: existing.url,
+      port: existing.port,
+      startedAt: existing.startedAt,
+      binaryVersion: bin.version,
+    });
     return {
       pid: existing.pid,
       url: existing.url,
@@ -222,6 +262,12 @@ export async function runGateRun(
         await sleep(200);
         continue;
       }
+      syncRunning({
+        url: state.url,
+        port: state.port,
+        startedAt: state.startedAt,
+        binaryVersion: bin.version,
+      });
       return {
         pid,
         url: state.url,
@@ -294,18 +340,23 @@ export interface GateStopResult {
 
 export async function runGateStop(
   env: NodeJS.ProcessEnv = process.env,
-  input: { kill?: (pid: number, signal: string) => void } = {},
+  input: { kill?: (pid: number, signal: string) => void; cwd?: string } = {},
 ): Promise<GateStopResult> {
   const kill = input.kill ?? defaultSignal;
   const state = readGateState(env);
-  if (!state) return { stopped: false };
+  if (!state) {
+    triggerHostedSyncFromEnv({ cwd: input.cwd ?? process.cwd(), env, state: "configured-stopped" });
+    return { stopped: false };
+  }
   if (pidAlive(state.pid) && !isGateDaemonProcess(state.pid)) {
     // Planted or recycled pid — never signal a foreign process.
     clearGateState(env);
+    triggerHostedSyncFromEnv({ cwd: input.cwd ?? process.cwd(), env, state: "configured-stopped" });
     return { stopped: false, pid: state.pid, stale: true };
   }
   await killGateProcessTree(state.pid, state.childPid, kill);
   clearGateState(env);
+  triggerHostedSyncFromEnv({ cwd: input.cwd ?? process.cwd(), env, state: "configured-stopped" });
   return {
     stopped: true,
     pid: state.pid,
@@ -321,6 +372,9 @@ export function gateMcpUrl(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 export function formatGateDoctorHuman(r: GateDoctorResult): string {
+  const syncLine = r.hostedSync.configured
+    ? `hosted sync: configured${formatLastSync(r.hostedSync.lastSync)}`
+    : "hosted sync: not configured (set KYA_API_KEY + KYA_BASE_URL to enable)";
   return [
     "KYA gate doctor",
     r.binary.present
@@ -331,13 +385,22 @@ export function formatGateDoctorHuman(r: GateDoctorResult): string {
     r.listener.running
       ? `listener: ${r.listener.url} (${r.listener.healthy ? "healthy" : "not answering"})`
       : "listener: not running — `kya gate run`",
+    syncLine,
   ].join("\n");
+}
+
+function formatLastSync(last: GateDoctorResult["hostedSync"]["lastSync"]): string {
+  if (!last) return "";
+  const status = last.ok ? "ok" : "failed";
+  const detail = last.error ? ` — ${last.error}` : "";
+  return ` (last sync: ${status}${detail})`;
 }
 
 export function gateSubcommand(parsed: { positionals: readonly string[] }): string {
   const sub = parsed.positionals[0];
-  if (sub === "init" || sub === "setup" || sub === "doctor" || sub === "run" || sub === "stop") {
-    return sub;
+  if (sub === "init" || sub === "setup" || sub === "doctor" || sub === "status" || sub === "run" || sub === "stop") {
+    // `status` is an alias for `doctor` — same output, hosted sync line included.
+    return sub === "status" ? "doctor" : sub;
   }
-  throw new UsageError("Usage: kya gate <init|setup|doctor|run|stop>");
+  throw new UsageError("Usage: kya gate <init|setup|doctor|status|run|stop>");
 }

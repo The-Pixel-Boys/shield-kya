@@ -164,4 +164,28 @@ describe("gateways.json file handling", () => {
       rmSync(home, { recursive: true, force: true });
     }
   });
+
+  it("readGateways assigns and persists a stable instanceId when one is missing", () => {
+    const home = tmp();
+    try {
+      const path = gatewaysPath(env(home));
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(
+        path,
+        JSON.stringify({ port: 4100, servers: [{ id: "github", transport: "stdio", cmd: ["npx", "gh-mcp"] }] }),
+        "utf8",
+      );
+      const first = readGateways(env(home));
+      expect(first.instanceId).toMatch(/^[0-9a-f-]{36}$/i);
+      const raw = JSON.parse(readFileSync(path, "utf8")) as { instanceId: string; port: number; recipes?: unknown[] };
+      expect(raw.instanceId).toBe(first.instanceId);
+      expect(raw.port).toBe(4100);
+      expect(raw.recipes).toBeUndefined();
+
+      const second = readGateways(env(home));
+      expect(second.instanceId).toBe(first.instanceId);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
 });

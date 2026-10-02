@@ -92,6 +92,7 @@ import {
   runGateSetup,
   runGateStop,
 } from "./commands/gate.js";
+import { triggerHostedSyncFromEnv } from "./gate/hosted-sync.js";
 import { runGateServe } from "./commands/gate-serve.js";
 import { ensureSupportedNode } from "./node-upgrade.js";
 
@@ -113,7 +114,7 @@ Commands:
                     --hooks also wires the host's PreToolUse hook (claude|grok|kimi)
                     --gate points the host at the local kya gateway (kya gate run)
   gate              Local MCP gateway: govern + audit tool calls to any MCP server
-                    (init | setup | doctor | run | stop)
+                    (init | setup | doctor | status | run | stop)
   init              Scaffold .kya/ config + sample tools + .env.example
   register-agent    POST /api/v1/kya/agents (human mint; server applies allow/break-glass/approve)
   eval-tool         Policy evaluate (HTTP plane or --offline sample)
@@ -322,6 +323,7 @@ export async function runCli(
         const sub = gateSubcommand(parsed);
         if (sub === "init") {
           const result = runGateInit(env);
+          void triggerHostedSyncFromEnv({ cwd, env });
           if (parsed.flags["json"] === true || parsed.flags["json"] === "true") {
             io.log(JSON.stringify(result, null, 2));
           } else {
@@ -332,6 +334,7 @@ export async function runCli(
         }
         if (sub === "setup") {
           const result = await runGateSetup(env);
+          void triggerHostedSyncFromEnv({ cwd, env });
           if (parsed.flags["json"] === true || parsed.flags["json"] === "true") {
             io.log(JSON.stringify(result, null, 2));
           } else {
@@ -353,7 +356,7 @@ export async function runCli(
           return result.binary.present ? 0 : 1;
         }
         if (sub === "stop") {
-          const result = await runGateStop(env);
+          const result = await runGateStop(env, { cwd });
           if (parsed.flags["json"] === true || parsed.flags["json"] === "true") {
             io.log(JSON.stringify(result, null, 2));
           } else {

@@ -8,6 +8,10 @@ import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { UsageError } from "../errors.js";
 import { readGateways } from "../gate/config.js";
+import {
+  syncGatewayToHosted,
+  type GatewayHostedState,
+} from "../gate/hosted-sync.js";
 import { gateBinaryPath } from "../gate/binary.js";
 import {
   clearGateState,
@@ -63,6 +67,7 @@ export async function startGateSupervisor(input: {
   });
 
   const url = `http://127.0.0.1:${gateways.port}`;
+  const startedAt = new Date().toISOString();
   writeGateState(
     {
       pid: process.pid,
@@ -70,10 +75,40 @@ export async function startGateSupervisor(input: {
       url,
       port: gateways.port,
       otlpPort: receiver.port,
-      startedAt: new Date().toISOString(),
+      startedAt,
     },
     env,
   );
+
+  const baseUrl = (env.KYA_BASE_URL ?? "").trim();
+  const apiKey = (env.KYA_API_KEY ?? env.SHIELD_API_KEY ?? "").trim();
+  const hostedSyncEnabled = Boolean(baseUrl && apiKey);
+
+  function doHostedSync(state: GatewayHostedState, force?: boolean): void {
+    if (!hostedSyncEnabled) return;
+    try {
+      void syncGatewayToHosted({
+        cwd: input.cwd,
+        env,
+        gatewaysConfig: readGateways(env),
+        supervisorState:
+          state === "running"
+            ? { state: "running", url, port: gateways.port, startedAt, binaryVersion: undefined }
+            : { state: "configured-stopped" },
+        baseUrl,
+        apiKey,
+        force,
+      });
+    } catch {
+      /* sync is best-effort — never crash the supervisor */
+    }
+  }
+
+  // Initial running sync + 60s heartbeat (only when credentials are configured).
+  doHostedSync("running", true);
+  const heartbeat = hostedSyncEnabled
+    ? setInterval(() => doHostedSync("running", true), 60_000)
+    : undefined;
 
   let shutdownFn: () => void = () => {};
   const waitUntilClosed = new Promise<void>((resolve) => {
@@ -81,6 +116,7 @@ export async function startGateSupervisor(input: {
     const shutdown = () => {
       if (closing) return;
       closing = true;
+      if (heartbeat) clearInterval(heartbeat);
       process.removeListener("SIGINT", shutdown);
       process.removeListener("SIGTERM", shutdown);
       if (child.exitCode === null) {
@@ -90,6 +126,8 @@ export async function startGateSupervisor(input: {
           /* already gone */
         }
       }
+      // Fire-and-forget a final "configured-stopped" sync before we exit.
+      doHostedSync("configured-stopped");
       void receiver
         .close()
         .catch(() => undefined)
