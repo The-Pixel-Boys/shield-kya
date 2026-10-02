@@ -4,6 +4,7 @@
  * it with a `recipes` catalog of ready-to-move entries for the well-known
  * servers from the MCP server registry.
  */
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { globalConfigDir } from "../config.js";
@@ -25,6 +26,8 @@ export interface GatewayServer {
 export type GateFailureMode = "failOpen" | "failClosed";
 
 export interface GatewaysConfig {
+  /** Stable identity for this gateway installation (auto-created on first read). */
+  readonly instanceId?: string;
   /** Listener port on 127.0.0.1 (default 3930). */
   readonly port: number;
   /** Local OTLP/HTTP receiver port (default 3931). */
@@ -163,7 +166,26 @@ export function validateGateways(raw: unknown): GatewaysConfig {
     }
     seen.add(s.id);
   }
-  return { port, otlpPort, failureMode, servers };
+  let instanceId: string | undefined;
+  if (raw.instanceId !== undefined) {
+    if (typeof raw.instanceId !== "string" || raw.instanceId.length === 0) {
+      throw new UsageError('gateways.json: "instanceId" must be a non-empty string');
+    }
+    instanceId = raw.instanceId;
+  }
+  return { port, otlpPort, failureMode, servers, ...(instanceId ? { instanceId } : {}) };
+}
+
+function defaultGatewaysConfig(): GatewaysConfig {
+  return { port: GATE_DEFAULT_PORT, otlpPort: GATE_DEFAULT_OTLP_PORT, failureMode: "failOpen", servers: [] };
+}
+
+function persistInstanceId(path: string, raw: unknown, instanceId: string): GatewaysConfig {
+  const cfg = validateGateways(raw);
+  if (cfg.instanceId) return cfg;
+  const patched = { ...(raw as Record<string, unknown>), instanceId };
+  atomicWriteSync(path, `${JSON.stringify(patched, null, 2)}\n`);
+  return { ...cfg, instanceId };
 }
 
 export function readGateways(
@@ -171,7 +193,10 @@ export function readGateways(
 ): GatewaysConfig {
   const path = gatewaysPath(env);
   if (!existsSync(path)) {
-    return { port: GATE_DEFAULT_PORT, otlpPort: GATE_DEFAULT_OTLP_PORT, failureMode: "failOpen", servers: [] };
+    mkdirSync(globalConfigDir(env), { recursive: true });
+    const cfg = { ...defaultGatewaysConfig(), instanceId: randomUUID() };
+    atomicWriteSync(path, `${JSON.stringify(cfg, null, 2)}\n`);
+    return cfg;
   }
   let raw: unknown;
   try {
@@ -179,7 +204,7 @@ export function readGateways(
   } catch {
     throw new UsageError(`${path} is not valid JSON — fix it by hand, then re-run kya gate run`);
   }
-  return validateGateways(raw);
+  return persistInstanceId(path, raw, randomUUID());
 }
 
 interface Recipe extends GatewayServer {
@@ -226,6 +251,7 @@ export function scaffoldGateways(
     // server then fails silently — its tools just vanish). failClosed is the
     // strict choice: any broken target stops the whole gateway.
     failureMode: "failOpen",
+    instanceId: randomUUID(),
     servers: [] as unknown[],
     recipes: RECIPES.map(({ note, ...entry }) => ({ note, ...entry })),
   };
