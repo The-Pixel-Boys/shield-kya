@@ -252,12 +252,18 @@ describe("receipt dashboard layout (hero grid + sidebar)", () => {
     }
   });
 
-  it("contains no external http(s) references — fully offline page", () => {
+  it("contains no external http(s) references except the live star link — fully offline page", () => {
     const empty = renderReceiptHtml(buildWindowReceiptModel([], 3));
     expect(empty).not.toMatch(/https?:\/\//);
     const live = renderReceiptHtml(
       buildReceiptModel("s", EVENTS, { live: true, liveToken: "tok-abc123" }),
     );
-    expect(live).not.toMatch(/https?:\/\//);
+    // The live report carries exactly one intentional external reference:
+    // the sidebar "Star on GitHub" CTA. Everything else stays loopback/offline.
+    const withoutStar = live.replaceAll(
+      "https://github.com/The-Pixel-Boys/shield-agent",
+      "",
+    );
+    expect(withoutStar).not.toMatch(/https?:\/\//);
   });
 });

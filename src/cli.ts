@@ -63,6 +63,7 @@ import {
   openPath,
   receiptInputFromArgs,
   runReceipt,
+  runReceiptShare,
 } from "./commands/receipt.js";
 import { formatStartHuman, runStart } from "./commands/start.js";
 import {
@@ -82,6 +83,7 @@ import { runSandboxCommand } from "./commands/sandbox.js";
 import { runHook } from "./commands/hook.js";
 import { formatStopHuman, runStop } from "./commands/stop.js";
 import { runReceiptServe } from "./commands/receipt-serve.js";
+import { maybePrintStarCta } from "./star-cta.js";
 import {
   formatGateDoctorHuman,
   gateMcpUrl,
@@ -123,6 +125,7 @@ Commands:
   hook              PreToolUse interception for native-hook hosts (claude|grok|kimi|…)
                     Reads the hook payload from stdin; exit 2 blocks. --strict denies advisory.
   receipt           Activity report HTML/JSON/MD (default: last 3 days, all tools; --open)
+                    --q pre-fills feed search · --share publishes a redacted summary (see --share-url)
   invoke            Authorize on the plane after Allow or APPROVED. Never runs the write here.
   approve           Human APPROVE an approval id (kya.approve scope)
   reject            Human REJECT an approval id (kya.approve scope)
@@ -154,6 +157,9 @@ Options (shared):
   --open            receipt/certify: open HTML in the browser
   --days <n>        receipt: history window (default 3)
   --session <id>    receipt: single session only (optional)
+  --q <query>       receipt: pre-fill the activity-feed search
+  --share           receipt: publish a redacted summary, print the public URL
+  --share-url <url> receipt: share endpoint base (or KYA_SHARE_URL; default https://shield-agent.com)
   --once            dash: print one frame and exit (CI / pipes)
   --window <n>      certify: report window in days (default 30)
   --fail-on <m>     certify: gap (default, exit 1 on gaps) | never
@@ -249,6 +255,7 @@ export async function runCli(
           io.log(JSON.stringify(result, null, 2));
         } else {
           io.log(formatStartHuman(result));
+          if (result.liveUrl) maybePrintStarCta(cwd, 3, io.log);
         }
         return 0;
       }
@@ -474,11 +481,29 @@ export async function runCli(
           offline: true,
         });
         const input = receiptInputFromArgs(parsed);
+        if (flagBool(parsed.flags, "share")) {
+          const shared = await runReceiptShare(
+            config,
+            {
+              sessionId: input.sessionId,
+              days: input.days,
+              shareUrl: flagString(parsed.flags, "share-url"),
+            },
+            env,
+          );
+          if (!shared.ok) {
+            io.error(shared.error);
+            return 1;
+          }
+          io.log(`Shared report: ${shared.url}`);
+          return 0;
+        }
         const result = await runReceipt(config, input);
         if (config.json) {
           io.log(JSON.stringify(result, null, 2));
         } else {
           io.log(formatReceiptHuman(result));
+          if (result.liveUrl) maybePrintStarCta(cwd, result.days, io.log);
         }
         return 0;
       }
