@@ -747,10 +747,12 @@ describe("chip filters", () => {
     const liveHtml = renderReceiptHtml(
       buildReceiptModel("s", events, { live: true, liveToken: "tok-abc123" }),
     );
-    // Static renders are page-1-only and omit the interactivity script.
+    // Static renders omit the live chip-filter script but include a small
+    // client-side BM25 search script instead.
     expect(staticHtml).not.toContain('id="kya-filters"');
-    expect(staticHtml).not.toContain("replaceState");
     expect(staticHtml).not.toContain("EventSource(");
+    expect(staticHtml).toContain('id="kya-static-search"');
+    expect(staticHtml).toContain("tokenize");
     // Live renders include the filter/pagination script + SSE refresh block.
     expect(liveHtml).toContain('id="kya-filters"');
     expect(liveHtml).toContain("replaceState");
@@ -759,6 +761,28 @@ describe("chip filters", () => {
     expect(liveHtml).toContain(".filtered-out { display: none !important; }");
     expect(liveHtml).toContain("new EventSource('/events?t=tok-abc123')");
     expect(liveHtml).toContain("es.onmessage = function(){ location.reload(); };");
+  });
+
+  it("renders the search input and relevance meta only when a query is set", () => {
+    const events = [ev({ ts: iso(0), sessionId: "s", summary: "deployed api" })];
+    const plain = renderReceiptHtml(buildReceiptModel("s", events, {}));
+    expect(plain).toContain('id="feed-search"');
+    expect(plain).toContain('class="feed-search-input"');
+    expect(plain).not.toContain('<div class="feed-search-meta">');
+    expect(plain).not.toContain("Semantic ranking requires");
+
+    const live = renderReceiptHtml(
+      buildReceiptModel("s", events, { live: true, liveToken: "tok-abc123", searchQuery: "deploy" }),
+    );
+    expect(live).toContain('value="deploy"');
+    expect(live).toContain('<div class="feed-search-meta">1 matches · ranked by relevance</div>');
+    expect(live).not.toContain("Semantic ranking requires");
+
+    const staticSearch = renderReceiptHtml(
+      buildReceiptModel("s", events, { searchQuery: "deploy" }),
+    );
+    expect(staticSearch).toContain('value="deploy"');
+    expect(staticSearch).toContain("Semantic ranking requires the live report server");
   });
 
   it("escapes quotes in project names used as attribute values", () => {
@@ -834,5 +858,136 @@ describe("chip filters", () => {
       buildReceiptModel("s", [ev({ ts: iso(0), sessionId: "s", toolId: "read_file" })], {}),
     );
     expect(none).not.toContain('aria-label="Servers"');
+  });
+});
+
+describe("search query plumbing", () => {
+  it("loadReceiptModel forwards searchQuery so ?q= renders pre-fill and meta", () => {
+    appendTrail(dir, ev({ ts: iso(1000), sessionId: "s1", summary: "read agents file" }));
+    const model = loadReceiptModel({ cwd: dir, days: 3, searchQuery: "read agents file" });
+    expect(model.searchQuery).toBe("read agents file");
+    const html = renderReceiptHtml(model);
+    expect(html).toContain('value="read agents file"');
+    expect(html).toContain("1 matches · filtered by relevance");
+  });
+
+  it("static renders with a search query emit the meta div and the ranking note", () => {
+    appendTrail(dir, ev({ ts: iso(1000), sessionId: "s1", summary: "read agents file" }));
+    const model = loadReceiptModel({ cwd: dir, days: 3, searchQuery: "read agents file" });
+    const html = renderReceiptHtml(model);
+    expect(html).toContain('<div class="feed-search-meta">');
+    expect(html).toContain("Semantic ranking requires the live report server");
+  });
+});
+
+describe("static receipt ?q= search script", () => {
+  interface FakeRow {
+    readonly textContent: string;
+    readonly filteredOut: () => boolean;
+  }
+
+  function extractScript(html: string): string {
+    const m = html.match(/<script id="kya-static-search">([\s\S]*?)<\/script>/);
+    if (!m) throw new Error("kya-static-search script not emitted");
+    return m[1]!;
+  }
+
+  /** Run the emitted static-search script against a minimal DOM stub. */
+  function runScript(html: string, search: string, prefill = ""): {
+    inputValue: string;
+    metaText: string;
+    rows: FakeRow[];
+  } {
+    const script = extractScript(html);
+    // The script must parse: a swallowed regex escape once made the whole
+    // block a SyntaxError, silently disabling ?q= in static receipts.
+    const fn = new Function("document", "location", "history", script);
+    const mk = (text: string, cls: string): FakeRow & { classList: unknown } => {
+      const classes = new Set(cls.split(" "));
+      return {
+        textContent: text,
+        filteredOut: () => classes.has("filtered-out"),
+        classList: {
+          toggle: (c: string, force?: boolean) => {
+            const on = force === undefined ? !classes.has(c) : Boolean(force);
+            if (on) classes.add(c);
+            else classes.delete(c);
+          },
+          contains: (c: string) => classes.has(c),
+        },
+      };
+    };
+    const rows = [mk("read agents file", "ev"), mk("deployed the api", "ev")];
+    const day = mk("Today", "day");
+    const input = { value: prefill, addEventListener: () => {} };
+    const meta = { textContent: "", style: {} as Record<string, string> };
+    const clearBtn = { hidden: true, addEventListener: () => {} };
+    const byId: Record<string, unknown> = {
+      feed: {
+        children: [day, ...rows],
+        querySelectorAll: (sel: string) => (sel === ".ev" ? rows : []),
+      },
+      "feed-search": input,
+      "clear-filters": clearBtn,
+    };
+    fn(
+      {
+        getElementById: (id: string) => byId[id] ?? null,
+        querySelector: (sel: string) => (sel === ".feed-search-meta" ? meta : null),
+      },
+      { search, pathname: "/receipt.html", hash: "" },
+      { replaceState: () => {} },
+    );
+    return { inputValue: input.value, metaText: meta.textContent, rows };
+  }
+
+  it("emits the tokenizer with a valid regex character class", () => {
+    const html = renderReceiptHtml(buildReceiptModel("s", [ev({ ts: iso(0), sessionId: "s" })], {}));
+    const script = extractScript(html);
+    // The dash must survive the template literal escaped, or the character
+    // class is an invalid range and the whole script is a SyntaxError.
+    expect(script).toContain("replace(/[_\\-.]/g, ' ')");
+    expect(() => new Function(script)).not.toThrow();
+  });
+
+  it("sets the input value, filters rows, and fills the meta line for ?q=", () => {
+    const events = [
+      ev({ ts: iso(0), sessionId: "s", summary: "read agents file" }),
+      ev({ ts: iso(1), sessionId: "s", summary: "deployed the api" }),
+    ];
+    const html = renderReceiptHtml(buildReceiptModel("s", events, {}));
+    const r = runScript(html, "?q=read+agents+file");
+    expect(r.inputValue).toBe("read agents file");
+    expect(r.rows[0]!.filteredOut()).toBe(false);
+    expect(r.rows[1]!.filteredOut()).toBe(true);
+    expect(r.metaText).toBe("1 matches · filtered by relevance");
+  });
+
+  it("falls back to the server-prefilled input when the URL has no ?q=", () => {
+    const events = [
+      ev({ ts: iso(0), sessionId: "s", summary: "read agents file" }),
+      ev({ ts: iso(1), sessionId: "s", summary: "deployed the api" }),
+    ];
+    const html = renderReceiptHtml(buildReceiptModel("s", events, { searchQuery: "read agents" }));
+    // Simulates the browser applying the server-rendered value attribute.
+    const r = runScript(html, "", "read agents");
+    expect(r.inputValue).toBe("read agents");
+    expect(r.rows[0]!.filteredOut()).toBe(false);
+    expect(r.rows[1]!.filteredOut()).toBe(true);
+  });
+});
+
+describe("star CTA link", () => {
+  it("shows Star on GitHub only in live reports", () => {
+    const events = [ev({ ts: iso(0), sessionId: "s" })];
+    const live = renderReceiptHtml(
+      buildReceiptModel("s", events, { live: true, liveToken: "tok-abc123" }),
+    );
+    expect(live).toContain('href="https://github.com/The-Pixel-Boys/shield-agent"');
+    expect(live).toContain("Star on GitHub ↗");
+    expect(live).toContain('rel="noopener noreferrer"');
+    const staticHtml = renderReceiptHtml(buildReceiptModel("s", events, {}));
+    expect(staticHtml).not.toContain("Star on GitHub");
+    expect(staticHtml).not.toContain("The-Pixel-Boys/shield-agent");
   });
 });

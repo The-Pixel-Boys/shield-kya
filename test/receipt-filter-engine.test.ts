@@ -118,10 +118,13 @@ function mount(html: string, url: { search?: string; hash?: string } = {}): Moun
       location.pathname = q >= 0 ? pre.slice(0, q) : pre;
     },
   };
+  const searchInput = new FakeEl({ id: "feed-search", class: "feed-search-input", type: "search" });
+  const searchMeta = new FakeEl({ class: "feed-search-meta" });
   const document = {
     getElementById: (id: string) =>
-      id === "feed" ? feed : id === "clear-filters" ? clearBtn : null,
+      id === "feed" ? feed : id === "clear-filters" ? clearBtn : id === "feed-search" ? searchInput : null,
     querySelectorAll: (sel: string) => (sel === "[data-fgroup]" ? chips : []),
+    querySelector: (sel: string) => (sel === ".feed-search-meta" ? searchMeta : null),
   };
   new Function("document", "location", "history", script!)(document, location, history);
   return { chips, rows, days, clearBtn, location };

@@ -8,7 +8,7 @@
 [![X](https://img.shields.io/badge/X-%40coscosmico-000000?logo=x&logoColor=white)](https://x.com/coscosmico)
 
 
-**Audit trail & traceability for AI agents.** Every tool call your coding agents make — gated (Allow / Review / Deny), recorded on a live local dashboard, and certifiable against the Agent Trust Baseline. One command. Free forever under MIT.
+**AI agents audit trail & traceability.** Every tool call your coding agents make — gated (Allow / Review / Deny), recorded on a live local dashboard, and certifiable against the Agent Trust Baseline. One command. Free forever under MIT.
 
 ```bash
 npm i -g @shield-agent/kya@latest && kya start
@@ -132,7 +132,21 @@ Install hub: [https://shield-agent.com/install](https://shield-agent.com/install
 
 One trail for all projects: `~/.kya/trail.jsonl` (`KYA_HOME` overrides `~`). `kya receipt --open` from any directory shows activity from every project. Each event carries its project folder name — the report adds a Projects rollup once two or more projects appear, and shows the project on each feed entry. Older per-project `<project>/.kya/trail.jsonl` files are still read and merged; no migration. The trail is capped at 1 MB (tail-read: oldest events drop away), shared across all projects.
 
-The report itself is a dashboard: a hero row on top (live **Certify** result, verdict mix, activity sparkline, showback) with tabbed sections below — **Overview** (analytics, sessions, reasons), **Certify** (the full live requirement table — every requirement grouped by domain with status, evidence, and attestation), **Activity** (the filterable event feed), **System** (wired hosts, sandboxes, ORR). Everything is one standalone offline HTML page; the live daemon from `kya start` re-renders it on every event.
+The report itself is a dashboard: a hero row on top (live **Certify** result, verdict mix, activity sparkline, showback) with tabbed sections below — **Overview** (analytics, sessions, reasons), **Certify** (the full live requirement table — every requirement grouped by domain with status, evidence, and attestation), **Activity** (the filterable event feed), **System** (wired hosts, sandboxes, ORR). Everything is one standalone offline HTML page (the live view adds a single external link: "Star on GitHub"); the live daemon from `kya start` re-renders it on every event.
+
+### Sharing a report
+
+`kya receipt --share` publishes a **redacted summary** of the current window (aggregate verdict counts, product and reason-code rollups, and the Certify status — no paths, no tool arguments, no session IDs) to shield-agent.com and prints a public URL (`/r/<id>`, expires after 7 days) anyone can open — every shared page carries the one-line install so readers can audit their own agents. Point it at a different collector with `--share-url <base>` or `KYA_SHARE_URL`.
+
+### Natural-language search
+
+The **Activity** search box understands plain English. It runs a hybrid of BM25 over tool IDs, summaries, reason codes, projects, and MCP server labels, plus optional local MiniLM semantic reranking. You can type things like `failed stripe transfers`, `files written by grok`, or `approval required production` — stopwords and stemming are handled automatically, and the same search works across the global trail.
+
+- Offline or `KYA_OFFLINE=1` keeps search purely lexical (no model download).
+- By default the live server downloads `BAAI/bge-small-en-v1.5` once into `~/.kya/models` and caches event vectors in `~/.kya/search-index.json`.
+- `KYA_SEARCH_SEMANTIC=off` disables the model while still keeping BM25.
+
+The hosted console uses the same hybrid search on the server side (Postgres full-text + optional OpenAI-compatible embeddings), so queries typed in either place behave the same way.
 
 ## Dual plane
 
@@ -161,6 +175,8 @@ Tag sessions with `KYA_HOST=ide` or `KYA_HOST=runtime`. Same policy path either 
 | `KYA_DASH_PLAN` | No | `enterprise` unlocks licensed TUI panes |
 | `KYA_DIFF_PREVIEW` | No | `0` disables clipped change previews on the receipt |
 | `KYA_RECEIPT_AUTO` | No | `0` disables auto-open receipt after wrap; `1` forces |
+| `KYA_SEARCH_SEMANTIC` | No | `off` disables MiniLM semantic reranking (BM25 still works) |
+| `KYA_SHARE_URL` | No | `kya receipt --share` collector base (default `https://shield-agent.com`) |
 
 Gate mode can also be pinned in the project's `.kya/config.json`:
 `{"gateMode": "hold"}` or `{"gateMode": "offline"}` (exact values only —
@@ -184,7 +200,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.19.0", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.21.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -224,7 +240,7 @@ Offline evaluate by default (no network, no hosted plane); an explicit config ho
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.19.0 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.21.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -235,7 +251,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.19.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.21.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 

@@ -23,6 +23,8 @@ import {
   type FeedFilters,
 } from "./render-receipt.js";
 import { trailPath } from "../trail.js";
+import { buildEventEmbeddings, EventEmbeddingCache, LocalMiniLmProvider } from "./embeddings.js";
+import type { EmbeddingProvider } from "./embeddings.js";
 
 const LOOPBACK = "127.0.0.1";
 const MAX_SSE_CLIENTS = 8;
@@ -33,6 +35,8 @@ export interface LiveReceiptOptions {
   readonly days: number;
   /** Prefer this port; 0 = ephemeral. Loopback-only bind. */
   readonly port?: number;
+  /** Test-only injection point for the embedding provider. */
+  readonly embeddingProvider?: EmbeddingProvider;
 }
 
 export interface LiveReceiptServer {
@@ -89,6 +93,19 @@ export function startLiveReceiptServer(
   let debounce: ReturnType<typeof setTimeout> | undefined;
   let closed = false;
   let onSignal: (() => void) | undefined;
+  const cache = new EventEmbeddingCache();
+  const provider = options.embeddingProvider ?? new LocalMiniLmProvider(process.env);
+  let embeddings = new Map<string, number[]>();
+
+  const refreshEmbeddings = async (): Promise<void> => {
+    const model = loadReceiptModel({ cwd, sessionId: options.sessionId, days: options.days });
+    embeddings = await buildEventEmbeddings(model.events, provider, cache);
+  };
+
+  const embedQuery = async (q: string): Promise<number[] | undefined> => {
+    if (!q.trim()) return undefined;
+    return provider.embed(q.trim());
+  };
 
   const broadcast = (): void => {
     for (const client of [...clients]) {
@@ -254,17 +271,25 @@ export function startLiveReceiptServer(
             const body = (await readJsonBody(req)) as Record<string, unknown> | undefined;
             const filters = isFeedFilters(body?.filters) ? body.filters : {};
             const requestedPage = typeof body?.page === "number" && body.page > 0 ? Math.floor(body.page) : 1;
+            const q = typeof body?.q === "string" ? body.q : "";
             const model = loadReceiptModel({
               cwd,
               sessionId: options.sessionId,
               days: options.days,
             });
+            if (q.trim() && embeddings.size === 0) {
+              await refreshEmbeddings();
+            }
+            const queryEmbedding = await embedQuery(q);
             const result = renderFeedPage(
               model.events,
               filters,
               requestedPage,
               Date.now(),
               true,
+              q,
+              embeddings,
+              queryEmbedding,
             );
             return jsonOk(res, {
               ok: true,
@@ -318,15 +343,15 @@ export function startLiveReceiptServer(
       if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
         let html: string;
         try {
+          const q = url.searchParams.get("q") ?? "";
           html = renderReceiptHtml(
             loadReceiptModel({
               cwd,
               sessionId: options.sessionId,
               days: options.days,
               live: true,
-              // Token rides the model into the script tag — never a post-hoc
-              // string replace on rendered HTML (attacker text could anchor it).
               liveToken: token,
+              searchQuery: q,
             }),
           );
         } catch {
@@ -400,6 +425,7 @@ export function startLiveReceiptServer(
         watcher = watch(dirname(path), { persistent: true }, (_event, filename) => {
           if (!filename || String(filename).endsWith("trail.jsonl")) {
             scheduleBroadcast();
+            void refreshEmbeddings();
           }
         });
         watcher.on("error", () => {
@@ -408,6 +434,9 @@ export function startLiveReceiptServer(
       } catch {
         /* still serve; live reload may be degraded */
       }
+
+      // Warm the embedding cache in the background; failures degrade to BM25.
+      void refreshEmbeddings();
 
       const waitUntilClosed = new Promise<void>((waitResolve) => {
         onSignal = (): void => {

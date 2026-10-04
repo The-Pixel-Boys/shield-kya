@@ -150,6 +150,11 @@ export function receiptCss(): string {
     text-decoration: none;
   }
   .sidebar-footer a:hover { color: var(--fg); }
+  .sidebar-footer a.star-link {
+    font-size: 0.7rem; font-weight: 500;
+    color: var(--mute); opacity: 0.85;
+  }
+  .sidebar-footer a.star-link:hover { opacity: 1; color: var(--fg); }
   .sidebar-footer a:focus-visible {
     outline: 2px solid var(--ok);
     outline-offset: 2px;
@@ -341,6 +346,30 @@ export function receiptCss(): string {
     }
   }
   .feed-head { margin-bottom: 0.9rem; }
+  .feed-search { margin-bottom: 0.75rem; }
+  .feed-search-input {
+    width: 100%; max-width: 28rem;
+    font-family: inherit; font-size: 0.84rem; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 0.45rem 0.7rem;
+    appearance: none; -webkit-appearance: none;
+  }
+  .feed-search-input::placeholder { color: var(--mute); }
+  .feed-search-input:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--ok) 55%, var(--line));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 14%, transparent);
+  }
+  .feed-search-meta {
+    margin-top: 0.35rem; font-size: 0.74rem; color: var(--mute);
+  }
+  .feed-search-note {
+    margin: -0.3rem 0 0.75rem; font-size: 0.74rem; color: var(--mute);
+  }
+  .feed-search-note code {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.72rem;
+  }
   .stats {
     display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.7rem;
   }
