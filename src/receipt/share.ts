@@ -99,7 +99,9 @@ export function buildSharePayload(model: ReceiptModel): SharePayload {
 /** Resolve the endpoint base: --share-url flag > KYA_SHARE_URL > default. */
 export function shareBaseUrl(override: string | undefined, env: NodeJS.ProcessEnv): string {
   const raw = override?.trim() || env.KYA_SHARE_URL?.trim() || SHARE_DEFAULT_BASE_URL;
-  return raw.replace(/\/+$/, "");
+  let end = raw.length;
+  while (end > 0 && raw.charCodeAt(end - 1) === 47 /* / */) end--;
+  return raw.slice(0, end);
 }
 
 export type ShareResult = { readonly ok: true; readonly url: string } | { readonly ok: false; readonly error: string };
