@@ -12,6 +12,12 @@ import {
 } from "../receipt/render-receipt.js";
 import { ensureReceiptDaemon } from "../receipt/daemon.js";
 import { receiptsDir } from "../trail.js";
+import {
+  buildSharePayload,
+  shareBaseUrl,
+  shareReceiptPayload,
+  type ShareResult,
+} from "../receipt/share.js";
 
 export const DEFAULT_RECEIPT_DAYS = 3;
 
@@ -44,13 +50,14 @@ export type ReceiptResult = StaticReceiptResult | LiveReceiptResult;
 
 export async function runReceipt(
   config: ResolvedConfig,
-  input: { sessionId?: string; days?: number; open?: boolean; outDir?: string },
+  input: { sessionId?: string; days?: number; open?: boolean; outDir?: string; searchQuery?: string },
 ): Promise<ReceiptResult> {
   const sessionId = input.sessionId?.trim();
   const days =
     input.days != null && Number.isFinite(input.days) && input.days > 0
       ? Math.floor(input.days)
       : DEFAULT_RECEIPT_DAYS;
+  const searchQuery = input.searchQuery?.trim() || undefined;
 
   // Static on-disk artifacts always use live:false (no EventSource on file://).
   const model = loadReceiptModel({
@@ -58,6 +65,7 @@ export async function runReceipt(
     sessionId,
     days,
     live: false,
+    searchQuery,
   });
 
   const dir = input.outDir?.trim() || receiptsDir(config.cwd);
@@ -101,6 +109,28 @@ export async function runReceipt(
   };
 }
 
+/**
+ * `kya receipt --share`: build the redacted share payload from the current
+ * window's receipt model and POST it to the hosted platform. Returns the
+ * public URL on success; failures are returned (not thrown) as {ok:false}.
+ */
+export async function runReceiptShare(
+  config: ResolvedConfig,
+  input: { sessionId?: string; days?: number; shareUrl?: string },
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<ShareResult> {
+  const sessionId = input.sessionId?.trim();
+  const days =
+    input.days != null && Number.isFinite(input.days) && input.days > 0
+      ? Math.floor(input.days)
+      : DEFAULT_RECEIPT_DAYS;
+  const model = loadReceiptModel({ cwd: config.cwd, sessionId, days, live: false });
+  const payload = buildSharePayload(model);
+  return shareReceiptPayload(payload, {
+    baseUrl: shareBaseUrl(input.shareUrl, env),
+  });
+}
+
 export function receiptInputFromArgs(parsed: ParsedArgs) {
   const daysRaw = flagString(parsed.flags, "days");
   const days = daysRaw ? Number.parseInt(daysRaw, 10) : undefined;
@@ -109,6 +139,7 @@ export function receiptInputFromArgs(parsed: ParsedArgs) {
     days: Number.isFinite(days) ? days : undefined,
     open: parsed.flags["open"] === true || parsed.flags["open"] === "true",
     outDir: flagString(parsed.flags, "out", "out-dir", "outDir"),
+    searchQuery: flagString(parsed.flags, "q", "query", "search"),
   };
 }
 

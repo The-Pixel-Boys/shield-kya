@@ -5,6 +5,7 @@ packages:
 # Allow esbuild native binary install (vitest/vite dependency).
 allowBuilds:
   esbuild: true
+  onnxruntime-node: true
 
 # GHSA-fx2h-pf6j-xcff / GHSA-4w7w-66w2-5vf9 / GHSA-v6wh-96g9-6wx3 (vite)
 # GHSA-67mh-4wv8-2f99 (esbuild)

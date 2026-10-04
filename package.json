@@ -1,7 +1,7 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.19.0",
-  "description": "Audit trail & traceability for AI agents — local MCP gate (Allow/Review/Deny), live receipt dashboard, trust-baseline certification.",
+  "version": "0.21.0",
+  "description": "AI agents audit trail & traceability — gate every tool call (Allow / Review / Deny), live activity dashboard, and continuous trust-baseline certification.",
   "license": "MIT",
   "type": "module",
   "mcpName": "io.github.The-Pixel-Boys/shield-kya",
@@ -75,14 +75,9 @@
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@vitest/coverage-v8": "^3.2.6",
+    "fastembed": "^3.0.0",
     "typescript": "^5.7.2",
     "vitest": "^3.2.6"
-  },
-  "pnpm": {
-    "overrides": {
-      "vite": "6.4.3",
-      "esbuild": "0.25.12"
-    }
   },
   "publishConfig": {
     "access": "public"
@@ -94,7 +89,17 @@
     "policy",
     "shield-agent",
     "cli",
-    "mcp-server"
+    "mcp-server",
+    "ai-agents",
+    "agent-observability",
+    "audit-trail",
+    "ai-act",
+    "claude-code",
+    "cursor",
+    "codex",
+    "gemini",
+    "grok",
+    "kimi"
   ],
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",

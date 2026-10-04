@@ -38,6 +38,7 @@ import {
   type GatePage,
 } from "./gate-page.js";
 import { receiptCss } from "./receipt-css.js";
+import { applyChipFilters, rankEvents } from "./search.js";
 
 export const PAGE_SIZE = 50;
 
@@ -63,6 +64,8 @@ export interface ReceiptModel {
   readonly liveToken?: string;
   /** Page number for the Activity feed (1-based). */
   readonly page: number;
+  /** Natural-language search query for the Activity feed. */
+  readonly searchQuery?: string;
   /** Local identity from .kya/config.json (inert text; never a link). */
   readonly identity?: KyaFileConfig;
   /** Sandbox state + configured KYA_SANDBOX backend. */
@@ -310,6 +313,7 @@ export function buildReceiptModel(
     mcpSeen: extras?.mcpSeen,
     live: extras?.live,
     liveToken: extras?.liveToken,
+    searchQuery: extras?.searchQuery,
     identity: extras?.identity,
     sandboxes: extras?.sandboxes,
     wiredHosts: extras?.wiredHosts,
@@ -336,6 +340,7 @@ export function buildWindowReceiptModel(
     mcpSeen: extras?.mcpSeen,
     live: extras?.live,
     liveToken: extras?.liveToken,
+    searchQuery: extras?.searchQuery,
     identity: extras?.identity,
     sandboxes: extras?.sandboxes,
     wiredHosts: extras?.wiredHosts,
@@ -354,6 +359,7 @@ export function loadReceiptModel(input: {
   readonly live?: boolean;
   readonly liveToken?: string;
   readonly page?: number;
+  readonly searchQuery?: string;
 }): ReceiptModel {
   const days = input.days > 0 ? Math.floor(input.days) : 3;
   const showback = loadShowbackCard(input.cwd);
@@ -364,6 +370,7 @@ export function loadReceiptModel(input: {
     page: input.page ?? 1,
     live: input.live,
     liveToken: input.liveToken,
+    searchQuery: input.searchQuery,
     identity: loadIdentity(input.cwd),
     sandboxes: loadSandboxes(input.cwd),
     wiredHosts: loadWiredHosts(input.cwd),
@@ -432,7 +439,7 @@ function projectMeta(project: string | undefined): string {
       <span class="project">${esc(clip(p, 40))}</span>`;
 }
 
-function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean): string {
+function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean, preserveOrder?: boolean): string {
   if (events.length === 0) {
     const hint = live
       ? "No events yet — evaluate a tool call with <code>kya wrap</code> and this page will refresh."
@@ -440,11 +447,11 @@ function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean
     return `<p class="empty">${hint}</p>`;
   }
 
-  const sorted = [...events].sort((a, b) => b.ts.localeCompare(a.ts));
+  const ordered = preserveOrder ? [...events] : [...events].sort((a, b) => b.ts.localeCompare(a.ts));
   const parts: string[] = [];
   let lastDay = "";
 
-  for (const e of sorted) {
+  for (const e of ordered) {
     const key = localDayKey(e.ts);
     if (key !== lastDay) {
       lastDay = key;
@@ -1549,44 +1556,6 @@ export interface FeedFilters {
   readonly [group: string]: readonly string[];
 }
 
-function eventMatchesFilter(e: TrailEvent, group: string, value: string): boolean {
-  switch (group) {
-    case "verdict":
-      return e.verdict.toUpperCase() === value;
-    case "never":
-      return (e.neverEvent || e.reasonCode === "NEVER_EVENT") && value === "1";
-    case "mode":
-      return e.mode === value;
-    case "plane":
-      return (e.host?.trim() || "unknown") === value;
-    case "product":
-      return (e.product ?? "other") === value;
-    case "project":
-      if (value === "") return false;
-      return (e.project?.trim() ?? "") === value;
-    case "tool":
-      return clip(e.toolId, 60) === value;
-    case "session":
-      return (e.sessionId || "unknown") === value;
-    case "server": {
-      const parsed = parseMcpToolId(e.toolId);
-      return parsed != null && mcpServerLabel(parsed.server) === value;
-    }
-    default:
-      return false;
-  }
-}
-
-function applyFeedFilters(events: readonly TrailEvent[], filters: FeedFilters): TrailEvent[] {
-  const groups = Object.entries(filters)
-    .map(([group, vals]) => [group, vals.filter((v) => v !== "")] as const)
-    .filter(([, vals]) => vals.length > 0);
-  if (groups.length === 0) return [...events];
-  return events.filter((e) =>
-    groups.every(([group, vals]) => vals.some((v) => eventMatchesFilter(e, group, v))),
-  );
-}
-
 export interface FeedPageResult {
   readonly feedHtml: string;
   readonly paginationHtml: string;
@@ -1601,17 +1570,35 @@ export function renderFeedPage(
   page: number,
   nowMs: number,
   live: boolean,
+  query?: string,
+  embeddings?: ReadonlyMap<string, number[]>,
+  queryEmbedding?: number[],
 ): FeedPageResult {
-  const sorted = [...events].sort((a, b) => b.ts.localeCompare(a.ts));
-  const filtered = applyFeedFilters(sorted, filters);
-  const total = filtered.length;
+  const q = query?.trim();
+  let ordered: TrailEvent[];
+  let total: number;
+  if (q) {
+    const ranked = rankEvents(events, {
+      query: q,
+      filters,
+      embeddings,
+      queryEmbedding,
+      facetBoost: 0.05,
+    });
+    ordered = ranked.map((r) => r.event);
+    total = ranked.length;
+  } else {
+    const sorted = [...events].sort((a, b) => b.ts.localeCompare(a.ts));
+    ordered = applyChipFilters(sorted, filters);
+    total = ordered.length;
+  }
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const p = clampPage(page, pages);
   const start = (p - 1) * PAGE_SIZE;
-  const pageEvents = filtered.slice(start, start + PAGE_SIZE);
+  const pageEvents = ordered.slice(start, start + PAGE_SIZE);
 
   return {
-    feedHtml: renderFeed(pageEvents, nowMs, live),
+    feedHtml: renderFeed(pageEvents, nowMs, live, !!q),
     paginationHtml: paginationBar(total, p, pages),
     total,
     page: p,
@@ -1657,7 +1644,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     ? clampPage(model.page ?? 1, Math.max(1, Math.ceil(events.length / PAGE_SIZE)))
     : 1;
   const initialFeed = livePaged
-    ? renderFeedPage(events, {}, currentPage, nowMs, model.live ?? false)
+    ? renderFeedPage(events, {}, currentPage, nowMs, model.live ?? false, model.searchQuery)
     : {
         feedHtml: renderFeed(events, nowMs, model.live ?? false),
         paginationHtml: `<div class="pagination-bar"><span class="mute">${events.length} event${events.length === 1 ? "" : "s"}</span></div>`,
@@ -1709,18 +1696,17 @@ export function renderReceiptHtml(model: ReceiptModel): string {
 </script>`
     : "";
 
-  // Client-side chip filters and pagination: only emitted for live reports
-  // (liveToken present). Static receipts render page 1 without interactivity.
-  // State maps are null-prototype: attacker-controlled values (project names)
-  // must never resolve via Object.prototype. The id lets tests extract just
-  // this script. KNOWN is space-delimited so `indexOf(' '+g+' ')` doubles as a
-  // prototype-safe whitelist ('constructor' etc. never match).
-  // Filter state persists in the ?f= QUERY param, not the hash: the hash is
-  // owned by the pure-CSS :target tabs (#overview/#changes/#certify/#activity/
-  // #system), so a hash-based filter would hide the Activity zone on every
-  // chip toggle and every tab click would wipe the filter. Legacy #f= hashes
-  // are still parsed on load (read-only); the next save writes the ?f= form
-  // and drops the legacy fragment.
+  // Client-side chip filters, pagination, and search: only emitted for live
+  // reports (liveToken present). Static receipts render a separate BM25-only
+  // search script below. State maps are null-prototype: attacker-controlled
+  // values (project names) must never resolve via Object.prototype. The id lets
+  // tests extract just this script. KNOWN is space-delimited so
+  // `indexOf(' '+g+' ')` doubles as a prototype-safe whitelist ('constructor'
+  // etc. never match). Filter state persists in the ?f= QUERY param, not the
+  // hash: the hash is owned by the pure-CSS :target tabs, so a hash-based
+  // filter would hide the Activity zone on every chip toggle. Legacy #f= hashes
+  // are still parsed on load (read-only); the next save writes the ?f= form and
+  // drops the legacy fragment.
   const filterScript = model.liveToken
     ? `<script id="kya-filters">
 (function(){
@@ -1728,9 +1714,12 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   if (!feed) return;
   var chg = document.getElementById('changes-list');
   var bar = document.getElementById('pagination-bar');
+  var searchInput = document.getElementById('feed-search');
+  var searchMeta = document.querySelector('.feed-search-meta');
   var KNOWN = ' verdict never mode plane product project tool session server ';
   var state = Object.create(null);
   var page = 1;
+  var q = '';
   var LIVE = !!(document.querySelectorAll && document.querySelectorAll('main[data-live-token]').length);
   var clearBtn = document.getElementById('clear-filters');
   var chips = document.querySelectorAll('[data-fgroup]');
@@ -1748,12 +1737,16 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   function parse(){
     state = Object.create(null);
     page = 1;
+    q = '';
     var raw = null;
     var s = location.search;
     if (s.indexOf('?') === 0) {
       var params = s.slice(1).split('&');
       for (var i = 0; i < params.length; i++) {
         if (raw === null && params[i].indexOf('f=') === 0) { raw = params[i].slice(2); }
+        else if (params[i].indexOf('q=') === 0) {
+          try { q = decodeURIComponent(params[i].slice(2).replace(/\\+/g, ' ')); } catch(e){ q = params[i].slice(2); }
+        }
         else if (params[i].indexOf('page=') === 0) {
           var p = parseInt(params[i].slice(5), 10);
           if (p > 0) page = p;
@@ -1788,19 +1781,18 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     if (s.indexOf('?') === 0) {
       var params = s.slice(1).split('&');
       for (var i = 0; i < params.length; i++) {
-        if (params[i] && params[i].indexOf('f=') !== 0 && params[i].indexOf('page=') !== 0) kept.push(params[i]);
+        if (params[i] && params[i].indexOf('f=') !== 0 && params[i].indexOf('q=') !== 0 && params[i].indexOf('page=') !== 0) kept.push(params[i]);
       }
     }
     if (parts.length) kept.push('f=' + parts.join(','));
+    if (q) kept.push('q=' + encodeURIComponent(q));
     if (page > 1) kept.push('page=' + page);
-    var q = kept.length ? '?' + kept.join('&') : '';
-    // The tab hash rides along untouched; a legacy #f= fragment is not a tab
-    // hash and is dropped now that the state lives in the query.
+    var qq = kept.length ? '?' + kept.join('&') : '';
     var h = location.hash.indexOf('#f=') === 0 ? '' : location.hash;
-    history.replaceState(null, '', location.pathname + q + h);
+    history.replaceState(null, '', location.pathname + qq + h);
   }
   function active(){
-    return Object.keys(state).some(function(g){ return Object.keys(state[g]).length > 0; });
+    return Object.keys(state).some(function(g){ return Object.keys(state[g]).length > 0; }) || !!q;
   }
   // AND across groups, OR within a group; an unstamped facet never matches.
   function rowVisible(row, on){
@@ -1812,7 +1804,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     return true;
   }
   function apply(){
-    var on = active();
+    var on = Object.keys(state).some(function(g){ return Object.keys(state[g]).length > 0; });
     // Guard: the script is only emitted for live reports, so the feed is
     // always server-rendered; changes entries still filter client-side.
     if (!LIVE) {
@@ -1843,7 +1835,13 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       var pressed = !!(state[chip.dataset.fgroup] && state[chip.dataset.fgroup][chip.dataset.fvalue]);
       chip.setAttribute('aria-pressed', pressed ? 'true' : 'false');
     });
-    if (clearBtn) clearBtn.hidden = !on;
+    if (clearBtn) clearBtn.hidden = !active();
+  }
+  function updateMeta(total){
+    if (!searchMeta) return;
+    if (!q) { searchMeta.style.display = 'none'; return; }
+    searchMeta.textContent = (total || 0) + ' matches · ranked by relevance';
+    searchMeta.style.display = '';
   }
   function feedUpdate(){
     var T = readToken();
@@ -1851,12 +1849,13 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     fetch('/feed?t=' + encodeURIComponent(T), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filters: state, page: page })
+      body: JSON.stringify({ filters: state, page: page, q: q })
     })
     .then(function(r){ return r.json(); })
     .then(function(data){
       if (feed && data.feedHtml) feed.innerHTML = data.feedHtml;
       if (bar && data.paginationHtml) bar.innerHTML = data.paginationHtml;
+      updateMeta(data.total);
     })
     .catch(function(err){ console.error('KYA feed update failed', err); });
   }
@@ -1889,9 +1888,139 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       feedUpdate();
     });
   }
-  if (clearBtn) clearBtn.addEventListener('click', function(){ state = Object.create(null); page = 1; save(); apply(); if (LIVE) feedUpdate(); });
+  if (searchInput) {
+    var debounce = 0;
+    searchInput.addEventListener('input', function(){
+      q = (searchInput.value || '').trim();
+      page = 1;
+      save(); apply();
+      clearTimeout(debounce);
+      if (LIVE) debounce = setTimeout(feedUpdate, 120);
+    });
+  }
+  if (clearBtn) clearBtn.addEventListener('click', function(){ state = Object.create(null); page = 1; q = ''; if (searchInput) searchInput.value = ''; save(); apply(); if (LIVE) feedUpdate(); });
   parse(); apply();
+  if (searchInput) searchInput.value = q;
   if (LIVE && (active() || page !== 1)) feedUpdate();
+})();
+</script>`
+    : "";
+
+  // Static receipts: a small client-side BM25-only scorer that filters the
+  // rendered feed rows. No network round-trips and no semantic embeddings.
+  const staticSearchScript = !model.liveToken
+    ? `<script id="kya-static-search">
+(function(){
+  var feed = document.getElementById('feed');
+  var input = document.getElementById('feed-search');
+  var meta = document.querySelector('.feed-search-meta');
+  var clearBtn = document.getElementById('clear-filters');
+  if (!feed || !input) return;
+  var STOP = Object.create(null);
+  "a an the and or but is are was were be been being to of in on at by for with as this that it its from up about into through during before after above below between among within without against over under again further then once here there when where why how all any both each few more most other some such only own same so than too very can will just should now did does do has have had having get got gets make made makes use used uses using".split(" ").forEach(function(w){ STOP[w] = 1; });
+  function stem(t){
+    if (t.length <= 3) return t;
+    if (t.slice(-3) === 'ing') return t.slice(0,-3) || t;
+    if (t.slice(-2) === 'ed') return t.slice(0,-2) || t;
+    if (t.slice(-1) === 's' && t.slice(-2) !== 'ss') return t.slice(0,-1) || t;
+    return t;
+  }
+  function tokenize(text){
+    var out = [];
+    var parts = String(text).toLowerCase().split(/[^a-z0-9]+/);
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i];
+      if (!p) continue;
+      var split = p.replace(/([A-Z])/g, ' $1').replace(/[_\\-.]/g, ' ').toLowerCase().split(/[^a-z0-9]+/);
+      for (var j = 0; j < split.length; j++) {
+        var s = stem(split[j]);
+        if (s && !STOP[s]) out.push(s);
+      }
+    }
+    return out;
+  }
+  var rows = Array.prototype.slice.call(feed.querySelectorAll('.ev'));
+  var docs = rows.map(function(row){
+    var text = row.textContent || '';
+    var tokens = tokenize(text);
+    var freq = Object.create(null);
+    for (var i = 0; i < tokens.length; i++) freq[tokens[i]] = (freq[tokens[i]] || 0) + 1;
+    return { row: row, tokens: tokens, freq: freq, text: text };
+  });
+  var N = docs.length;
+  var avgLen = N ? docs.reduce(function(a,d){ return a + d.tokens.length; }, 0) / N : 0;
+  var q = '';
+  function scoreDoc(doc, qTokens){
+    if (!qTokens.length) return 1;
+    var score = 0, k1 = 1.5, b = 0.75;
+    for (var i = 0; i < qTokens.length; i++) {
+      var t = qTokens[i];
+      var df = 0;
+      for (var j = 0; j < docs.length; j++) if (docs[j].freq[t]) df++;
+      if (!df) continue;
+      var tf = doc.freq[t] || 0;
+      if (!tf) continue;
+      var idf = Math.log(1 + (N - df + 0.5) / (df + 0.5));
+      var denom = tf + k1 * (1 - b + b * doc.tokens.length / Math.max(avgLen, 1));
+      score += idf * (tf * (k1 + 1) / denom);
+    }
+    return score;
+  }
+  function apply(){
+    var qTokens = tokenize(q);
+    var visible = 0;
+    for (var i = 0; i < docs.length; i++) {
+      var s = scoreDoc(docs[i], qTokens);
+      var hide = q && s <= 0;
+      docs[i].row.classList.toggle('filtered-out', hide);
+      if (!hide) visible++;
+    }
+    var day = null, dayHas = false;
+    function flush(){ if (day) day.classList.toggle('filtered-out', q && !dayHas); }
+    for (var k = 0; k < feed.children.length; k++) {
+      var el = feed.children[k];
+      if (el.classList.contains('day')) { flush(); day = el; dayHas = false; }
+      else if (el.classList.contains('ev') && !el.classList.contains('filtered-out')) dayHas = true;
+    }
+    flush();
+    if (meta) {
+      if (q) { meta.textContent = visible + ' matches · filtered by relevance'; meta.style.display = ''; }
+      else meta.style.display = 'none';
+    }
+    if (clearBtn) clearBtn.hidden = !q;
+  }
+  function save(){
+    var kept = [];
+    var s = location.search;
+    if (s.indexOf('?') === 0) {
+      var params = s.slice(1).split('&');
+      for (var i = 0; i < params.length; i++) {
+        if (params[i] && params[i].indexOf('q=') !== 0) kept.push(params[i]);
+      }
+    }
+    if (q) kept.push('q=' + encodeURIComponent(q));
+    var qq = kept.length ? '?' + kept.join('&') : '';
+    var h = location.hash;
+    history.replaceState(null, '', location.pathname + qq + h);
+  }
+  input.addEventListener('input', function(){ q = (input.value || '').trim(); apply(); save(); });
+  if (clearBtn) clearBtn.addEventListener('click', function(){ q = ''; input.value = ''; apply(); save(); });
+  var s = location.search;
+  var found = false;
+  if (s.indexOf('?') === 0) {
+    var params = s.slice(1).split('&');
+    for (var i = 0; i < params.length; i++) {
+      if (params[i].indexOf('q=') === 0) {
+        try { q = decodeURIComponent(params[i].slice(2).replace(/\\+/g, ' ')); } catch(e){ q = params[i].slice(2); }
+        found = true;
+      }
+    }
+  }
+  // No ?q= in the URL: honor the server-prefilled input (static artifacts
+  // generated with kya receipt --q) so they open pre-filtered.
+  if (!found) q = (input.value || '').trim();
+  input.value = q;
+  apply();
 })();
 </script>`
     : "";
@@ -2097,6 +2226,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">Theme</button>
     <!-- Stop-report action is wired by the live-server POST handler. -->
     <a href="#" id="stop-report">Stop report</a>
+    ${model.liveToken ? '<a href="https://github.com/The-Pixel-Boys/shield-agent" class="star-link" target="_blank" rel="noopener noreferrer">Star on GitHub ↗</a>' : ""}
   </footer>
 </aside>
 ${model.liveToken ? '<main data-live-token="1">' : '<main>'}
@@ -2121,6 +2251,11 @@ ${model.liveToken ? '<main data-live-token="1">' : '<main>'}
     ${overviewBody}
   </section>
   <section class="zone" id="activity" aria-labelledby="tab-activity">
+    <div class="feed-search">
+      <input id="feed-search" class="feed-search-input" type="search" placeholder="Search activity in plain language…" value="${esc(model.searchQuery ?? "")}" autocomplete="off" />
+      ${model.searchQuery ? `<div class="feed-search-meta">${initialFeed.total} matches · ${livePaged ? "ranked by relevance" : "filtered by relevance"}</div>` : ""}
+    </div>
+    ${!model.liveToken && model.searchQuery ? '<p class="feed-search-note">Semantic ranking requires the live report server (<code>kya start</code>).</p>' : ""}
     <div class="feed-head">
       <div class="stats" aria-label="Counts">
         <button type="button" class="stat ok" data-fgroup="verdict" data-fvalue="ALLOW" aria-pressed="false" title="Filter: Allow">Allow<b>${c.allow}</b></button>
@@ -2155,6 +2290,7 @@ ${changesPanel(changes, nowMs)}
   </section>
 </main>
 ${filterScript}
+${staticSearchScript}
 ${themeScript}
 ${gateScript}
 ${liveScript}
