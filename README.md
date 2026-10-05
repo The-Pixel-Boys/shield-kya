@@ -14,6 +14,14 @@
 npm i -g @shield-agent/kya@latest && kya start
 ```
 
+Or install with a package manager:
+
+```bash
+brew install The-Pixel-Boys/tap/shield-kya
+scoop install shield-kya
+winget install The-Pixel-Boys.ShieldKYA
+```
+
 Requires **Node.js 24+**. Restart Cursor / Claude Code / Codex once so MCP loads. Hosted desk: [shield-agent.com](https://shield-agent.com/install).
 
 

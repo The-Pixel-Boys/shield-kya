@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+
+PackageIdentifier: The-Pixel-Boys.ShieldKYA
+PackageVersion: 0.19.0
+PackageLocale: en-US
+Publisher: The Pixel Boys
+PublisherUrl: https://shield-agent.com
+PublisherSupportUrl: https://github.com/The-Pixel-Boys/shield-kya/issues
+PackageName: Shield KYA
+PackageUrl: https://shield-agent.com/install
+License: MIT
+LicenseUrl: https://github.com/The-Pixel-Boys/shield-kya/blob/main/LICENSE
+Copyright: Copyright (c) The Pixel Boys
+ShortDescription: Audit trail and traceability for AI agents
+Description: |
+  Shield KYA is a local MCP gate that gives every tool call your coding agents
+  make an Allow, Review, or Deny verdict, records them on a live local dashboard,
+  and certifies them against the Agent Trust Baseline.
+Moniker: shield-kya
+Tags:
+  - kya
+  - know-your-agent
+  - mcp
+  - policy
+  - shield-agent
+  - cli
+  - mcp-server
+ReleaseNotesUrl: https://github.com/The-Pixel-Boys/shield-kya/releases/tag/v0.19.0
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
