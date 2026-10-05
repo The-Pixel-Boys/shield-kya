@@ -1,0 +1,30 @@
+# Dependencies and build outputs
+node_modules/
+dist/
+coverage/
+*.log
+
+# Version control
+.git/
+.gitignore
+
+# Development / IDE
+.idea/
+.vscode/
+.cursor/
+.claude/
+.continue/
+.cursor-plugin/
+
+# CI / packaging artifacts
+.github/
+*.tgz
+/tmp/
+
+# Local runtime state
+.kya/
+
+# Documentation and examples (not needed at build time)
+docs/
+examples/
+*.md

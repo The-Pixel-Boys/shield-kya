@@ -43,6 +43,34 @@ npm i -g @shield-agent/kya@latest && kya start
 
 Run it in your project directory. (From a clone of this repo, `./scripts/install-local.sh` replaces the npm install.)
 
+## Docker
+
+Multi-arch images (`linux/amd64`, `linux/arm64`) are published to **GHCR** and **Docker Hub**. The image bundles Node.js 24, the `@shield-agent/kya` CLI, and the pinned gateway binary, so it works offline.
+
+```bash
+# GHCR
+docker run --rm ghcr.io/the-pixel-boys/shield-kya --help
+
+# Docker Hub
+docker run --rm shieldagent/shield-kya --help
+
+# Offline evaluate
+docker run --rm ghcr.io/the-pixel-boys/shield-kya eval-tool --offline \
+  --tool-id org.sample.never.event --irreversible
+
+# MCP stdio server (use --interactive only when the host needs a TTY)
+docker run --rm -i ghcr.io/the-pixel-boys/shield-kya serve-mcp --stdio
+```
+
+Persist KYA state across runs by mounting a host directory over `/root/.kya`:
+
+```bash
+docker run --rm -v "$HOME/.kya:/root/.kya" ghcr.io/the-pixel-boys/shield-kya \
+  eval-tool --offline --tool-id org.sample.never.event --irreversible
+```
+
+The gateway binary is pre-installed at `/root/.kya/bin/kya-gate`; no download happens at runtime.
+
 That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/mcp.json` → `kya serve-mcp --stdio`), also **wires user-level configs for every installed host it detects** (`~/.claude.json`, `~/.kimi-code/`, `~/.grok/`, `~/.cursor/`, …), and **opens** the live activity report. The report runs in the background — you get your terminal back; `kya stop` stops it, `kya receipt --open` reopens it. Cursor, Kiro, Qwen, Amp, Droid, Cline, and Grok pick the server up live with no restart (Kimi: just a new session); Claude Code, Codex, OpenCode, Gemini, Copilot CLI, and Kilo CLI load it on next launch — `claude --resume` keeps your conversation.
 
 ![KYA report — live dashboard: Certify trust baseline, verdicts, analytics](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-overview.png)
