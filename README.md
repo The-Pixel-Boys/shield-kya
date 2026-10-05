@@ -43,6 +43,34 @@ npm i -g @shield-agent/kya@latest && kya start
 
 Run it in your project directory. (From a clone of this repo, `./scripts/install-local.sh` replaces the npm install.)
 
+## Docker
+
+Multi-arch images (`linux/amd64`, `linux/arm64`) are published to **GHCR** and **Docker Hub**. The image bundles Node.js 24, the `@shield-agent/kya` CLI, and the pinned gateway binary, so it works offline.
+
+```bash
+# GHCR
+docker run --rm ghcr.io/the-pixel-boys/shield-kya --help
+
+# Docker Hub
+docker run --rm shieldagent/shield-kya --help
+
+# Offline evaluate
+docker run --rm ghcr.io/the-pixel-boys/shield-kya eval-tool --offline \
+  --tool-id org.sample.never.event --irreversible
+
+# MCP stdio server (use --interactive only when the host needs a TTY)
+docker run --rm -i ghcr.io/the-pixel-boys/shield-kya serve-mcp --stdio
+```
+
+Persist KYA state across runs by mounting a host directory over `/root/.kya`:
+
+```bash
+docker run --rm -v "$HOME/.kya:/root/.kya" ghcr.io/the-pixel-boys/shield-kya \
+  eval-tool --offline --tool-id org.sample.never.event --irreversible
+```
+
+The gateway binary is pre-installed at `/root/.kya/bin/kya-gate`; no download happens at runtime.
+
 That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/mcp.json` → `kya serve-mcp --stdio`), also **wires user-level configs for every installed host it detects** (`~/.claude.json`, `~/.kimi-code/`, `~/.grok/`, `~/.cursor/`, …), and **opens** the live activity report. The report runs in the background — you get your terminal back; `kya stop` stops it, `kya receipt --open` reopens it. Cursor, Kiro, Qwen, Amp, Droid, Cline, and Grok pick the server up live with no restart (Kimi: just a new session); Claude Code, Codex, OpenCode, Gemini, Copilot CLI, and Kilo CLI load it on next launch — `claude --resume` keeps your conversation.
 
 ![KYA report — live dashboard: Certify trust baseline, verdicts, analytics](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-overview.png)
@@ -330,6 +358,68 @@ pnpm install
 pnpm test
 pnpm build
 ```
+
+## CI/CD integrations
+
+KYA ships ready-to-use wrappers for the main CI platforms. Each wrapper installs `@shield-agent/kya` at the version you choose and runs the command you pass.
+
+### GitHub Actions
+
+See [kya-action](https://github.com/The-Pixel-Boys/kya-action) on GitHub Marketplace.
+
+### GitLab CI/CD Catalog
+
+Include the component from `packaging/gitlab-ci/template.yml`:
+
+```yaml
+include:
+  - local: packaging/gitlab-ci/template.yml
+    inputs:
+      command: "kya certify --window 30 --fail-on gap --json"
+      artifacts_path: ".kya/certify"
+```
+
+For a published component use `component: gitlab.com/the-pixel-boys/shield-kya/packaging/gitlab-ci/kya@main`. Full docs: [`packaging/gitlab-ci/README.md`](packaging/gitlab-ci/README.md).
+
+### CircleCI orb
+
+Use the orb in `packaging/circleci-orb/orb.yml`:
+
+```yaml
+version: 2.1
+
+orbs:
+  kya: the-pixel-boys/kya@1.0.0
+
+workflows:
+  kya-check:
+    jobs:
+      - kya/certify
+```
+
+Full docs: [`packaging/circleci-orb/README.md`](packaging/circleci-orb/README.md).
+
+### Bitbucket Pipelines
+
+Use the pipe in `packaging/bitbucket-pipe/`:
+
+```yaml
+script:
+  - pipe: docker://shieldagent/kya-pipe:latest
+    variables:
+      KYA_COMMAND: "kya certify --window 30 --fail-on gap --json"
+      KYA_ARTIFACTS: ".kya/certify"
+```
+
+Full docs: [`packaging/bitbucket-pipe/README.md`](packaging/bitbucket-pipe/README.md).
+
+### Common CI commands
+
+- `kya certify --window 30 --fail-on gap --json`
+- `kya orr run --path . --out ./orr-report --skip-optional-producers`
+- `kya eval-tool --offline --tool-id org.sample.data.write --irreversible`
+
+`eval-tool` is the CLI name for policy evaluation. Replace `--tool-id` and arguments with the values for your agent.
 
 ## Docs
 

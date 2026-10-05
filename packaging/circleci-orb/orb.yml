@@ -1,0 +1,114 @@
+version: 2.1
+
+description: >
+  Run KYA (Know Your Agent) trust-baseline checks in CircleCI pipelines.
+  This orb installs the @shield-agent/kya CLI and exposes commands and jobs
+  for kya certify, kya orr run, kya eval-tool, and any other kya subcommand.
+
+display:
+  home_url: "https://shield-agent.com/install"
+  source_url: "https://github.com/The-Pixel-Boys/shield-kya"
+
+commands:
+  install:
+    description: Install the @shield-agent/kya CLI globally.
+    parameters:
+      version:
+        type: string
+        default: "latest"
+    steps:
+      - run:
+          name: Install KYA
+          command: npm i -g "@shield-agent/kya@<< parameters.version >>"
+
+  run:
+    description: Run an arbitrary kya command.
+    parameters:
+      command:
+        type: string
+      artifacts:
+        type: string
+        default: ".kya/certify"
+      artifacts_destination:
+        type: string
+        default: "kya-report"
+    steps:
+      - run:
+          name: KYA run
+          command: << parameters.command >>
+      - store_artifacts:
+          path: << parameters.artifacts >>
+          destination: << parameters.artifacts_destination >>
+
+jobs:
+  certify:
+    description: Run kya certify and store the report artifacts.
+    parameters:
+      version:
+        type: string
+        default: "latest"
+      fail_on:
+        type: enum
+        enum: ["gap", "never"]
+        default: "gap"
+      window_days:
+        type: integer
+        default: 30
+      artifacts:
+        type: string
+        default: ".kya/certify"
+      artifacts_destination:
+        type: string
+        default: "kya-certify"
+    executor: node
+    steps:
+      - checkout
+      - install:
+          version: << parameters.version >>
+      - run:
+          name: KYA certify
+          command: kya certify --window << parameters.window_days >> --fail-on << parameters.fail_on >> --json
+      - store_artifacts:
+          path: << parameters.artifacts >>
+          destination: << parameters.artifacts_destination >>
+
+  orr:
+    description: Run kya orr run and store the report artifacts.
+    parameters:
+      version:
+        type: string
+        default: "latest"
+      path:
+        type: string
+        default: "."
+      out:
+        type: string
+        default: "./orr-report"
+      skip_optional_producers:
+        type: boolean
+        default: true
+      artifacts_destination:
+        type: string
+        default: "kya-orr"
+    executor: node
+    steps:
+      - checkout
+      - install:
+          version: << parameters.version >>
+      - run:
+          name: KYA ORR run
+          command: |
+            if [ "<< parameters.skip_optional_producers >>" = "true" ]; then
+              kya orr run --path "<< parameters.path >>" --out "<< parameters.out >>" --skip-optional-producers
+            else
+              kya orr run --path "<< parameters.path >>" --out "<< parameters.out >>"
+            fi
+      - store_artifacts:
+          path: << parameters.out >>
+          destination: << parameters.artifacts_destination >>
+
+executors:
+  node:
+    description: Node.js 24 executor for KYA.
+    docker:
+      - image: cimg/node:24.0

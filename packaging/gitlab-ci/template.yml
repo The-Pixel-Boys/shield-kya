@@ -1,0 +1,32 @@
+spec:
+  inputs:
+    stage:
+      default: test
+    kya_version:
+      default: latest
+    command:
+      default: "kya certify --window 30 --fail-on gap --json"
+    artifacts_path:
+      default: ".kya/certify"
+    artifacts_expiry:
+      default: "30 days"
+
+.kya-install:
+  image: node:24
+  stage: $[[ inputs.stage ]]
+  variables:
+    KYA_VERSION: $[[ inputs.kya_version ]]
+  before_script:
+    - npm i -g "@shield-agent/kya@${KYA_VERSION}"
+
+kya:
+  extends: .kya-install
+  variables:
+    KYA_COMMAND: $[[ inputs.command ]]
+  script:
+    - ${KYA_COMMAND}
+  artifacts:
+    when: always
+    paths:
+      - $[[ inputs.artifacts_path ]]
+    expire_in: $[[ inputs.artifacts_expiry ]]
