@@ -244,7 +244,14 @@ const run = governed({ toolId: "write_file", server: "filesystem", fn: myWrite }
 await run({ path: "out.txt", content: "hi" }); // throws KyaDeniedError on DENY
 ```
 
-Offline evaluate by default (no network, no hosted plane); an explicit config honors the live plane. `governA2aSend` gates in-process agent-to-agent sends. Python frameworks (LangGraph, CrewAI, Pydantic AI, ADK, AutoGen, smolagents) use the `shield-kya` shim (`sdks/kya-python/`), which delegates to the local kya CLI. Support matrix and recipes: `docs/sdk-integrations.md`; runnable scripts: `examples/sdk/`.
+Offline evaluate by default (no network, no hosted plane); an explicit config honors the live plane. `governA2aSend` gates in-process agent-to-agent sends.
+
+Python frameworks use the `shield-kya` shim (`sdks/kya-python/`), which delegates to the local kya CLI. Drop-in framework packages now exist:
+
+- LangChain / LangGraph: `pip install kya-langchain[langchain]` (`sdks/python-langchain/`)
+- CrewAI: `pip install kya-crewai[crewai]` (`sdks/python-crewai/`)
+
+Support matrix and recipes: `docs/sdk-integrations.md`; runnable scripts: `examples/sdk/`.
 
 ## Claude connector
 
