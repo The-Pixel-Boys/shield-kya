@@ -11,7 +11,7 @@ when:
     branch: main
 
 steps:
-  test:
+  - name: test
     image: bash
     commands:
       - pnpm install
