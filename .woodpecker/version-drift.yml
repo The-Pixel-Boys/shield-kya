@@ -12,7 +12,7 @@ when:
     cron: version-drift
 
 steps:
-  drift:
+  - name: drift
     image: bash
     commands:
       - |

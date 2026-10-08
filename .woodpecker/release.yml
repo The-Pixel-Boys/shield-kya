@@ -13,7 +13,7 @@ when:
   ref: refs/tags/v*
 
 steps:
-  publish:
+  - name: publish
     image: bash
     environment:
       NPM_TOKEN:
