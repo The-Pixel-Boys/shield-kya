@@ -44,7 +44,7 @@ steps:
       # Publish to npm (or skip)
       - |
         set -euo pipefail
-        if [ -z "${NPM_TOKEN:-}" ]; then
+        if [ -z "$NPM_TOKEN" ]; then
           echo "NPM_TOKEN is not set on The-Pixel-Boys/shield-kya."
           echo "Publish @shield-agent/kya from monorepo tag kya-v* on The-Pixel-Boys/shield-agent."
           echo "Skipping npm publish so this check stays green."
