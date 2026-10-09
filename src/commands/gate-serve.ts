@@ -1,7 +1,7 @@
 /**
  * Hidden supervisor: runs the OTLP receiver and the gateway binary as its
  * child in the foreground, publishing `<global .kya>/gate-server.json` once
- * up. Spawned detached by `kya gate run` — never invoked by users directly.
+ * up. Spawned detached by `kya gate run` - never invoked by users directly.
  * SIGTERM/SIGINT (or a dead binary child) shuts both down.
  */
 import { randomUUID } from "node:crypto";
@@ -57,7 +57,7 @@ export async function startGateSupervisor(input: {
     });
   } catch (err) {
     throw new UsageError(
-      `gate OTLP receiver could not bind 127.0.0.1:${otlpPort} — ${err instanceof Error ? err.message : String(err)}`,
+      `gate OTLP receiver could not bind 127.0.0.1:${otlpPort} - ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 
@@ -100,7 +100,7 @@ export async function startGateSupervisor(input: {
         force,
       });
     } catch {
-      /* sync is best-effort — never crash the supervisor */
+      /* sync is best-effort - never crash the supervisor */
     }
   }
 

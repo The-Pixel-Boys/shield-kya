@@ -1,9 +1,9 @@
 /**
  * Daemon version handshake: /healthz carries the package version, and
  * ensureReceiptDaemon refuses to reuse a daemon reporting a different (or
- * no) version — it stops the stale one and respawns. Also covers
+ * no) version - it stops the stale one and respawns. Also covers
  * `kya stop --all` sweeping orphaned receipt daemons beyond the cwd state
- * file. Daemon tests spawn dist/cli.js — run `pnpm build` first.
+ * file. Daemon tests spawn dist/cli.js - run `pnpm build` first.
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -123,7 +123,7 @@ describe("/healthz version payload", () => {
   });
 });
 
-describe("ensureReceiptDaemon — stale version is replaced, not reused", () => {
+describe("ensureReceiptDaemon - stale version is replaced, not reused", () => {
   it("stops a pre-0.4.1 daemon (no version in /healthz) and spawns a fresh one", async () => {
     const old = await startFakeOldDaemon();
     const handle = await ensureReceiptDaemon(config, { days: 3 });

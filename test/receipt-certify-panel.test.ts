@@ -118,7 +118,7 @@ describe("loadCertifyCard", () => {
     expect(sec01?.title).toBe("Gate enforces, not observe-only");
   });
 
-  it("NEVER throws — unreadable project trail state yields undefined", () => {
+  it("NEVER throws - unreadable project trail state yields undefined", () => {
     const cwd = tmp();
     const home = tmp(); // global trail absent
     mkdirSync(join(cwd, ".kya"), { recursive: true });
@@ -140,7 +140,7 @@ describe("loadCertifyCard", () => {
     expect(c).toBeDefined();
     if (!c) return;
     expect(c.windowDays).toBe(30);
-    // Counts cover every catalog requirement (30) — never a partial rollup
+    // Counts cover every catalog requirement (30) - never a partial rollup
     expect(c.pass + c.gap + c.insufficientEvidence + c.attested).toBe(30);
   });
 });
@@ -203,7 +203,7 @@ const SEC01_GAP_CARD: CertifyCard = {
       id: "SEC-01",
       title: "Gate enforces, not observe-only",
       severity: "high",
-      evidence: 'gate mode is observe — set KYA_HOLD=1 / KYA_OFFLINE=1 or "gateMode" in .kya/config.json',
+      evidence: 'gate mode is observe - set KYA_HOLD=1 / KYA_OFFLINE=1 or "gateMode" in .kya/config.json',
     },
   ],
 };
@@ -212,7 +212,7 @@ describe("renderReceiptHtml certify panel", () => {
   it("renders a gap card: aria-label, amber pill, counts, top gaps, hint", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3, { certify: GAP_CARD }));
     expect(html).toContain('aria-label="Certify"');
-    expect(html).toContain("Certify — Agent Trust Baseline");
+    expect(html).toContain("Certify - Agent Trust Baseline");
     expect(html).toContain('<span class="pill orr-amber">gap</span>');
     expect(html).toContain('<span class="kpi-num warn">3</span><span class="kpi-lab">Gap</span>');
     expect(html).toContain('<span class="kpi-num ok">20</span><span class="kpi-lab">Pass</span>');
@@ -220,8 +220,11 @@ describe("renderReceiptHtml certify panel", () => {
     expect(html).toContain("DP-01");
     expect(html).toContain("window 30d, 42 trail events");
     expect(html).toContain(
-      "the Certify tab has the full live requirement table · kya certify for the gap report + signed bundle",
+      "the Certify tab has the complete gap report · <code>kya certify</code> writes the signed evidence bundle",
     );
+    expect(html).toContain('<div class="cert-cta">');
+    expect(html).toContain('Open full requirement table');
+    expect(html).toContain('kya certify --open');
   });
 
   it("renders a pass card with the green pill", () => {
@@ -269,10 +272,10 @@ describe("renderReceiptMarkdown certify section", () => {
     const md = renderReceiptMarkdown(
       buildWindowReceiptModel([], 3, { certify: SEC01_GAP_CARD }),
     );
-    expect(md).toContain("- `SEC-01` — Gate enforces, not observe-only (high)");
+    expect(md).toContain("- `SEC-01` - Gate enforces, not observe-only (high)");
     const mdGap = renderReceiptMarkdown(buildWindowReceiptModel([], 3, { certify: GAP_CARD }));
-    expect(mdGap).toContain("- `SEC-04` — ORR security posture is not red (critical)");
-    expect(mdGap).toContain("- `DP-01` — Agent tool calls are intercepted and recorded (high)");
+    expect(mdGap).toContain("- `SEC-04` - ORR security posture is not red (critical)");
+    expect(mdGap).toContain("- `DP-01` - Agent tool calls are intercepted and recorded (high)");
   });
 
   it("puts ## Certify before ## Analytics and ## Feed (dashboard hierarchy)", () => {

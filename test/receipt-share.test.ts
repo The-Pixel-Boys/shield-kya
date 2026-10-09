@@ -51,7 +51,7 @@ function richModel(): ReceiptModel {
 }
 
 describe("buildSharePayload", () => {
-  it("carries aggregates and labels only — no sessions, paths, tools, or identity", () => {
+  it("carries aggregates and labels only - no sessions, paths, tools, or identity", () => {
     const payload = buildSharePayload(richModel());
     expect(payload.version).toBe(1);
     expect(payload.title).toBe("Agent activity");
@@ -165,7 +165,7 @@ describe("shareReceiptPayload", () => {
       ok: false,
       status: 429,
       retryAfterSeconds: undefined,
-      error: "share failed: rate limited — retry later",
+      error: "share failed: rate limited - retry later",
     });
   });
 
@@ -178,7 +178,7 @@ describe("shareReceiptPayload", () => {
       ok: false,
       status: 429,
       retryAfterSeconds: 42,
-      error: "share failed: rate limited — retry in ~42s",
+      error: "share failed: rate limited - retry in ~42s",
     });
   });
 
@@ -268,7 +268,7 @@ describe("shareReceiptWithRetry", () => {
     const sleep = vi.fn(async (_ms: number) => {});
     const result = await shareReceiptWithRetry(payload, { baseUrl: "https://api.example", fetchImpl, sleep });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toBe("share failed: rate limited — retry later");
+    if (!result.ok) expect(result.error).toBe("share failed: rate limited - retry later");
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(sleep).not.toHaveBeenCalled();
   });
@@ -377,13 +377,13 @@ describe("kya receipt --share", () => {
     expect(receiptInputFromArgs(parseArgs(["receipt", "--share", "--share-retries", "abc"])).shareRetries).toBe(0);
   });
 
-  it("429: single attempt by default, 'rate limited — retry later' message", async () => {
+  it("429: single attempt by default, 'rate limited - retry later' message", async () => {
     const fetchMock = vi.fn(async () => new Response("slow down", { status: 429 }));
     vi.stubGlobal("fetch", fetchMock);
     const { io, errors } = captureIo();
     const code = await runCli(["receipt", "--share"], io, {}, cwd);
     expect(code).toBe(1);
-    expect(errors.join("\n")).toContain("share failed: rate limited — retry later");
+    expect(errors.join("\n")).toContain("share failed: rate limited - retry later");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

@@ -17,6 +17,7 @@ import { appendTrail, defaultSessionId } from "../trail.js";
 import { assertNoSecrets } from "../dash/render.js";
 import { deriveDiffPreview } from "../diff-preview.js";
 import { deriveTargetPath, deriveTrailSummary } from "../trail-summary.js";
+import { maybeSpawnNotifyFlush } from "../notify/dispatch.js";
 
 export interface WrapResult {
   readonly eval: EvalToolResult;
@@ -58,7 +59,7 @@ function recordTrail(
       diffPreview = "[redacted]";
     }
   }
-  appendTrail(config.cwd, {
+  const trailEvent = {
     ts: new Date().toISOString(),
     sessionId: defaultSessionId(),
     host: config.host,
@@ -71,7 +72,11 @@ function recordTrail(
     ...(summary ? { summary } : {}),
     ...(diffPreview ? { diffPreview } : {}),
     ...(targetPath ? { targetPath } : {}),
-  });
+  };
+  appendTrail(config.cwd, trailEvent);
+  // Webhooks + OTLP export ride a detached helper; wrap never waits on the
+  // network. No-op unless a sink is configured.
+  maybeSpawnNotifyFlush({ env: process.env, cwd: config.cwd, event: trailEvent });
 }
 
 export async function runWrap(
@@ -96,7 +101,7 @@ export async function runWrap(
     return {
       eval: evalResult,
       sideEffect: "blocked",
-      next: "denied — do not execute; wrap never retries around the PEP",
+      next: "denied - do not execute; wrap never retries around the PEP",
     };
   }
 
@@ -107,8 +112,8 @@ export async function runWrap(
       sideEffect: "blocked",
       next:
         verdict === "ALLOW"
-          ? "evaluate ALLOW — wrap still does not execute the side effect"
-          : "unknown verdict — treat as blocked",
+          ? "evaluate ALLOW - wrap still does not execute the side effect"
+          : "unknown verdict - treat as blocked",
     };
   }
 
@@ -120,7 +125,7 @@ export async function runWrap(
       sideEffect: "blocked",
       observed: true,
       next:
-        "observed REQUIRE_APPROVE — recorded on trail, no Hold ticket (host still owns OK?). Use --hold or KYA_HOLD=1 for org Hold path",
+        "observed REQUIRE_APPROVE - recorded on trail, no Hold ticket (host still owns OK?). Use --hold or KYA_HOLD=1 for org Hold path",
     };
   }
 
@@ -168,7 +173,7 @@ export async function runWrap(
     sideEffect: "blocked",
     approval,
     workItemId,
-    next: `pending ${approval.id} — kya approve --id ${approval.id} (human). wrap does not execute`,
+    next: `pending ${approval.id} - kya approve --id ${approval.id} (human). wrap does not execute`,
   };
 }
 

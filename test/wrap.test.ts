@@ -259,7 +259,7 @@ describe("gate honors gateMode from .kya/config.json (I-1: certify and gate can 
     return cwd;
   }
 
-  it('config {"gateMode":"hold"} makes wrap open a Hold ticket — no env, no flags', async () => {
+  it('config {"gateMode":"hold"} makes wrap open a Hold ticket - no env, no flags', async () => {
     const cwd = tmpWithConfig({ gateMode: "hold" });
     const config = resolveConfig({
       cwd,

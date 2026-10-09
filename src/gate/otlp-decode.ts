@@ -1,8 +1,8 @@
 /**
- * Minimal OTLP wire decode for ExportTraceServiceRequest — protobuf (OTLP/HTTP
+ * Minimal OTLP wire decode for ExportTraceServiceRequest - protobuf (OTLP/HTTP
  * default) and OTLP/JSON. Only the fields the gate consumes are read (span
  * name, string/int/bool attributes, status); every other field is skipped by
- * wire type. Tool arguments are never extracted — the whitelist lives in
+ * wire type. Tool arguments are never extracted - the whitelist lives in
  * otlp-receiver.ts.
  */
 

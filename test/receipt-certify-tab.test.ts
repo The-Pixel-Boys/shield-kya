@@ -15,7 +15,7 @@ import type { TrailEvent } from "../src/trail.js";
 
 /**
  * The dedicated Certify tab: a 4th :target zone between Overview and
- * Activity carrying the full live requirement table — all 30 requirements
+ * Activity carrying the full live requirement table - all 30 requirements
  * grouped by the 6 catalog domains in catalog order, with status pills,
  * evidence lines, and attestation text. Fail-closed: no card, no table.
  */
@@ -80,7 +80,7 @@ const REQS: CertifyRequirementResult[] = [
   req("SOC-01", "society", "high", "attested", "Acceptable-use policy", {
     evidence: "attested by operator",
     attestation: {
-      text: "AUP signed by ops — filed in the team wiki",
+      text: "AUP signed by ops - filed in the team wiki",
       at: "2026-09-01T12:00:00.000Z",
     },
   }),
@@ -169,9 +169,9 @@ describe("Certify tab (5th zone)", () => {
   it("(c) renders all 30 requirement rows grouped by the 6 domains in catalog order", () => {
     const zone = certifyZone(htmlWith(FULL_CARD));
     expect(zone).toContain('aria-label="Certify detail"');
-    // Every requirement: <code>ID</code> — title, with a status pill.
+    // Every requirement: <code>ID</code> - title, with a status pill.
     for (const r of REQS) {
-      expect(zone).toContain(`<code>${r.id}</code> — ${r.title}`);
+      expect(zone).toContain(`<code>${r.id}</code> - ${r.title}`);
     }
     // Status pill counts match the fixture mix (pass 11 / gap 7 /
     // insufficient 11 / attested 1).
@@ -206,7 +206,7 @@ describe("Certify tab (5th zone)", () => {
     // The attested row carries the attestation text + timestamp instead of
     // its bare evidence line.
     expect(zone).toContain("attested 2026-09-01T12:00:00.000Z");
-    expect(zone).toContain("AUP signed by ops — filed in the team wiki");
+    expect(zone).toContain("AUP signed by ops - filed in the team wiki");
   });
 
   it("(e) fail-closed empty state: undefined card → zone-empty hint, no table", () => {
@@ -246,9 +246,35 @@ describe("Certify tab (5th zone)", () => {
     });
     const zone = certifyZone(htmlWith({ ...FULL_CARD, requirements: [bare] }));
     expect(zone).toContain(
-      '<span class="pill ok">pass</span> <code>DP-01</code> — Silent requirement',
+      '<span class="pill ok">pass</span> <code>DP-01</code> - Silent requirement',
     );
     expect(zone).not.toContain('class="evi"');
     expect(zone).not.toContain('class="att"');
+  });
+
+  it("(h) long evidence renders in full behind a Read more toggle, never truncated", () => {
+    const longEvidence =
+      "no attestation recorded - kya certify --attest DP-04 --text \"…\" (Confirm the agent configuration never persists raw secrets or full arguments to local evidence stores; redaction must happen before the trail write, not at render time)";
+    expect(longEvidence.length).toBeGreaterThan(160);
+    const long_ = req("DP-04", "data-privacy", "high", "gap", "Redaction by construction", {
+      evidence: longEvidence,
+    });
+    const zone = certifyZone(htmlWith({ ...FULL_CARD, requirements: [long_] }));
+    // Expandable row: preview in the summary, complete text in .full.
+    expect(zone).toContain('class="req-more evi"');
+    // The tail of the full text must survive (proves no truncation); the
+    // quotes in the text are HTML-escaped, so assert on plain segments.
+    expect(zone).toContain("redaction must happen before the trail write, not at render time)");
+    // Titles are never clipped either.
+    const longTitle = req("SEC-09", "security", "low", "pass", `T${"i".repeat(200)}`, {
+      evidence: "",
+    });
+    const zone2 = certifyZone(htmlWith({ ...FULL_CARD, requirements: [longTitle] }));
+    expect(zone2).toContain(`T${"i".repeat(200)}`);
+  });
+
+  it("(i) short evidence stays a plain inline span (no toggle)", () => {
+    const zone = certifyZone(htmlWith(FULL_CARD));
+    expect(zone).toContain('<span class="evi">evidence for DP-01</span>');
   });
 });

@@ -343,7 +343,7 @@ describe("mapAgentShieldFinding", () => {
 });
 
 describe("buildAgentShieldArgv", () => {
-  it("is scan --format json --path only — never --fix / MiniClaw / npx -y", () => {
+  it("is scan --format json --path only - never --fix / MiniClaw / npx -y", () => {
     const built = buildAgentShieldArgv("/tmp/agents");
     expect(built.command).toBe("agentshield");
     expect(built.args).toEqual(["scan", "--format", "json", "--path", "/tmp/agents"]);

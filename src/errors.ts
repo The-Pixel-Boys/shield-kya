@@ -1,4 +1,4 @@
-/** Fail-closed CLI / client errors — never silent allow-all. */
+/** Fail-closed CLI / client errors - never silent allow-all. */
 
 export class KyaError extends Error {
   readonly code: string;

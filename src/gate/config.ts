@@ -1,5 +1,5 @@
 /**
- * `.kya/gateways.json` — the upstream MCP servers the local kya gateway
+ * `.kya/gateways.json` - the upstream MCP servers the local kya gateway
  * federates. Strict JSON (hand-editable, merge-safe); `kya gate init` seeds
  * it with a `recipes` catalog of ready-to-move entries for the well-known
  * servers from the MCP server registry.
@@ -35,7 +35,7 @@ export interface GatewaysConfig {
   /**
    * Gateway behavior when a target fails to initialize: failOpen serves the
    * healthy targets (default, better local UX); failClosed takes the whole
-   * gateway down (strict — a silently missing server is impossible).
+   * gateway down (strict - a silently missing server is impossible).
    */
   readonly failureMode: GateFailureMode;
   readonly servers: readonly GatewayServer[];
@@ -116,7 +116,7 @@ function parseServer(raw: unknown, index: number): GatewayServer {
   if (transport === "http" && env) {
     // The gateway's http targets have no env concept; auth travels as headers.
     throw new UsageError(
-      `${where}: transport "http" does not support "env" — use "headers" (e.g. {"authorization": "Bearer …"})`,
+      `${where}: transport "http" does not support "env" - use "headers" (e.g. {"authorization": "Bearer …"})`,
     );
   }
   if (transport === "stdio" && headers) {
@@ -202,7 +202,7 @@ export function readGateways(
   try {
     raw = JSON.parse(readFileSync(path, "utf8"));
   } catch {
-    throw new UsageError(`${path} is not valid JSON — fix it by hand, then re-run kya gate run`);
+    throw new UsageError(`${path} is not valid JSON - fix it by hand, then re-run kya gate run`);
   }
   return persistInstanceId(path, raw, randomUUID());
 }
@@ -213,7 +213,7 @@ interface Recipe extends GatewayServer {
 
 const RECIPES: readonly Recipe[] = [
   { id: "playwright", transport: "stdio", cmd: ["npx", "-y", "@playwright/mcp@latest"], note: "Browser automation" },
-  { id: "github", transport: "http", url: "https://api.githubcopilot.com/mcp/", headers: { authorization: "Bearer <github-pat>" }, note: "GitHub (remote; auth travels as a header — the gateway's http targets have no env)" },
+  { id: "github", transport: "http", url: "https://api.githubcopilot.com/mcp/", headers: { authorization: "Bearer <github-pat>" }, note: "GitHub (remote; auth travels as a header - the gateway's http targets have no env)" },
   { id: "slack", transport: "stdio", cmd: ["npx", "-y", "@modelcontextprotocol/server-slack"], env: { SLACK_BOT_TOKEN: "<xoxb-…>", SLACK_TEAM_ID: "<T…>" }, note: "Slack workspace" },
   { id: "postgresql", transport: "stdio", cmd: ["npx", "-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"], note: "PostgreSQL (pass the connection string as the last arg)" },
   { id: "filesystem", transport: "stdio", cmd: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "."], note: "Local filesystem (scope = last args)" },
@@ -236,7 +236,7 @@ const RECIPES: readonly Recipe[] = [
 
 /**
  * Scaffold `.kya/gateways.json`: an empty active `servers` list plus the
- * `recipes` catalog — move a recipe object into `servers` and fill its
+ * `recipes` catalog - move a recipe object into `servers` and fill its
  * placeholders to enable it. Idempotent: an existing file is left alone.
  */
 export function scaffoldGateways(
@@ -248,7 +248,7 @@ export function scaffoldGateways(
   const doc = {
     port: GATE_DEFAULT_PORT,
     // failOpen: one broken target never takes the gateway down (a missing
-    // server then fails silently — its tools just vanish). failClosed is the
+    // server then fails silently - its tools just vanish). failClosed is the
     // strict choice: any broken target stops the whole gateway.
     failureMode: "failOpen",
     instanceId: randomUUID(),

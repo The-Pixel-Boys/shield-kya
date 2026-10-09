@@ -399,7 +399,7 @@ describe("e2e with the real gateway binary", () => {
         });
 
         // Not "listening" until the listener answers (a bare GET gets a 406
-        // from the real gateway — any HTTP answer means it is up).
+        // from the real gateway - any HTTP answer means it is up).
         let answered = false;
         for (let waited = 0; waited < 10_000 && !answered; waited += 200) {
           try {

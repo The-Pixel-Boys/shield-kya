@@ -66,7 +66,7 @@ export function readGateState(
       };
     }
   } catch {
-    /* corrupt state — treat as absent */
+    /* corrupt state - treat as absent */
   }
   return undefined;
 }

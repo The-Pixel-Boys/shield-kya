@@ -113,8 +113,24 @@ describe("MCP trail recording", () => {
       neverEvent: true,
       argsHash: computeArgsHash({ target: "x" }),
     });
-    expect(event!.summary).toBeUndefined();
+    // Change fields are derived like wrap/govern do: { target: "x" } yields a
+    // summary + targetPath, but no diffPreview (not a write-like tool).
+    expect(event!.summary).toBeTruthy();
+    expect(event!.targetPath).toBe("x");
+    expect(event!.diffPreview).toBeUndefined();
     expect(Date.parse(event!.ts)).not.toBeNaN();
+  });
+
+  it("policy_evaluate records a diffPreview for write-like tools (Changes tab)", async () => {
+    const result = await handleMcpToolCall(
+      "kya.policy_evaluate",
+      { toolId: "Write", args: { file_path: "/p/a.ts", content: "export const x = 1;\n" } },
+      ctx(),
+    );
+    expect(result.isError).toBeFalsy();
+    const [event] = readTrail(cwd);
+    expect(event).toMatchObject({ toolId: "Write", targetPath: "/p/a.ts" });
+    expect(event!.diffPreview).toContain("export const x = 1;");
   });
 
   it("mode is observe by default and hold when holdEnabled", async () => {
@@ -172,7 +188,7 @@ describe("MCP trail recording", () => {
   });
 
   it("a failing trail write never breaks the tool result", async () => {
-    // .kya exists as a regular file — appendTrail cannot mkdir/append.
+    // .kya exists as a regular file - appendTrail cannot mkdir/append.
     writeFileSync(join(cwd, ".kya"), "not a dir", "utf8");
     const result = await handleMcpToolCall(
       "kya.policy_evaluate",

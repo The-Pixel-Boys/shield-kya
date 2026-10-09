@@ -8,7 +8,7 @@ import { chmodSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
  * Crash-safe write: tmp file in the same directory, then rename onto the
  * target (atomic on POSIX and win32 within one volume). A mid-write crash
  * leaves the original config intact; the tmp file is removed best-effort.
- * An existing target's file mode is carried over — a rename would otherwise
+ * An existing target's file mode is carried over - a rename would otherwise
  * turn a 0600 config into the umask default.
  */
 export function atomicWriteSync(target: string, content: string): void {
@@ -18,7 +18,7 @@ export function atomicWriteSync(target: string, content: string): void {
     try {
       mode = statSync(target).mode;
     } catch {
-      /* new file — keep default mode */
+      /* new file - keep default mode */
     }
     writeFileSync(tmp, content, "utf8");
     if (mode !== undefined) {

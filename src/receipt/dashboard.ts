@@ -80,7 +80,7 @@ function hourLabel(startMs: number): string {
   return `${String(new Date(startMs).getHours()).padStart(2, "0")}:00`;
 }
 
-/** "Sep 16 14:00" — used when an hourly window crosses midnight. */
+/** "Sep 16 14:00" - used when an hourly window crosses midnight. */
 function hourDayLabel(startMs: number): string {
   const d = new Date(startMs);
   return `${MONTHS[d.getMonth()]} ${d.getDate()} ${hourLabel(startMs)}`;
@@ -113,7 +113,7 @@ export interface BucketWindowInput {
 /**
  * Zero-filled bucket window: from the earliest event's bucket up to the
  * latest, capped to the most recent `cap` buckets, ascending chronologically.
- * Candidates are deduped by start ms — stepping back across a spring-forward
+ * Candidates are deduped by start ms - stepping back across a spring-forward
  * transition can map two steps to the same bucket start (duplicate column).
  * Pure and exported so tests can feed the duplicate-start case directly.
  */

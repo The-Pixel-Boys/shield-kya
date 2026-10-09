@@ -88,7 +88,7 @@ describe("orr_fresh", () => {
     ).toBe("insufficient_evidence");
   });
 
-  it("compares exact ms — exactly maxAgeDays old passes, 1ms older gaps", () => {
+  it("compares exact ms - exactly maxAgeDays old passes, 1ms older gaps", () => {
     // NOW is 2026-09-18T12:00:00.000Z; maxAgeDays 30 → boundary 2026-08-19T12:00:00.000Z.
     expect(
       evaluateRequirement(

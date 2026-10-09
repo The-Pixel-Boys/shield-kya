@@ -2,7 +2,7 @@
  * One-time "star the repo" CTA, printed after `kya start` / `kya receipt`
  * surface a live report URL and the trail has real activity in the window.
  * The flag lives in the project `.kya/` dir, so the CTA prints at most once
- * per project — it never gates or delays the report itself.
+ * per project - it never gates or delays the report itself.
  */
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -11,7 +11,7 @@ import { atomicWriteSync } from "./fs-atomic.js";
 import { readTrailSince } from "./trail.js";
 
 export const STAR_REPO_URL = "https://github.com/The-Pixel-Boys/shield-agent";
-export const STAR_CTA_LINE = `Loving KYA? Star the repo — it keeps the OSS report free: ${STAR_REPO_URL}`;
+export const STAR_CTA_LINE = `Loving KYA? Star the repo - it keeps the OSS report free: ${STAR_REPO_URL}`;
 /** The CTA only fires once the trail has meaningful activity to report. */
 export const STAR_CTA_MIN_EVENTS = 10;
 
@@ -45,7 +45,7 @@ export function maybePrintStarCta(
       mkdirSync(configDir(cwd), { recursive: true });
       atomicWriteSync(starCtaFlagPath(cwd), `${new Date().toISOString()}\n`);
     } catch {
-      /* flag persistence is best-effort — worst case the CTA prints again */
+      /* flag persistence is best-effort - worst case the CTA prints again */
     }
     return true;
   } catch {

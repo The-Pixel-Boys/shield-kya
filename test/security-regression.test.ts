@@ -2,7 +2,7 @@
  * Regression tests for the adversarial-review security fixes:
  * daemon state trust (F1/F2), file guards (F3), trail validation (F4),
  * live-token anchor spoof (F5), markdown escaping (F6), secret patterns (F7).
- * Daemon tests spawn dist/cli.js — run `pnpm build` first.
+ * Daemon tests spawn dist/cli.js - run `pnpm build` first.
  */
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import {
@@ -97,7 +97,7 @@ async function ensureAndTrack(): Promise<{ url: string; pid: number; reused: boo
   return handle;
 }
 
-describe("F1 — planted receipt-server.json is not trusted", () => {
+describe("F1 - planted receipt-server.json is not trusted", () => {
   it("refuses to reuse a non-loopback url and spawns a fresh daemon", async () => {
     writeDaemonState(dir, daemonState({ url: "https://evil.example/x", port: 443 }));
     const handle = await ensureAndTrack();
@@ -136,7 +136,7 @@ describe("F1 — planted receipt-server.json is not trusted", () => {
     const second = await ensureAndTrack();
     expect(second.reused).toBe(false);
     expect(second.pid).not.toBe(first.pid);
-    // The wedged daemon was SIGTERM'd — no orphan leak.
+    // The wedged daemon was SIGTERM'd - no orphan leak.
     for (let waited = 0; waited < 3_000 && pidAlive(first.pid); waited += 100) {
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -176,7 +176,7 @@ describe("F1 — planted receipt-server.json is not trusted", () => {
   );
 });
 
-describe("F2 — daemon state file permissions and symlink clobber", () => {
+describe("F2 - daemon state file permissions and symlink clobber", () => {
   it.skipIf(process.platform === "win32")(
     "forces mode 0600 on a pre-existing 0644 state file",
     () => {
@@ -230,7 +230,7 @@ describe("F2 — daemon state file permissions and symlink clobber", () => {
   });
 });
 
-describe("F3 — non-regular files and cwd-relative jails", () => {
+describe("F3 - non-regular files and cwd-relative jails", () => {
   const block = JSON.stringify({ mcpServers: { "shield-kya": { command: "kya" } } });
 
   it.skipIf(process.platform === "win32")(
@@ -290,7 +290,7 @@ describe("F3 — non-regular files and cwd-relative jails", () => {
   });
 });
 
-describe("F4 — malformed trail lines are dropped, not fatal", () => {
+describe("F4 - malformed trail lines are dropped, not fatal", () => {
   it("readTrail keeps only schema-valid lines and rendering survives", () => {
     const good = {
       ts: new Date().toISOString(),
@@ -354,7 +354,7 @@ describe("F4 — malformed trail lines are dropped, not fatal", () => {
   });
 });
 
-describe("F5 — EventSource replace-anchor is not spoofable", () => {
+describe("F5 - EventSource replace-anchor is not spoofable", () => {
   it("embeds the token exactly once even when trail text contains the anchor", async () => {
     const anchor = "EventSource('/events')";
     appendTrail(dir, {
@@ -395,7 +395,7 @@ describe("F5 — EventSource replace-anchor is not spoofable", () => {
   }, 15_000);
 });
 
-describe("F6 — markdown renderer escapes untrusted text", () => {
+describe("F6 - markdown renderer escapes untrusted text", () => {
   const ESC = "\u001b";
   const BIDI = "\u202e";
   const ZWSP = "\u200b";
@@ -424,10 +424,10 @@ describe("F6 — markdown renderer escapes untrusted text", () => {
     expect(md).not.toContain(ESC);
     expect(md).not.toContain(BIDI);
     expect(md).not.toContain(ZWSP);
-    // Inline text (summary) is escaped — no raw HTML outside code fences.
+    // Inline text (summary) is escaped - no raw HTML outside code fences.
     expect(md).not.toContain("<script>alert(1)");
     // Fenced diff content is verbatim: no backslash garbling, fence holds.
-    // (Previews appear in both ## Feed and ## Changes — scope to the Feed.)
+    // (Previews appear in both ## Feed and ## Changes - scope to the Feed.)
     const feed = md.slice(md.indexOf("## Feed"), md.indexOf("## Changes"));
     const lines = feed.split("\n");
     const fenceIdx = lines.flatMap((l, i) => (l === "~~~~" ? [i] : []));
@@ -455,7 +455,7 @@ describe("F6 — markdown renderer escapes untrusted text", () => {
       3,
     );
     const md = renderReceiptMarkdown(model);
-    // Previews also render under ## Changes — scope fence checks to the Feed.
+    // Previews also render under ## Changes - scope fence checks to the Feed.
     const feed = md.slice(md.indexOf("## Feed"), md.indexOf("## Changes"));
     const lines = feed.split("\n");
     const fenceIdx = lines.flatMap((l, i) => (l === "~~~~" ? [i] : []));
@@ -484,7 +484,7 @@ describe("F6 — markdown renderer escapes untrusted text", () => {
     const md = renderReceiptMarkdown(model);
     const head = md.split("\n").find((l) => l.includes("a'b'c"));
     expect(head).toBeDefined();
-    // Backticks stripped from the span value — the span stays balanced.
+    // Backticks stripped from the span value - the span stays balanced.
     expect(head?.split("`").length - 1).toBe(2);
     expect(head).toContain("`a'b'c`");
   });
@@ -533,7 +533,7 @@ describe("F6 — markdown renderer escapes untrusted text", () => {
       3,
     );
     const md = renderReceiptMarkdown(model);
-    // Previews also render under ## Changes — scope fence checks to the Feed.
+    // Previews also render under ## Changes - scope fence checks to the Feed.
     const feed = md.slice(md.indexOf("## Feed"), md.indexOf("## Changes"));
     const lines = feed.split("\n");
     // Fence must be one longer than the longest payload run (5 → 6 tildes).
@@ -549,7 +549,7 @@ describe("F6 — markdown renderer escapes untrusted text", () => {
   });
 });
 
-describe("F7 — assertNoSecrets coverage without false-positive DoS", () => {
+describe("F7 - assertNoSecrets coverage without false-positive DoS", () => {
   it("throws on URL userinfo credentials in identity baseUrl", () => {
     const url = ["http://admin", ":", "s3cr3t", "P4ss", "@internal.corp:8090"].join("");
     const model = buildWindowReceiptModel([], 3, {

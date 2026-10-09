@@ -1,5 +1,5 @@
 /**
- * Vercel AI SDK tool adapter. Structural only — no `ai` import. Matches the
+ * Vercel AI SDK tool adapter. Structural only - no `ai` import. Matches the
  * `{ description, parameters, execute }` tool shape; returns the same shape
  * with a governed execute. AI SDK tools are keyed by name in the tools
  * record, so the name is an explicit adapter option.
@@ -14,7 +14,7 @@ export interface VercelAiToolLike<TArgs = unknown, TResult = unknown> {
 }
 
 export interface GovernVercelAiOptions extends GovernanceOptions {
-  /** Tool name — the key this definition is registered under. */
+  /** Tool name - the key this definition is registered under. */
   readonly name: string;
 }
 

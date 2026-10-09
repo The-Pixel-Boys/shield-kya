@@ -1,7 +1,7 @@
 /**
  * Agent Trust Baseline catalog: types, loader, validator.
  * The bundled catalog/agent-trust-baseline-v0.json at the package root is the
- * source of truth (shipped via package.json "files"). Evidence only — a
+ * source of truth (shipped via package.json "files"). Evidence only - a
  * catalog requirement never ALLOWs anything.
  */
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -69,7 +69,7 @@ const ORR_MAX = new Set<string>(["green", "amber"]);
 const TRAIL_MODES = new Set<string>(["observe", "hold", "offline"]);
 const REQ_ID = /^[A-Z]+-\d+$/;
 
-/** Bundled catalog: <pkg>/catalog/… — works from both src/ (vitest) and dist/ (built). */
+/** Bundled catalog: <pkg>/catalog/… - works from both src/ (vitest) and dist/ (built). */
 export function defaultCatalogPath(): string {
   return fileURLToPath(
     new URL("../../catalog/agent-trust-baseline-v0.json", import.meta.url),
@@ -220,7 +220,7 @@ function parseCheck(id: string, raw: unknown): RequirementCheck {
       return { kind: "showback_present" };
     case "attest": {
       if (!nonEmpty(c.prompt)) throw reqErr(id, "attest requires non-empty prompt");
-      // Prompts are interpolated into one-line evidence — no control chars.
+      // Prompts are interpolated into one-line evidence - no control chars.
       if (/[\x00-\x1f\x7f]/.test(c.prompt)) {
         throw reqErr(id, "attest prompt must not contain control characters");
       }

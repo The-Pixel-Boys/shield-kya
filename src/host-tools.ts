@@ -17,7 +17,7 @@ const HOST_TOOLS: Readonly<Record<string, HostToolTier>> = {
   bash: "SHELL", run_terminal_command: "SHELL",
 };
 
-/** Lookup is case-insensitive; only `__`-qualified names (mcp__*, server__tool) stay unknown — a bare `read_file` from an MCP filesystem server still matches READ, which is deliberate: reads are reads in this advisory vocabulary. */
+/** Lookup is case-insensitive; only `__`-qualified names (mcp__*, server__tool) stay unknown - a bare `read_file` from an MCP filesystem server still matches READ, which is deliberate: reads are reads in this advisory vocabulary. */
 export function findHostToolTier(toolId: string): HostToolTier | undefined {
   const id = toolId.trim().toLowerCase();
   if (!id || id.includes("__")) return undefined;

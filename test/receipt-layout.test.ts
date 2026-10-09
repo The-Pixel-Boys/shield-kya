@@ -252,7 +252,7 @@ describe("receipt dashboard layout (hero grid + sidebar)", () => {
     }
   });
 
-  it("contains no external http(s) references except the live star link — fully offline page", () => {
+  it("contains no external http(s) references except the live star link - fully offline page", () => {
     const empty = renderReceiptHtml(buildWindowReceiptModel([], 3));
     expect(empty).not.toMatch(/https?:\/\//);
     const live = renderReceiptHtml(

@@ -83,7 +83,7 @@ describe("kya start", () => {
       mkdirSync(join(home, ".grok"));
       mkdirSync(join(home, ".cursor"));
       writeFileSync(join(home, ".claude.json"), JSON.stringify({ theme: "dark" }), "utf8");
-      // No evidence for qwen/kiro/opencode/etc. — they must stay unwired.
+      // No evidence for qwen/kiro/opencode/etc. - they must stay unwired.
 
       const r = await runStart(cfg(cwd), {
         open: false,
@@ -194,7 +194,7 @@ describe("kya start", () => {
 
       // Human output announces the hook wiring and its session-start semantics.
       expect(formatStartHuman(first)).toContain(
-        "hooks: Claude Code, Grok, Kimi Code CLI (PreToolUse interception — applies to new sessions)",
+        "hooks: Claude Code, Grok, Kimi Code CLI (PreToolUse interception - applies to new sessions)",
       );
       expect(first.next).toContain("load hooks at session start");
 

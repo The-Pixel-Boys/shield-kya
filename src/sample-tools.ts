@@ -1,5 +1,5 @@
 /**
- * Sample custom tools for light install — zero vertical packs (R8).
+ * Sample custom tools for light install - zero vertical packs (R8).
  * Same descriptors as docs/dev/kya-custom-tools-sample.md.
  */
 

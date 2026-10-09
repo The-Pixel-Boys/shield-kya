@@ -61,7 +61,7 @@ export function enterpriseNavLine(ent: Entitlement, active: DashPane): string {
         .join("  ")}`,
     );
   }
-  return clip("ent:  (hidden on FREE — set KYA_DASH_PLAN=enterprise to unlock)");
+  return clip("ent:  (hidden on FREE - set KYA_DASH_PLAN=enterprise to unlock)");
 }
 
 export function lockedPane(pane: DashPane): string[] {
@@ -123,7 +123,7 @@ export function assertNoSecrets(text: string, extra?: string): void {
     /\bsession=[^\s;&"']{8,}/i,
     /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/i,
     /-----END [A-Z0-9 ]*PRIVATE KEY-----/i,
-    // Keyword assignments require a realistically long value — short benign
+    // Keyword assignments require a realistically long value - short benign
     // mentions ("refreshed token: ab12cd34") must not DoS every render.
     /\b(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*(?!\[redacted\])[^\s#"']{16,}/i,
     /\bxox[baprs]-[A-Za-z0-9-]{10,}/i,

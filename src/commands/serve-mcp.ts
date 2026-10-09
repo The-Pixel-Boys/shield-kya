@@ -42,7 +42,7 @@ export async function runServeMcp(
       host: config.host,
       agentId: config.agentId,
       // Offline (KYA_OFFLINE=1, as `kya start`/`kya connect` wire for hosts):
-      // start keyless — initialize/tools/list work; tool calls still fail
+      // start keyless - initialize/tools/list work; tool calls still fail
       // closed at call time without a key.
       requireApiKey: !config.offline,
     });
