@@ -21,6 +21,7 @@
 - Use OPA if you need a general policy language. On hosted, OPA is an optional PDP (Rego allowlists under `infra/podman/opa/packs/`) that may only further DENY on evaluate and invoke; Shield stays the PEP. Fail-closed when enabled and unreachable. Per-merchant package path + packId map ship; hosted IdP group→tool maps fail-closed without verified groups; `kya.policy.evaluated` SIEM webhook on evaluate. Agent OIDC assertion is a fail-closed stub until JWKS. Not inside this npm package.
 - Multi-tenant density, private registries, ORR board ops, pin, and support are separate from the solo `npx` path.
 - Growth counts are observe metrics (principals, evaluates, approvals).
+- Anonymous usage stats (`kya telemetry`) are opt-in and off by default: asked once on a terminal, never in CI or `--json`. The long-running gate, report and gateway processes send a heartbeat. `kya hook` never touches the network itself; it starts a detached helper at most once a day that sends a single `ping`, so hook-only installs count as active but never as live sessions. See `docs/telemetry.md`.
 - OTLP metrics are opt-in and off by default. OSS CLI is thin (evaluate latency only). Hosted is richer Micrometer export. Neither path is a policy decision. See `docs/otlp.md`.
 
 - Showback USD is an estimate from a checked-in published rate table. Unknown models report tokens only. ORR / metrics never ALLOW, DENY, or kill on spend.

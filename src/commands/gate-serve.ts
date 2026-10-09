@@ -111,7 +111,11 @@ export async function startGateSupervisor(input: {
     : undefined;
 
   let shutdownFn: () => void = () => {};
-  const waitUntilClosed = new Promise<void>((resolve) => {
+  // A binary that cannot be started (missing, not executable) is reported on the ChildProcess 'error'
+  // event, which would be an uncaught exception with no listener and kill the supervisor before any
+  // cleanup (state file, telemetry `end`). Treat it as a failed start: shut down, then reject.
+  let startError: Error | undefined;
+  const waitUntilClosed = new Promise<void>((resolve, reject) => {
     let closing = false;
     const shutdown = () => {
       if (closing) return;
@@ -133,14 +137,25 @@ export async function startGateSupervisor(input: {
         .catch(() => undefined)
         .finally(() => {
           clearGateState(env, process.pid);
-          resolve();
+          if (startError) reject(startError);
+          else resolve();
         });
     };
     shutdownFn = shutdown;
     process.once("SIGINT", shutdown);
     process.once("SIGTERM", shutdown);
     child.once("exit", () => shutdown());
+    child.once("error", (err) => {
+      startError = new UsageError(
+        `gate binary could not be started (${binary}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      shutdown();
+    });
   });
+
+  // The rejection is for whoever awaits waitUntilClosed; without this a start failure that lands before
+  // the caller attaches its handler would be reported as an unhandled rejection and kill the process.
+  waitUntilClosed.catch(() => undefined);
 
   return {
     pid: process.pid,

@@ -136,6 +136,41 @@ describe("gate supervisor lifecycle (fake kya-gate binary)", () => {
     }
   }, 15_000);
 
+  it("a binary that cannot be started fails the supervisor cleanly instead of crashing it", async () => {
+    const home = tmp();
+    try {
+      writeGateways(home);
+      const e = env(home);
+      const handle = await startGateSupervisor({
+        cwd: home,
+        env: e,
+        binaryPath: join(home, "no-such-kya-gate"),
+        otlpPort: 0,
+      });
+
+      // Used to be an uncaught 'error' event: the process died before any cleanup ran.
+      await expect(handle.waitUntilClosed).rejects.toThrow(/gate binary could not be started/);
+      expect(readGateState(e)).toBeUndefined();
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it("a non-executable binary fails the same way", async () => {
+    const home = tmp();
+    try {
+      writeGateways(home);
+      const plain = join(home, "not-executable");
+      writeFileSync(plain, "#!/bin/sh\nexit 0\n", "utf8");
+      chmodSync(plain, 0o644);
+      const handle = await startGateSupervisor({ cwd: home, env: env(home), binaryPath: plain, otlpPort: 0 });
+
+      await expect(handle.waitUntilClosed).rejects.toThrow(/could not be started/);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 15_000);
+
   it("kya gate run YAML was written next to the state (sanity: config file exists for the child)", () => {
     // runGateRun owns YAML generation; the supervisor consumes gate.yaml.
     // Here we only assert the path helper the two sides share.

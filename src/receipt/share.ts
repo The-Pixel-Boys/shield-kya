@@ -13,6 +13,13 @@ import { aggregateEvents, type ReceiptModel } from "./render-receipt.js";
 export const SHARE_DEFAULT_BASE_URL = "https://shield-agent.com";
 export const SHARE_PATH = "/api/v1/share/reports";
 export const SHARE_TIMEOUT_MS = 15_000;
+export const SHARE_MAX_RETRIES = 3;
+
+/** Exponential backoff per retry attempt (index 0 = first retry). */
+const RETRY_BASE_DELAYS_MS = [1_000, 2_000, 4_000] as const;
+const RETRY_JITTER_MS = 250;
+/** Cap on a server-supplied Retry-After so a hostile header can't park the CLI. */
+const RETRY_AFTER_CAP_S = 60;
 
 export interface ShareStats {
   readonly total: number;
@@ -104,7 +111,30 @@ export function shareBaseUrl(override: string | undefined, env: NodeJS.ProcessEn
   return raw.slice(0, end);
 }
 
-export type ShareResult = { readonly ok: true; readonly url: string } | { readonly ok: false; readonly error: string };
+export type ShareResult =
+  | { readonly ok: true; readonly url: string }
+  | {
+      readonly ok: false;
+      readonly error: string;
+      /** HTTP status when the failure came from a response (absent on network/timeout). */
+      readonly status?: number;
+      /** Parsed Retry-After seconds from a 429, when present. */
+      readonly retryAfterSeconds?: number;
+    };
+
+/** Parse a Retry-After header as integer seconds; undefined when absent/malformed. */
+function parseRetryAfterSeconds(raw: string | null): number | undefined {
+  if (!raw) return undefined;
+  const n = Number.parseInt(raw.trim(), 10);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
+/** Clamp a --share-retries flag value: negative/non-numeric → 0, cap at SHARE_MAX_RETRIES. */
+export function clampShareRetries(raw: string | undefined): number {
+  const n = raw ? Number.parseInt(raw, 10) : 0;
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(n, SHARE_MAX_RETRIES);
+}
 
 /** POST the payload; 15s timeout. Never throws — failures come back as {ok:false}. */
 export async function shareReceiptPayload(
@@ -131,7 +161,19 @@ export async function shareReceiptPayload(
       };
     }
     if (res.status !== 200 && res.status !== 201) {
-      return { ok: false, error: `share failed: HTTP ${res.status}` };
+      if (res.status === 429) {
+        const retryAfterSeconds = parseRetryAfterSeconds(res.headers.get("Retry-After"));
+        return {
+          ok: false,
+          status: 429,
+          retryAfterSeconds,
+          error:
+            retryAfterSeconds != null
+              ? `share failed: rate limited — retry in ~${retryAfterSeconds}s`
+              : "share failed: rate limited — retry later",
+        };
+      }
+      return { ok: false, status: res.status, error: `share failed: HTTP ${res.status}` };
     }
     const data = (await res.json().catch(() => null)) as { url?: unknown } | null;
     if (!data || typeof data.url !== "string" || !data.url) {
@@ -140,5 +182,50 @@ export async function shareReceiptPayload(
     return { ok: true, url: data.url };
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/** Retryable failures: 429, 5xx, or network/timeout. 4xx validation errors are final. */
+function isShareRetryable(result: ShareResult): boolean {
+  return !result.ok && (result.status === undefined || result.status === 429 || result.status >= 500);
+}
+
+/** Backoff for the next attempt: Retry-After wins (capped), else exponential + jitter. */
+function shareRetryDelayMs(
+  failure: Extract<ShareResult, { ok: false }>,
+  attempt: number,
+): number {
+  if (failure.retryAfterSeconds != null) {
+    return Math.min(failure.retryAfterSeconds, RETRY_AFTER_CAP_S) * 1000;
+  }
+  const base = RETRY_BASE_DELAYS_MS[Math.min(attempt, RETRY_BASE_DELAYS_MS.length - 1)]!;
+  return base + Math.floor(Math.random() * (RETRY_JITTER_MS + 1));
+}
+
+const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Opt-in bounded retry around the single-attempt shareReceiptPayload: at most
+ * SHARE_MAX_RETRIES retries on 429/5xx/network failures, exponential backoff
+ * with jitter, honoring Retry-After. Default (retries 0) stays single-attempt.
+ */
+export async function shareReceiptWithRetry(
+  payload: SharePayload,
+  opts: {
+    readonly baseUrl: string;
+    readonly fetchImpl?: typeof fetch;
+    readonly timeoutMs?: number;
+    readonly retries?: number;
+    readonly sleep?: (ms: number) => Promise<void>;
+  },
+): Promise<ShareResult> {
+  const requested = opts.retries ?? 0;
+  const retries =
+    Number.isFinite(requested) && requested > 0 ? Math.min(Math.floor(requested), SHARE_MAX_RETRIES) : 0;
+  const sleep = opts.sleep ?? defaultSleep;
+  for (let attempt = 0; ; attempt++) {
+    const result = await shareReceiptPayload(payload, opts);
+    if (result.ok || !isShareRetryable(result) || attempt >= retries) return result;
+    await sleep(shareRetryDelayMs(result, attempt));
   }
 }
