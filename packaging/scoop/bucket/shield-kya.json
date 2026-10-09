@@ -1,0 +1,23 @@
+{
+    "version": "0.19.0",
+    "description": "Audit trail and traceability for AI agents - local MCP gate (Allow/Review/Deny), live receipt dashboard, trust-baseline certification.",
+    "homepage": "https://shield-agent.com/install",
+    "license": "MIT",
+    "depends": "nodejs",
+    "url": "https://registry.npmjs.org/@shield-agent/kya/-/kya-0.19.0.tgz",
+    "hash": "sha256:c5a451dce71dcbbae603666c1cb32699a60d2539e47117944562cd3fd4828a73",
+    "extract_dir": "package",
+    "post_install": [
+        "Push-Location \"$dir\\package\"",
+        "npm install --omit=dev --no-audit --no-fund",
+        "Pop-Location"
+    ],
+    "bin": "package\\dist\\cli.js",
+    "checkver": {
+        "url": "https://registry.npmjs.org/@shield-agent/kya",
+        "jsonpath": "$.dist-tags.latest"
+    },
+    "autoupdate": {
+        "url": "https://registry.npmjs.org/@shield-agent/kya/-/kya-$version.tgz"
+    }
+}

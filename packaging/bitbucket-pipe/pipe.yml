@@ -1,0 +1,10 @@
+name: KYA
+description: Run KYA (Know Your Agent) trust-baseline commands in Bitbucket Pipelines.
+image: shieldagent/kya-pipe:latest
+variables:
+  KYA_VERSION:
+    default: latest
+  KYA_COMMAND:
+    default: "kya certify --window 30 --fail-on gap --json"
+  KYA_ARTIFACTS:
+    default: ".kya/certify"
