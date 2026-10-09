@@ -418,13 +418,24 @@ describe("verdicts hero card — static mix bars", () => {
 describe("activity hero card — 7-bucket sparkline", () => {
   it("emits exactly 7 rects with the max bucket at full height", () => {
     // Three daily buckets: 2 events, gap day, 4 events.
+    // Buckets are LOCAL calendar days (the receipt is a local, human-facing report). Offsets from
+    // Date.now() made this test fail whenever it ran within minutes of local midnight, because the
+    // "same day" events straddled two days. Anchor at local noon yesterday so they never can.
+    const noon = new Date();
+    noon.setDate(noon.getDate() - 1);
+    noon.setHours(12, 0, 0, 0);
+    const at = (daysBack: number, plusMs = 0) => {
+      const d = new Date(noon);
+      d.setDate(d.getDate() - daysBack);
+      return new Date(d.getTime() + plusMs).toISOString();
+    };
     const events: TrailEvent[] = [
-      ev({ ts: iso(2 * DAY), sessionId: "s" }),
-      ev({ ts: iso(2 * DAY + 60_000), sessionId: "s" }),
-      ev({ ts: iso(0), sessionId: "s" }),
-      ev({ ts: iso(60_000), sessionId: "s" }),
-      ev({ ts: iso(120_000), sessionId: "s" }),
-      ev({ ts: iso(180_000), sessionId: "s" }),
+      ev({ ts: at(2), sessionId: "s" }),
+      ev({ ts: at(2, 60_000), sessionId: "s" }),
+      ev({ ts: at(0), sessionId: "s" }),
+      ev({ ts: at(0, 60_000), sessionId: "s" }),
+      ev({ ts: at(0, 120_000), sessionId: "s" }),
+      ev({ ts: at(0, 180_000), sessionId: "s" }),
     ];
     const html = renderReceiptHtml(buildWindowReceiptModel(events, 3));
     const hero = section(html, "Activity");
@@ -437,6 +448,16 @@ describe("activity hero card — 7-bucket sparkline", () => {
     expect(hero).toContain('y="12" width="8" height="12"');
     expect(hero).not.toContain("NaN");
     expect(hero).not.toContain("Infinity");
+  });
+
+  it("buckets by local calendar day: events either side of local midnight are separate bars", () => {
+    const events: TrailEvent[] = [
+      ev({ ts: new Date(2026, 6, 15, 23, 59).toISOString(), sessionId: "s" }),
+      ev({ ts: new Date(2026, 6, 16, 0, 1).toISOString(), sessionId: "s" }),
+    ];
+    const hero = section(renderReceiptHtml(buildWindowReceiptModel(events, 3)), "Activity");
+    // One event each: two buckets, both at the max, so both bars are full height.
+    expect(hero.match(/height="24"/g)).toHaveLength(2);
   });
 
   it("empty events: still 7 rects on a flat baseline, no NaN/Infinity", () => {

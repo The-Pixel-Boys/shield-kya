@@ -1,6 +1,6 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "description": "AI agents audit trail & traceability — gate every tool call (Allow / Review / Deny), live activity dashboard, and continuous trust-baseline certification.",
   "license": "MIT",
   "type": "module",
@@ -70,7 +70,8 @@
     "test:coverage": "vitest run --coverage",
     "pack:check": "pnpm run build && pnpm pack --pack-destination /tmp && node dist/cli.js --help",
     "sync:version": "node scripts/sync-version.mjs",
-    "prepublishOnly": "pnpm run build && pnpm test"
+    "check:version": "node scripts/check-version-pins.mjs",
+    "prepublishOnly": "pnpm run check:version && pnpm run build && pnpm test"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

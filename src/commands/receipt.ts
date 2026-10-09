@@ -14,8 +14,9 @@ import { ensureReceiptDaemon } from "../receipt/daemon.js";
 import { receiptsDir } from "../trail.js";
 import {
   buildSharePayload,
+  clampShareRetries,
   shareBaseUrl,
-  shareReceiptPayload,
+  shareReceiptWithRetry,
   type ShareResult,
 } from "../receipt/share.js";
 
@@ -111,12 +112,13 @@ export async function runReceipt(
 
 /**
  * `kya receipt --share`: build the redacted share payload from the current
- * window's receipt model and POST it to the hosted platform. Returns the
- * public URL on success; failures are returned (not thrown) as {ok:false}.
+ * window's receipt model and POST it to the hosted platform. Single attempt
+ * by default; input.shareRetries (max 3) opts into bounded backoff retries.
+ * Returns the public URL on success; failures are returned (not thrown).
  */
 export async function runReceiptShare(
   config: ResolvedConfig,
-  input: { sessionId?: string; days?: number; shareUrl?: string },
+  input: { sessionId?: string; days?: number; shareUrl?: string; shareRetries?: number },
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<ShareResult> {
   const sessionId = input.sessionId?.trim();
@@ -126,8 +128,9 @@ export async function runReceiptShare(
       : DEFAULT_RECEIPT_DAYS;
   const model = loadReceiptModel({ cwd: config.cwd, sessionId, days, live: false });
   const payload = buildSharePayload(model);
-  return shareReceiptPayload(payload, {
+  return shareReceiptWithRetry(payload, {
     baseUrl: shareBaseUrl(input.shareUrl, env),
+    retries: input.shareRetries ?? 0,
   });
 }
 
@@ -140,6 +143,7 @@ export function receiptInputFromArgs(parsed: ParsedArgs) {
     open: parsed.flags["open"] === true || parsed.flags["open"] === "true",
     outDir: flagString(parsed.flags, "out", "out-dir", "outDir"),
     searchQuery: flagString(parsed.flags, "q", "query", "search"),
+    shareRetries: clampShareRetries(flagString(parsed.flags, "share-retries", "shareRetries")),
   };
 }
 

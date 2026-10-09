@@ -4,9 +4,11 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildSharePayload,
+  clampShareRetries,
   SHARE_DEFAULT_BASE_URL,
   shareBaseUrl,
   shareReceiptPayload,
+  shareReceiptWithRetry,
   type SharePayload,
 } from "../src/receipt/share.js";
 import {
@@ -156,6 +158,30 @@ describe("shareReceiptPayload", () => {
     if (!result.ok) expect(result.error).toContain("HTTP 500");
   });
 
+  it("429 without Retry-After: 'retry later' text", async () => {
+    const fetchImpl = vi.fn(async () => new Response("slow down", { status: 429 })) as unknown as typeof fetch;
+    const result = await shareReceiptPayload(payload, { baseUrl: "https://api.example", fetchImpl });
+    expect(result).toEqual({
+      ok: false,
+      status: 429,
+      retryAfterSeconds: undefined,
+      error: "share failed: rate limited — retry later",
+    });
+  });
+
+  it("429 with Retry-After 42: 'retry in ~42s' text", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response("slow down", { status: 429, headers: { "Retry-After": "42" } }),
+    ) as unknown as typeof fetch;
+    const result = await shareReceiptPayload(payload, { baseUrl: "https://api.example", fetchImpl });
+    expect(result).toEqual({
+      ok: false,
+      status: 429,
+      retryAfterSeconds: 42,
+      error: "share failed: rate limited — retry in ~42s",
+    });
+  });
+
   it("fails cleanly on a network error", async () => {
     const fetchImpl = vi.fn(async () => {
       throw new Error("connection refused");
@@ -169,6 +195,82 @@ describe("shareReceiptPayload", () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })) as unknown as typeof fetch;
     const result = await shareReceiptPayload(payload, { baseUrl: "https://api.example", fetchImpl });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("clampShareRetries", () => {
+  it("clamps to max 3, negative/non-numeric → 0", () => {
+    expect(clampShareRetries(undefined)).toBe(0);
+    expect(clampShareRetries("0")).toBe(0);
+    expect(clampShareRetries("2")).toBe(2);
+    expect(clampShareRetries("9")).toBe(3);
+    expect(clampShareRetries("-1")).toBe(0);
+    expect(clampShareRetries("abc")).toBe(0);
+  });
+});
+
+describe("shareReceiptWithRetry", () => {
+  const payload = buildSharePayload(
+    buildWindowReceiptModel([ev({ ts: "2026-10-01T10:00:00.000Z", sessionId: "s" })], 3, {}),
+  );
+
+  function scriptFetch(...responses: Response[]): ReturnType<typeof vi.fn> {
+    let i = 0;
+    return vi.fn(async () => responses[Math.min(i++, responses.length - 1)]!);
+  }
+
+  it("retries 429 (Retry-After) then 500 with bounded backoff, returns the 201 url", async () => {
+    const fetchImpl = scriptFetch(
+      new Response("slow down", { status: 429, headers: { "Retry-After": "1" } }),
+      new Response("boom", { status: 500 }),
+      new Response(JSON.stringify({ url: "https://shield-agent.com/r/ok" }), { status: 201 }),
+    ) as unknown as typeof fetch;
+    const sleep = vi.fn(async (_ms: number) => {});
+    const result = await shareReceiptWithRetry(payload, {
+      baseUrl: "https://api.example",
+      fetchImpl,
+      retries: 2,
+      sleep,
+    });
+    expect(result).toEqual({ ok: true, url: "https://shield-agent.com/r/ok" });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
+    // First delay honors Retry-After exactly (no jitter).
+    expect(sleep.mock.calls[0]![0]).toBe(1000);
+    // Second delay is exponential (2s) + uniform jitter 0–250ms.
+    expect(sleep.mock.calls[1]![0]).toBeGreaterThanOrEqual(2000);
+    expect(sleep.mock.calls[1]![0]).toBeLessThanOrEqual(2250);
+  });
+
+  it("never retries 4xx validation errors, even with retries left", async () => {
+    const fetchImpl = scriptFetch(
+      new Response("bad payload", { status: 400 }),
+      new Response(JSON.stringify({ url: "https://shield-agent.com/r/ok" }), { status: 201 }),
+    ) as unknown as typeof fetch;
+    const sleep = vi.fn(async (_ms: number) => {});
+    const result = await shareReceiptWithRetry(payload, {
+      baseUrl: "https://api.example",
+      fetchImpl,
+      retries: 3,
+      sleep,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("HTTP 400");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("default (retries 0) is a single attempt on 429", async () => {
+    const fetchImpl = scriptFetch(
+      new Response("slow down", { status: 429 }),
+      new Response(JSON.stringify({ url: "https://shield-agent.com/r/ok" }), { status: 201 }),
+    ) as unknown as typeof fetch;
+    const sleep = vi.fn(async (_ms: number) => {});
+    const result = await shareReceiptWithRetry(payload, { baseUrl: "https://api.example", fetchImpl, sleep });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("share failed: rate limited — retry later");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
   });
 });
 
@@ -266,6 +368,33 @@ describe("kya receipt --share", () => {
     vi.stubGlobal("fetch", fetchMock2);
     await runCli(["receipt", "--share"], io, { KYA_SHARE_URL: "https://env.example" }, cwd);
     expect(fetchMock2.mock.calls[0]![0]).toBe("https://env.example/api/v1/share/reports");
+  });
+
+  it("receiptInputFromArgs parses --share-retries with clamping", () => {
+    expect(receiptInputFromArgs(parseArgs(["receipt", "--share"])).shareRetries).toBe(0);
+    expect(receiptInputFromArgs(parseArgs(["receipt", "--share", "--share-retries", "2"])).shareRetries).toBe(2);
+    expect(receiptInputFromArgs(parseArgs(["receipt", "--share", "--share-retries", "9"])).shareRetries).toBe(3);
+    expect(receiptInputFromArgs(parseArgs(["receipt", "--share", "--share-retries", "abc"])).shareRetries).toBe(0);
+  });
+
+  it("429: single attempt by default, 'rate limited — retry later' message", async () => {
+    const fetchMock = vi.fn(async () => new Response("slow down", { status: 429 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { io, errors } = captureIo();
+    const code = await runCli(["receipt", "--share"], io, {}, cwd);
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain("share failed: rate limited — retry later");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("400: no retry even with --share-retries 3", async () => {
+    const fetchMock = vi.fn(async () => new Response("bad payload", { status: 400 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { io, errors } = captureIo();
+    const code = await runCli(["receipt", "--share", "--share-retries", "3"], io, {}, cwd);
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain("share failed: HTTP 400");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("runReceiptShare returns an error result instead of throwing", async () => {
