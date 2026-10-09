@@ -3,6 +3,8 @@ import {
   Bm25Index,
   buildEventIndex,
   cosine,
+  eventKey,
+  expandQuery,
   extractFacetHints,
   rankEvents,
   rrfMerge,
@@ -159,5 +161,64 @@ describe("rankEvents", () => {
     ];
     const ranked = rankEvents(events, { query: "migration" });
     expect(ranked[0]?.event.toolId).toBe("A");
+  });
+});
+
+describe("plain-language search", () => {
+  it("expands 'dangerous' to the destructive vocabulary events actually use", () => {
+    const events: TrailEvent[] = [
+      ev({ ts: "2026-10-09T10:00:00.000Z", sessionId: "s", toolId: "Bash", summary: "shell kill (+19 args)" }),
+      ev({ ts: "2026-10-09T10:01:00.000Z", sessionId: "s", toolId: "WebSearch", summary: "(no safe summary)" }),
+    ];
+    const ranked = rankEvents(events, { query: "dangerous" });
+    expect(ranked.map((r) => r.event.toolId)).toContain("Bash");
+    expect(ranked.map((r) => r.event.toolId)).not.toContain("WebSearch");
+  });
+
+  it("expands 'destructive' the same way", () => {
+    const events: TrailEvent[] = [
+      ev({ ts: "2026-10-09T10:00:00.000Z", sessionId: "s", toolId: "Bash", summary: "shell rm -rf build (+2 args)" }),
+      ev({ ts: "2026-10-09T10:01:00.000Z", sessionId: "s", toolId: "Read", summary: "read /tmp/notes.md" }),
+    ];
+    const ranked = rankEvents(events, { query: "destructive" });
+    expect(ranked.map((r) => r.event.toolId)).toEqual(["Bash"]);
+  });
+
+  it("matches verdict words: 'blocked' finds DENY events", () => {
+    const events: TrailEvent[] = [
+      ev({ ts: "2026-10-09T10:00:00.000Z", sessionId: "s", toolId: "Bash", verdict: "DENY", reasonCode: "POLICY_DENY", summary: "(no safe summary)" }),
+      ev({ ts: "2026-10-09T10:01:00.000Z", sessionId: "s", toolId: "Read", verdict: "ALLOW", summary: "read /tmp/notes.md" }),
+    ];
+    const ranked = rankEvents(events, { query: "blocked" });
+    expect(ranked).toHaveLength(1);
+    expect(ranked[0]?.event.verdict).toBe("DENY");
+  });
+
+  it("matches 'held' against REQUIRE_APPROVE events", () => {
+    const events: TrailEvent[] = [
+      ev({ ts: "2026-10-09T10:00:00.000Z", sessionId: "s", toolId: "Bash", verdict: "REQUIRE_APPROVE", summary: "shell rm -rf (+1 args)" }),
+      ev({ ts: "2026-10-09T10:01:00.000Z", sessionId: "s", toolId: "Read", verdict: "ALLOW", summary: "read /tmp/notes.md" }),
+    ];
+    const ranked = rankEvents(events, { query: "held" });
+    expect(ranked[0]?.event.verdict).toBe("REQUIRE_APPROVE");
+  });
+
+  it("drops semantic candidates below the similarity floor", () => {
+    const target = ev({ ts: "2026-10-09T10:00:00.000Z", sessionId: "s", toolId: "WebSearch", summary: "(no safe summary)" });
+    const embeddings = new Map([[eventKey(target), [0.1, 0.99, 0]]]);
+    const ranked = rankEvents([target], { query: "dangerous", queryEmbedding: [1, 0, 0], embeddings });
+    expect(ranked).toHaveLength(0);
+  });
+
+  it("keeps semantic candidates above the similarity floor", () => {
+    const target = ev({ ts: "2026-10-09T10:00:00.000Z", sessionId: "s", toolId: "Bash", summary: "(no safe summary)" });
+    const embeddings = new Map([[eventKey(target), [0.9, 0.1, 0]]]);
+    const ranked = rankEvents([target], { query: "zzzq", queryEmbedding: [1, 0, 0], embeddings });
+    expect(ranked).toHaveLength(1);
+    expect(ranked[0]?.event.toolId).toBe("Bash");
+  });
+
+  it("leaves queries without known concepts untouched", () => {
+    expect(expandQuery("receipt server")).toBe("receipt server");
   });
 });

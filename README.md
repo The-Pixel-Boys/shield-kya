@@ -142,7 +142,7 @@ Sharing is a single attempt by design (storm-proof: no silent retries against th
 
 ### Natural-language search
 
-The **Activity** search box understands plain English. It runs a hybrid of BM25 over tool IDs, summaries, reason codes, projects, and MCP server labels, plus optional local MiniLM semantic reranking. You can type things like `failed stripe transfers`, `files written by grok`, or `approval required production` - stopwords and stemming are handled automatically, and the same search works across the global trail.
+The **Activity** search box understands plain English. It runs a hybrid of BM25 over tool IDs, summaries, reason codes, verdicts, projects, and MCP server labels, plus local MiniLM semantic reranking (shipped as an optional dependency; the report falls back to lexical-only if the model runtime is unavailable). A built-in concept glossary maps everyday words to the vocabulary events actually use, so `dangerous` finds rm/kill/delete/sudo calls, `blocked` finds denials, and `held` finds approval requests. You can also type things like `failed stripe transfers`, `files written by grok`, or `approval required production` - stopwords and stemming are handled automatically, and the same search works across the global trail.
 
 - Offline or `KYA_OFFLINE=1` keeps search purely lexical (no model download).
 - By default the live server downloads `BAAI/bge-small-en-v1.5` once into `~/.kya/models` and caches event vectors in `~/.kya/search-index.json`.
@@ -204,7 +204,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.23.0", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.23.1", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -244,7 +244,7 @@ Offline evaluate by default (no network, no hosted plane); an explicit config ho
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.23.0 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.23.1 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -255,7 +255,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.23.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.23.1 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 

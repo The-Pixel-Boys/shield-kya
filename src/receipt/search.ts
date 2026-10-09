@@ -171,6 +171,7 @@ export function eventDocumentText(e: TrailEvent): string {
   const parts = [
     e.toolId,
     e.reasonCode,
+    verdictWords(e.verdict),
     e.summary ?? "",
     e.project ?? "",
     productLabel(e.product),
@@ -179,6 +180,63 @@ export function eventDocumentText(e: TrailEvent): string {
     e.targetPath ?? "",
   ];
   return parts.filter((p) => p).join(" ");
+}
+
+/**
+ * Lexical forms of a verdict so plain-language queries like "blocked",
+ * "denied" or "held" match the events they describe.
+ */
+export function verdictWords(verdict: string): string {
+  switch (verdict.toUpperCase()) {
+    case "ALLOW":
+      return "allowed";
+    case "DENY":
+      return "denied blocked";
+    case "REQUIRE_APPROVE":
+      return "review approval held";
+    case "NEVER_EVENT":
+      return "never blocked";
+    case "HOLD":
+      return "held";
+    default:
+      return "";
+  }
+}
+
+/**
+ * Curated plain-language to trail-vocabulary glossary. Keys are matched
+ * against raw lowercase query words; values are appended to the query before
+ * tokenization so BM25 can match the words events actually carry (the
+ * tokenizer's light stemming aligns both sides).
+ */
+const QUERY_EXPANSIONS: Record<string, readonly string[]> = {
+  dangerous: ["rm", "delete", "remove", "kill", "sudo", "force", "overwrite", "reset", "drop", "wipe", "denied", "blocked"],
+  destructive: ["rm", "delete", "remove", "kill", "sudo", "force", "overwrite", "reset", "drop", "wipe"],
+  risky: ["rm", "delete", "kill", "sudo", "force", "denied", "blocked", "held"],
+  unsafe: ["rm", "delete", "kill", "sudo", "force", "denied", "blocked"],
+  irreversible: ["rm", "delete", "drop", "reset", "force", "wipe"],
+  blocked: ["denied", "blocked"],
+  denied: ["denied", "blocked"],
+  rejected: ["denied", "blocked"],
+  held: ["held", "review", "approval"],
+  pending: ["held", "review", "approval"],
+  failed: ["error", "failed", "exit"],
+  broken: ["error", "failed"],
+  secret: ["secrets", "token", "password", "credential", "redact"],
+  secrets: ["secret", "token", "password", "credential", "redact"],
+  leak: ["secret", "token", "password", "redact"],
+  leaked: ["secret", "token", "password", "redact"],
+  expensive: ["tokens", "cost", "usd"],
+};
+
+/** Append trail-vocabulary synonyms for known plain-language concepts. */
+export function expandQuery(query: string): string {
+  const extra: string[] = [];
+  for (const word of query.toLowerCase().split(/[^a-z0-9]+/)) {
+    const hit = QUERY_EXPANSIONS[word];
+    if (hit) extra.push(...hit);
+  }
+  return extra.length ? `${query} ${extra.join(" ")}` : query;
 }
 
 /** Stable SHA1 of the searchable document text; used to version embeddings. */
@@ -374,6 +432,7 @@ export function buildEventIndex(events: readonly TrailEvent[]): Bm25Index {
     const fields = [
       { text: e.toolId, weight: 2 },
       { text: e.reasonCode, weight: 1 },
+      { text: verdictWords(e.verdict), weight: 1 },
       { text: e.summary ?? "", weight: 2 },
       { text: e.project ?? "", weight: 1 },
       { text: productLabel(e.product), weight: 1 },
@@ -407,6 +466,11 @@ export interface SearchOptions {
   readonly facetBoost?: number;
 }
 
+/** Absolute cosine floor for semantic candidates (see rankEvents). */
+export const SEMANTIC_MIN_SIM = 0.2;
+/** Cap on semantic candidates fed into the RRF merge. */
+export const SEMANTIC_MAX_CANDIDATES = 100;
+
 /**
  * Rank events by query relevance. Chip filters are applied first; BM25 ranks
  * the survivors; optional semantic embeddings are merged with RRF.
@@ -419,19 +483,25 @@ export function rankEvents(events: readonly TrailEvent[], options: SearchOptions
   const filtered = applyChipFilters(events, filters ?? {});
   const index = buildEventIndex(filtered);
 
-  const bm25 = index.search(q);
+  const bm25 = index.search(expandQuery(q));
   const byId = new Map(filtered.map((e) => [eventKey(e), e]));
 
   let merged: Bm25Score[] = bm25;
   if (embeddings && embeddings.size > 0 && q.length > 0 && queryEmbedding) {
+    // MiniLM cosine over short event documents sits in a narrow band: an
+    // unconditional sim>0 floor lets near-random docs flood the merge
+    // (measured: p99 = 0.125 for a concept query over a real 3k-event trail).
+    // Gate at an absolute floor and cap the candidate count so the semantic
+    // side only contributes when it actually has signal.
     const semantic: Bm25Score[] = [];
     for (const e of filtered) {
       const vec = embeddings.get(eventKey(e));
       if (!vec) continue;
       const sim = cosine(queryEmbedding, vec);
-      if (sim > 0) semantic.push({ id: eventKey(e), score: sim });
+      if (sim >= SEMANTIC_MIN_SIM) semantic.push({ id: eventKey(e), score: sim });
     }
-    merged = rrfMerge(bm25, semantic.sort((a, b) => b.score - a.score));
+    semantic.sort((a, b) => b.score - a.score);
+    merged = rrfMerge(bm25, semantic.slice(0, SEMANTIC_MAX_CANDIDATES));
   }
 
   const ranked: RankedEvent[] = [];
