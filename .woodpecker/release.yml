@@ -16,8 +16,12 @@ steps:
   - name: publish
     image: bash
     environment:
-      NPM_TOKEN:
-        from_secret: npm_token
+      # npm_token is intentionally NOT in this repo's Woodpecker store, and the
+      # server hard-fails a pipeline that references a missing secret — so it is
+      # referenced as a plain (empty) env instead; the publish guard below skips
+      # cleanly. To enable publish: add `npm_token` to the store and switch this
+      # to `from_secret: npm_token`.
+      NPM_TOKEN: "${NPM_TOKEN:-}"
     commands:
       - "T=\"$(mktemp -d)\"; trap 'rm -rf \"$T\"' EXIT"
       - pnpm install
