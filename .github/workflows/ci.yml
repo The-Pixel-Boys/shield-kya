@@ -1,11 +1,8 @@
 name: ci
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
+  # Migrated to Woodpecker (ci.shield-agent.com) — manual-only safety net.
+  workflow_dispatch:
 permissions:
   contents: read
 
