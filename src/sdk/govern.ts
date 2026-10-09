@@ -1,12 +1,12 @@
 /**
  * In-process governance shim: evaluate a tool call through the same path
- * `kya wrap` uses (offline sample evaluate by default — no network, no hosted
+ * `kya wrap` uses (offline sample evaluate by default - no network, no hosted
  * plane required), record the trail event, then ALLOW/REQUIRE_APPROVE run the
  * function while DENY throws KyaDeniedError without running it.
  *
  * Importing this module starts nothing: config resolves lazily on first call.
  *
- * Deliberate coupling: the trail write is fail-closed — a governance shim
+ * Deliberate coupling: the trail write is fail-closed - a governance shim
  * where the audit record cannot be written does not run the action.
  */
 
@@ -24,7 +24,7 @@ export class KyaDeniedError extends KyaError {
 
   constructor(input: { verdict: string; reasonCode: string; toolId: string }) {
     super(
-      `kya ${input.verdict}: ${input.toolId} (${input.reasonCode || "no reason"}) — function not executed`,
+      `kya ${input.verdict}: ${input.toolId} (${input.reasonCode || "no reason"}) - function not executed`,
       "KYA_DENIED",
       1,
     );

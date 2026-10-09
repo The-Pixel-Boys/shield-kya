@@ -61,9 +61,54 @@ export OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=https://otlp.datadoghq.com/v1/metrics
 
 EU sites use the matching Datadog host (`datadoghq.eu`, etc.).
 
+## Exporting KYA verdicts as spans
+
+The OSS CLI can also **export** each gate verdict as one OTLP/JSON span (POST to `{endpoint}/v1/traces`), so verdicts show up in Langfuse, Datadog, Honeycomb, or any OTel Collector next to your agent's own GenAI traces. Default is **off**: no endpoint configured means a pure no-op. Export is fire-and-forget: it never blocks, delays, or changes a verdict, and every failure is swallowed (counted in-memory for a future status command).
+
+Configure in `.kya/config.json` under the `otlpExport` key:
+
+```json
+{
+  "otlpExport": {
+    "endpoint": "http://127.0.0.1:4318",
+    "headers": { "Authorization": "Bearer <token>" },
+    "insecure": false
+  }
+}
+```
+
+- `endpoint` - OTLP/HTTP base URL (`/v1/traces` is appended if missing). Env override: `KYA_OTLP_EXPORT_ENDPOINT`.
+- `headers` - optional auth headers. Prefer putting secrets on the Collector, not in the file.
+- `insecure` - plaintext `http://` is accepted for loopback only; set `true` to allow http to a remote host. `https://` always works.
+
+Span shape: one span per verdict, `service.name=shield-kya-cli`, name `kya.verdict <toolId>`, attributes following the OTel GenAI semantic conventions:
+
+| Attribute | Value |
+|-----------|-------|
+| `gen_ai.tool.name` | gated tool id (`<target>__<tool>`) |
+| `kya.verdict` | `ALLOW` / `REQUIRE_APPROVE` / `DENY` |
+| `kya.reason_code` | e.g. `ALLOW`, `POLICY_DENY` |
+| `kya.mode` | `observe` / `hold` / `offline` |
+| `kya.host` | `ide` / `runtime` |
+| `kya.session_id` | gate session id |
+| `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` | only when the caller knows them |
+
+`DENY` spans carry OTLP status `ERROR` with the reason code as the message; other verdicts are `OK`.
+
+Collector snippet: add a traces pipeline to [`otel-collector-kya.yaml`](./otel-collector-kya.yaml):
+
+```yaml
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/grafana, datadog]
+```
+
 ## Forbidden attributes
 
-Do not tag or export: tool args, prompts/completions, emails, phones, IPs, approval payload bodies, raw `merchant_id` / high-cardinality `tool_id` on metrics.
+Do not tag or export: tool args, prompts/completions, emails, phones, IPs, approval payload bodies, raw `merchant_id` / high-cardinality `tool_id` on metrics. The verdict exporter ships only the attributes in the table above.
 
 ## Related (hosted monorepo only)
 

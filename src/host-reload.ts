@@ -1,15 +1,15 @@
 /**
- * Per-host MCP reload behavior — researched against official docs, 2026-09.
+ * Per-host MCP reload behavior - researched against official docs, 2026-09.
  * The blanket "restart your host" instruction was wrong for most hosts: many
  * watch their config file (or offer an in-session reload) and pick up a new
  * server with no restart at all. Messaging in `connect` / `start` is built
  * from this table, and docs/hosts/<id>.md pages mirror it.
  *
  * Classes:
- *   auto    — new server is picked up in the running host (file watcher or
+ *   auto    - new server is picked up in the running host (file watcher or
  *             in-session refresh; detail says which)
- *   session — loads in the next session/conversation; app stays open
- *   restart — process must be relaunched (resumeTip preserves context if any)
+ *   session - loads in the next session/conversation; app stays open
+ *   restart - process must be relaunched (resumeTip preserves context if any)
  */
 import { execFileSync } from "node:child_process";
 
@@ -36,7 +36,7 @@ export const HOST_RELOAD: Readonly<Record<string, HostReload>> = {
   kiro: {
     id: "kiro",
     reload: "auto",
-    detail: "Kiro hot-reloads mcp.json on save — only the new server starts",
+    detail: "Kiro hot-reloads mcp.json on save - only the new server starts",
     processNames: ["kiro", "kiro-cli"],
   },
   qwen: {
@@ -78,7 +78,7 @@ export const HOST_RELOAD: Readonly<Record<string, HostReload>> = {
   kimi: {
     id: "kimi",
     reload: "session",
-    detail: "Kimi Code registers MCP servers at session start — a new session is enough",
+    detail: "Kimi Code registers MCP servers at session start - a new session is enough",
     processNames: ["kimi"],
   },
   claude: {
@@ -162,14 +162,14 @@ export function hostRunning(info: HostReload, procs: ReadonlySet<string>): boole
 export function reloadMessage(info: HostReload, label: string, running: boolean): string {
   switch (info.reload) {
     case "auto":
-      return `No restart needed — ${info.detail}.`;
+      return `No restart needed - ${info.detail}.`;
     case "session":
       return running
-        ? `${label} is running — start a new session to load shield-kya (${info.detail}). No app restart.`
-        : `shield-kya loads in your next ${label} session — no restart needed.`;
+        ? `${label} is running - start a new session to load shield-kya (${info.detail}). No app restart.`
+        : `shield-kya loads in your next ${label} session - no restart needed.`;
     case "restart":
       return running
-        ? `${label} is running — relaunch it to load shield-kya (${info.detail}${info.resumeTip ? `; ${info.resumeTip}` : ""}).`
-        : `shield-kya loads when you next start ${label} — it is not running, so nothing to restart.`;
+        ? `${label} is running - relaunch it to load shield-kya (${info.detail}${info.resumeTip ? `; ${info.resumeTip}` : ""}).`
+        : `shield-kya loads when you next start ${label} - it is not running, so nothing to restart.`;
   }
 }

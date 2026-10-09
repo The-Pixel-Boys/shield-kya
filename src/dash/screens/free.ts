@@ -19,7 +19,7 @@ export function homeBody(input: {
     `offline      ${input.offline ? "yes (sample tools, not production PEP)" : "no"}`,
     `api key      ${input.hasApiKey ? "set" : "empty (fail-closed on live panes)"}`,
     `plane        ${input.offline ? "offline" : input.baseUrl}`,
-    `agentId      ${input.agentId ?? "(none — kya register-agent)"}`,
+    `agentId      ${input.agentId ?? "(none - kya register-agent)"}`,
     "",
     "2 policy (e force-eval / w wrap)   3 agents (k kill, confirm y)",
     "4 approvals (i invoke)             5 sessions (b/R shrink, confirm y)",
@@ -47,7 +47,7 @@ export function policyOfflineBody(): string[] {
     env: { host: "ide" },
   });
   return [
-    "Policy playground (offline sample — not the production PEP).",
+    "Policy playground (offline sample - not the production PEP).",
     "Sole PEP in production is Shield HTTP evaluate.",
     "",
     ...table(
@@ -119,7 +119,7 @@ export function sandboxBody(input: {
 }): string[] {
   const lines = [
     "Sandbox (opt-in Firecracker wrap). Not MCP. Never auto-exec.",
-    `KYA_SANDBOX   ${input.backend || "(unset — set mock|firecracker)"}`,
+    `KYA_SANDBOX   ${input.backend || "(unset - set mock|firecracker)"}`,
     "Spawn/exec go through evaluate first. DENY / Hold block side effects.",
     "",
   ];
@@ -199,7 +199,7 @@ export function orrBody(summary?: {
   path?: string;
 }): string[] {
   return [
-    "ORR board (reporting only — not a second PEP).",
+    "ORR board (reporting only - not a second PEP).",
     "Scanners are evidence. Sole PEP remains Shield KYA.",
     "",
     summary
@@ -215,7 +215,7 @@ export function mcpBody(input: { host: string; hasApiKey: boolean }): string[] {
     "  kya serve-mcp --port 13920",
     "  tools: kya.policy_evaluate | kya.session_ingest | kya.request_approval",
     `host         ${input.host}`,
-    `api key      ${input.hasApiKey ? "set" : "empty — serve-mcp will fail-closed"}`,
+    `api key      ${input.hasApiKey ? "set" : "empty - serve-mcp will fail-closed"}`,
     "Dash will not start the server (it would steal this TTY).",
   ];
 }

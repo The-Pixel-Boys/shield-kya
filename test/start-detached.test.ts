@@ -27,7 +27,7 @@ function runCli(args: readonly string[], cwd: string): Promise<RunOut> {
         HOME: cwd,
         KYA_NO_BROWSER: "1",
         // CI/dev machines may run Node < engines; the gate is unit-tested
-        // separately — keep these spawns on the detach behavior.
+        // separately - keep these spawns on the detach behavior.
         KYA_SKIP_NODE_CHECK: "1",
       },
     });
@@ -46,7 +46,7 @@ async function fetchStatus(url: string): Promise<number> {
   return res.status;
 }
 
-describe("kya start — detached report server", () => {
+describe("kya start - detached report server", () => {
   it(
     "start exits, report serves with token, stop kills it",
     async () => {
@@ -71,7 +71,7 @@ describe("kya start — detached report server", () => {
           token: string;
         };
         expect(url).toContain(state.token);
-        // State file carries the loopback token — must not be world-readable.
+        // State file carries the loopback token - must not be world-readable.
         if (process.platform !== "win32") {
           const { statSync } = await import("node:fs");
           expect(statSync(statePath).mode & 0o777).toBe(0o600);

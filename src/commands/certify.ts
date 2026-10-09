@@ -1,5 +1,5 @@
 /**
- * kya certify — Agent Trust Baseline gap report from local evidence.
+ * kya certify - Agent Trust Baseline gap report from local evidence.
  * Evidence only: not a second PEP; never mints principals, never ALLOWs,
  * DENYs, or blocks anything. Local-first: no network, no account, no key check.
  */
@@ -216,11 +216,11 @@ export function runCertify(options: CertifyOptions): CertifyResult {
 export function formatCertifySummary(report: CertifyReport): string {
   const o = report.overall;
   const lines = [
-    `certify ${report.catalog.id} v${report.catalog.version} — ${o.result.toUpperCase()}`,
+    `certify ${report.catalog.id} v${report.catalog.version} - ${o.result.toUpperCase()}`,
     `${o.pass} pass · ${o.gap} gap · ${o.insufficientEvidence} insufficient evidence · ${o.attested} attested`,
   ];
   if (o.result === "gap" && o.gap === 0) {
-    lines.push("  no certifiable evidence in window — run the gate first (kya wrap / kya connect)");
+    lines.push("  no certifiable evidence in window - run the gate first (kya wrap / kya connect)");
   }
   for (const r of report.requirements.filter((x) => x.status === "gap").slice(0, 10)) {
     lines.push(`  gap ${r.id} [${r.severity}] ${r.title}`);

@@ -1,12 +1,12 @@
 /**
- * kya connect <host> — wire Shield KYA MCP into a coding host's config file.
+ * kya connect <host> - wire Shield KYA MCP into a coding host's config file.
  * Idempotent create/merge/skip. Global (home) scope by default; --project for
  * hosts with project-level config. Hosts without a verified MCP config stay
  * copy-paste recipes (recipeOnly).
  *
  * Home-config writes are merge-only and symlink-safe: an existing target is
  * resolved with realpath and must be a regular file (dotfile setups symlink
- * ~/.claude.json & co. — writing the resolved regular file is supported).
+ * ~/.claude.json & co. - writing the resolved regular file is supported).
  */
 import {
   existsSync,
@@ -244,11 +244,11 @@ export function writeTarget(path: string): string {
   try {
     real = realpathSync(path);
   } catch {
-    throw new UsageError(`${path} cannot be resolved — refusing to write`);
+    throw new UsageError(`${path} cannot be resolved - refusing to write`);
   }
   if (!statSync(real).isFile()) {
     throw new UsageError(
-      `${path} does not resolve to a regular file — refusing to write`,
+      `${path} does not resolve to a regular file - refusing to write`,
     );
   }
   return real;
@@ -256,8 +256,8 @@ export function writeTarget(path: string): string {
 
 /**
  * Where a create should land. A dangling symlink (dotfiles target not yet
- * materialized) resolves to its link target — relative links resolve against
- * the link's directory — so the rename completes the link instead of
+ * materialized) resolves to its link target - relative links resolve against
+ * the link's directory - so the rename completes the link instead of
  * replacing it with a regular file.
  */
 export function createTarget(path: string): string {
@@ -268,7 +268,7 @@ export function createTarget(path: string): string {
       return resolved;
     }
   } catch {
-    /* not a symlink or unreadable link — plain create below */
+    /* not a symlink or unreadable link - plain create below */
   }
   mkdirSync(dirname(path), { recursive: true });
   return path;
@@ -294,19 +294,19 @@ export function mergeJsonHostConfig(
   try {
     raw = JSON.parse(readFileSync(target, "utf8")) as Record<string, unknown>;
   } catch {
-    // Never rewrite a host's real config we cannot parse — that destroys settings.
+    // Never rewrite a host's real config we cannot parse - that destroys settings.
     throw new UsageError(
-      `${path} is not valid JSON — fix it by hand or back it up and delete it, then re-run connect`,
+      `${path} is not valid JSON - fix it by hand or back it up and delete it, then re-run connect`,
     );
   }
   const existing = raw[rootKey];
   if (existing !== undefined && (typeof existing !== "object" || existing === null || Array.isArray(existing))) {
     throw new UsageError(
-      `${path} has "${rootKey}" but it is not an object — refusing to clobber it`,
+      `${path} has "${rootKey}" but it is not an object - refusing to clobber it`,
     );
   }
   const servers = (existing ?? {}) as Record<string, unknown>;
-  // Presence of the key — even a null value — counts as wired: never touch it
+  // Presence of the key - even a null value - counts as wired: never touch it
   // without --force.
   if (Object.prototype.hasOwnProperty.call(servers, serverKey) && !force) {
     return "skipped";
@@ -358,7 +358,7 @@ function tomlGateTableBlock(url: string, dialect: "grok-toml" | "codex-toml"): s
  * Minimal TOML wiring for Grok/Codex: append the [mcp_servers.<key>] table at
  * EOF, skip when present, --force replaces the existing table block. An inline
  * `<key> = …` definition under [mcp_servers] cannot be merged safely as
- * text — refuse it with a clear error.
+ * text - refuse it with a clear error.
  */
 function mergeTomlHostConfig(
   path: string,
@@ -383,12 +383,12 @@ function mergeTomlHostConfig(
   if (!header) {
     if (re.quotedTable.test(text)) {
       throw new UsageError(
-        `${path} has a quoted [mcp_servers."${serverKey}"] table — appending an unquoted one would duplicate it; fix the header by hand, then re-run connect`,
+        `${path} has a quoted [mcp_servers."${serverKey}"] table - appending an unquoted one would duplicate it; fix the header by hand, then re-run connect`,
       );
     }
     if (re.inline.test(text)) {
       throw new UsageError(
-        `${path} defines ${serverKey} inline under [mcp_servers] — remove that line by hand, then re-run connect`,
+        `${path} defines ${serverKey} inline under [mcp_servers] - remove that line by hand, then re-run connect`,
       );
     }
     const sep = text.length === 0 || text.endsWith("\n") ? "" : "\n";
@@ -450,12 +450,12 @@ export function wireHost(input: WireHostInput): WireHostResult {
   const spec = CONNECT_REGISTRY[key];
   if (!spec) {
     throw new UsageError(
-      `unknown host "${input.host}" — supported: ${knownHosts().join(", ")}`,
+      `unknown host "${input.host}" - supported: ${knownHosts().join(", ")}`,
     );
   }
   if (spec.recipeOnly) {
     throw new UsageError(
-      `${spec.label} has no safe auto-wire — follow the copy-paste recipe in ${spec.recipeOnly}`,
+      `${spec.label} has no safe auto-wire - follow the copy-paste recipe in ${spec.recipeOnly}`,
     );
   }
   const scope: ConnectScope = input.scope ?? "global";
@@ -465,7 +465,7 @@ export function wireHost(input: WireHostInput): WireHostResult {
       : spec.globalPath?.(input.home);
   if (!path) {
     throw new UsageError(
-      `${spec.label} has no ${scope}-scope config — try --${scope === "project" ? "global" : "project"}`,
+      `${spec.label} has no ${scope}-scope config - try --${scope === "project" ? "global" : "project"}`,
     );
   }
   const status = mergeHostConfig(
@@ -486,7 +486,7 @@ export function wireNextMessage(
   procs: ReadonlySet<string>,
 ): string {
   const verify =
-    "Verify: ask the agent to list its MCP tools — kya.policy_evaluate, kya.session_ingest, kya.request_approval should appear.";
+    "Verify: ask the agent to list its MCP tools - kya.policy_evaluate, kya.session_ingest, kya.request_approval should appear.";
   const reload = hostReload(hostId);
   return reload
     ? `${reloadMessage(reload, label, hostRunning(reload, procs))} ${verify}`
@@ -501,7 +501,7 @@ export async function runConnect(
   const home = env.KYA_HOME?.trim() || homedir();
   if (input.hooks && !hookSupported(input.host)) {
     throw new UsageError(
-      `no hook wiring for ${input.host} — supported: claude, grok, kimi`,
+      `no hook wiring for ${input.host} - supported: claude, grok, kimi`,
     );
   }
   const wired = wireHost({
@@ -519,7 +519,7 @@ export async function runConnect(
     try {
       r = wireHook({ host: wired.host, home, force: input.force });
     } catch (err) {
-      // The MCP write already landed — say so, so the user knows the state.
+      // The MCP write already landed - say so, so the user knows the state.
       if (err instanceof UsageError) {
         throw new UsageError(
           `${err.message} (note: MCP config was already wired at ${wired.path})`,
@@ -550,7 +550,7 @@ export function formatConnectHuman(r: ConnectResult): string {
       ? "created"
       : r.status === "wired"
         ? "wired"
-        : "already wired (skipped — use --force to overwrite)";
+        : "already wired (skipped - use --force to overwrite)";
   const hooksVerb =
     r.hooksStatus === undefined
       ? undefined
@@ -558,7 +558,7 @@ export function formatConnectHuman(r: ConnectResult): string {
         ? "hooks created"
         : r.hooksStatus === "wired"
           ? "hooks wired"
-          : "hooks already wired (skipped — use --force to overwrite)";
+          : "hooks already wired (skipped - use --force to overwrite)";
   return [
     `KYA connect ${r.host}`,
     `${verb}: ${r.path}`,

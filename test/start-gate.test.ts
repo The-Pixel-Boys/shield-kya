@@ -59,7 +59,7 @@ function fakeGateDeps(calls: { ensure: number; run: number }, opts: { ensureFail
   };
 }
 
-describe("kya start — gateway auto-bootstrap", () => {
+describe("kya start - gateway auto-bootstrap", () => {
   it("servers>0: imports, installs, starts, rewires only the imported ids, backs up originals", async () => {
     const cwd = tmp("kya-startgate-");
     const home = tmp("kya-startgate-home-");
@@ -159,7 +159,7 @@ describe("kya start — gateway auto-bootstrap", () => {
       expect(r.gate!.running).toBe(false);
       expect(r.gate!.warnings.length).toBeGreaterThan(0);
       expect(r.gate!.warnings[0]).toContain("gateway binary");
-      // Direct entries stay — removing them without a gateway would break the user.
+      // Direct entries stay - removing them without a gateway would break the user.
       const claude = JSON.parse(readFileSync(join(home, ".claude.json"), "utf8")) as {
         mcpServers: Record<string, unknown>;
       };

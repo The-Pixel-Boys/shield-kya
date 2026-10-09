@@ -43,7 +43,7 @@ export function resolveGatePlatform(
   const a = arch === "x64" ? "amd64" : arch === "arm64" ? "arm64" : undefined;
   if (!os || !a) {
     throw new KyaError(
-      `no gateway build for ${platform}/${arch} — supported: linux, darwin, windows × amd64, arm64`,
+      `no gateway build for ${platform}/${arch} - supported: linux, darwin, windows × amd64, arm64`,
       "GATE_UNSUPPORTED_PLATFORM",
     );
   }
@@ -152,7 +152,7 @@ export async function ensureGateBinary(deps: EnsureBinaryDeps = {}): Promise<Ens
     const [tgzRes, sumRes] = [await fetchFn(base), await fetchFn(`${base}.sha256`)];
     if (!tgzRes.ok || !sumRes.ok) {
       throw new KyaError(
-        `gateway artifact ${name} not available (HTTP ${!tgzRes.ok ? tgzRes.status : sumRes.status}) — gateway binaries are published by the kya release pipeline (see legal/THIRD-PARTY.md); check the release tag gate-v${GATE_VERSION}`,
+        `gateway artifact ${name} not available (HTTP ${!tgzRes.ok ? tgzRes.status : sumRes.status}) - gateway binaries are published by the kya release pipeline (see legal/THIRD-PARTY.md); check the release tag gate-v${GATE_VERSION}`,
         "GATE_DOWNLOAD_FAILED",
       );
     }
@@ -161,7 +161,7 @@ export async function ensureGateBinary(deps: EnsureBinaryDeps = {}): Promise<Ens
     const actual = sha256Hex(tgz);
     if (actual !== expected) {
       throw new KyaError(
-        `gateway artifact checksum mismatch (expected ${expected}, got ${actual}) — refusing to install`,
+        `gateway artifact checksum mismatch (expected ${expected}, got ${actual}) - refusing to install`,
         "GATE_CHECKSUM_MISMATCH",
       );
     }
@@ -171,7 +171,7 @@ export async function ensureGateBinary(deps: EnsureBinaryDeps = {}): Promise<Ens
     const extracted = join(stage, platform === "win32" ? "kya-gate.exe" : "kya-gate");
     if (!existsSync(extracted)) {
       throw new KyaError(
-        `gateway artifact ${name} did not contain a kya-gate binary — corrupt repack?`,
+        `gateway artifact ${name} did not contain a kya-gate binary - corrupt repack?`,
         "GATE_ARTIFACT_INVALID",
       );
     }

@@ -205,6 +205,6 @@ export function triggerHostedSyncFromEnv(input: HostedSyncEnvInput): void {
       force: input.force,
     });
   } catch {
-    /* best-effort — sync must never break gate commands */
+    /* best-effort - sync must never break gate commands */
   }
 }

@@ -1,5 +1,5 @@
 /**
- * Mastra-style tool adapter. Structural only — no @mastra imports. Matches
+ * Mastra-style tool adapter. Structural only - no @mastra imports. Matches
  * the `{ id, description, inputSchema, execute }` tool shape; returns the
  * same shape with a governed execute.
  */

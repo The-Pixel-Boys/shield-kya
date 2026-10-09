@@ -1,7 +1,7 @@
 /**
  * Fail-safe loaders for the local Agent-activity report.
  * Every loader returns undefined (or an empty list) on missing, corrupt, or
- * oversize state and never throws — the report renders with zero optional
+ * oversize state and never throws - the report renders with zero optional
  * state. Nothing here ever reads .kya/receipt-server.json (loopback token).
  */
 import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
@@ -184,7 +184,7 @@ export function loadOrrCard(cwd: string): OrrCard | undefined {
 }
 
 /**
- * Per-category ratings from <cwd>/orr-report/report.json — sibling of the slim
+ * Per-category ratings from <cwd>/orr-report/report.json - sibling of the slim
  * OrrCard for consumers that need category granularity (certify). Same
  * confined-read pattern; invalid entries are dropped, not fatal.
  */
@@ -242,7 +242,7 @@ const CERTIFY_SEVERITY_RANK: Record<RequirementSeverity, number> = {
 /**
  * Live Agent Trust Baseline card, recomputed from local evidence on every
  * call via computeLiveCertify (read-only, no writes). Fail-safe like every
- * loader here: any internal error yields undefined, never a throw — the
+ * loader here: any internal error yields undefined, never a throw - the
  * report renders without the panel rather than not at all.
  */
 export function loadCertifyCard(
@@ -304,7 +304,7 @@ export interface WiredHostRow {
 function hasWiredEntry(path: string, spec: HostSpec): boolean {
   try {
     // statSync follows symlinks on purpose (dotfile setups symlink host
-    // configs) — but only regular files are ever read: FIFOs, devices and
+    // configs) - but only regular files are ever read: FIFOs, devices and
     // sockets would block or stream forever.
     const st = statSync(path);
     if (!st.isFile() || st.size > MAX_HOST_CONFIG_BYTES) return false;
@@ -333,7 +333,7 @@ export function loadWiredHosts(
   return Object.entries(CONNECT_REGISTRY).map(([id, spec]): WiredHostRow => {
     const reload = hostReload(id);
     const isRunning = reload ? hostRunning(reload, running) : false;
-    // recipeOnly hosts have no verified config file — never probe for one.
+    // recipeOnly hosts have no verified config file - never probe for one.
     if (spec.recipeOnly) {
       return {
         id,

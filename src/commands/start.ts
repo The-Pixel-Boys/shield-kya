@@ -6,9 +6,9 @@
  * `.cursor/mcp.json` in cwd), user-level MCP configs for hosts with evidence
  * of installation (config file present, or the host's config dir exists),
  * and PreToolUse hooks for hook-capable hosts (claude, grok, kimi).
- * All go through merge-only logic — never clobber. The gateway bootstrap
+ * All go through merge-only logic - never clobber. The gateway bootstrap
  * (bootstrapGate) then imports third-party MCP servers found in those host
- * configs into gateways.json and routes them through the local gateway —
+ * configs into gateways.json and routes them through the local gateway -
  * warn-and-continue throughout, skippable via --no-gate / KYA_GATE=off.
  */
 import { existsSync, readFileSync } from "node:fs";
@@ -98,8 +98,8 @@ function errMsg(err: unknown): string {
 
 /**
  * Gate bootstrap for `kya start`: scaffold gateways.json, import third-party
- * servers discovered in host configs, then — only when there is something to
- * govern — install the binary, start the supervisor, and route the source
+ * servers discovered in host configs, then - only when there is something to
+ * govern - install the binary, start the supervisor, and route the source
  * hosts through the gateway (direct entries removed, originals backed up
  * under .kya/backups). Every step warns and continues: start never fails
  * because of the gateway, and host configs are only touched once the
@@ -119,7 +119,7 @@ export async function bootstrapGate(
     imported = importGateCandidates(candidates, env).imported;
     servers = readGateways(env).servers;
   } catch (err) {
-    warnings.push(`gateways.json needs a hand fix (${errMsg(err)}) — gateway bootstrap skipped`);
+    warnings.push(`gateways.json needs a hand fix (${errMsg(err)}) - gateway bootstrap skipped`);
     return {
       imported: [],
       serverCount: 0,
@@ -127,7 +127,7 @@ export async function bootstrapGate(
       backups: [],
       rewiredHosts: [],
       warnings,
-      summary: "gateway: gateways.json is not usable — fix it by hand, then re-run kya start",
+      summary: "gateway: gateways.json is not usable - fix it by hand, then re-run kya start",
     };
   }
   const importedIds = imported.map((s) => s.id);
@@ -140,7 +140,7 @@ export async function bootstrapGate(
       rewiredHosts: [],
       warnings,
       summary:
-        "gateway: no third-party MCP servers found — add one to any host config and re-run kya start",
+        "gateway: no third-party MCP servers found - add one to any host config and re-run kya start",
     };
   }
 
@@ -149,7 +149,7 @@ export async function bootstrapGate(
     await ensure(env);
   } catch (err) {
     warnings.push(
-      `gateway binary could not be installed (${errMsg(err)}) — continuing without the gateway; host configs untouched`,
+      `gateway binary could not be installed (${errMsg(err)}) - continuing without the gateway; host configs untouched`,
     );
     return {
       imported: importedIds,
@@ -158,7 +158,7 @@ export async function bootstrapGate(
       backups: [],
       rewiredHosts: [],
       warnings,
-      summary: `gateway: ${servers.length} server${servers.length === 1 ? "" : "s"} configured but the binary is unavailable (offline?) — re-run kya start when online`,
+      summary: `gateway: ${servers.length} server${servers.length === 1 ? "" : "s"} configured but the binary is unavailable (offline?) - re-run kya start when online`,
     };
   }
 
@@ -168,7 +168,7 @@ export async function bootstrapGate(
   try {
     run = await runGate(config, env);
   } catch (err) {
-    warnings.push(`gateway failed to start (${errMsg(err)}) — continuing without it; host configs untouched`);
+    warnings.push(`gateway failed to start (${errMsg(err)}) - continuing without it; host configs untouched`);
     return {
       imported: importedIds,
       serverCount: servers.length,
@@ -176,7 +176,7 @@ export async function bootstrapGate(
       backups: [],
       rewiredHosts: [],
       warnings,
-      summary: "gateway: configured but the listener did not come up — see `kya gate doctor`",
+      summary: "gateway: configured but the listener did not come up - see `kya gate doctor`",
     };
   }
 
@@ -208,14 +208,14 @@ export async function bootstrapGate(
       if (removal) backups.push(removal.backup);
       rewiredHosts.push(host);
     } catch (err) {
-      warnings.push(`${host}: could not route through the gateway (${errMsg(err)}) — its existing servers are kept`);
+      warnings.push(`${host}: could not route through the gateway (${errMsg(err)}) - its existing servers are kept`);
     }
   }
 
   const addr = run.url.replace(/^https?:\/\//, "");
   const summary = importedIds.length
     ? `gateway: ${importedIds.length} server${importedIds.length === 1 ? "" : "s"} imported (${importedIds.join(", ")}), gateway running on ${addr}` +
-      (backups.length ? " — originals backed up to .kya/backups/" : "")
+      (backups.length ? " - originals backed up to .kya/backups/" : "")
     : `gateway: running on ${addr} (${servers.length} server${servers.length === 1 ? "" : "s"}: ${servers.map((s) => s.id).join(", ")})`;
   return {
     imported: importedIds,
@@ -240,13 +240,13 @@ function seedTrailIfEmpty(cwd: string): void {
     verdict: "ALLOW",
     reasonCode: "ALLOW",
     mode: "observe",
-    summary: "KYA started — wire MCP in your host, then wrap tools here",
+    summary: "KYA started - wire MCP in your host, then wrap tools here",
   });
 }
 
 /**
  * Config dirs that count as evidence a host is installed even before its
- * config file exists (home dir itself never counts — ~/.claude.json's parent
+ * config file exists (home dir itself never counts - ~/.claude.json's parent
  * is ~). Any other host qualifies only when its config file already exists.
  */
 const EVIDENCE_DIRS: Readonly<Record<string, (home: string) => string>> = {
@@ -364,8 +364,8 @@ export async function runStart(
         running: false,
         backups: [],
         rewiredHosts: [],
-        warnings: [`gateway bootstrap failed (${errMsg(err)}) — continuing without it`],
-        summary: "gateway: bootstrap failed — kya start continues without the gateway",
+        warnings: [`gateway bootstrap failed (${errMsg(err)}) - continuing without it`],
+        summary: "gateway: bootstrap failed - kya start continues without the gateway",
       };
     }
   }
@@ -410,10 +410,10 @@ export async function runStart(
     reportReused,
     next:
       `${hostNotes} ` +
-      "The report runs in the background — reopen with `kya receipt --open`, " +
+      "The report runs in the background - reopen with `kya receipt --open`, " +
       "stop with `kya stop`." +
       (hooksWired.length
-        ? " Hooks take effect in new sessions — claude, grok, and kimi all load hooks at session start."
+        ? " Hooks take effect in new sessions - claude, grok, and kimi all load hooks at session start."
         : ""),
   };
 }
@@ -427,7 +427,7 @@ export function formatStartHuman(r: StartResult): string {
       ? `wired hosts: ${r.wiredHosts.map((h) => `${h.label} (${h.path})`).join(", ")}`
       : undefined,
     r.hooksWired.length
-      ? `hooks: ${r.hooksWired.map((h) => h.label).join(", ")} (PreToolUse interception — applies to new sessions)`
+      ? `hooks: ${r.hooksWired.map((h) => h.label).join(", ")} (PreToolUse interception - applies to new sessions)`
       : undefined,
     r.gate ? r.gate.summary : undefined,
     ...(r.gate?.warnings.map((w) => `gateway warning: ${w}`) ?? []),

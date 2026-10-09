@@ -66,9 +66,37 @@ describe("kya hook", () => {
     expect(r.stdout).toBe("");
   });
 
+  it("records a diffPreview for write-like tools so the Changes tab populates", async () => {
+    const e = env();
+    const r = await runHook({
+      host: "kimi", strict: false, env: e, cwd: cwd(),
+      stdinText: claudePayload("Write", { file_path: "/p/src/a.ts", content: "export const x = 1;\n" }),
+    });
+    expect(r.exitCode).toBe(0);
+    const row = readTrail(cwd(), e)[0];
+    expect(row).toMatchObject({ toolId: "Write", targetPath: "/p/src/a.ts" });
+    expect(row.diffPreview).toContain("export const x = 1;");
+  });
+
+  it("records an edit hunk preview and never a shell preview", async () => {
+    const e = env(); const c = cwd();
+    await runHook({
+      host: "claude", strict: false, env: e, cwd: c,
+      stdinText: claudePayload("Edit", { file_path: "/p/b.ts", old_string: "const a = 1;", new_string: "const a = 2;" }),
+    });
+    await runHook({
+      host: "claude", strict: false, env: e, cwd: c,
+      stdinText: claudePayload("Bash", { command: "echo hi > /p/c.txt" }),
+    });
+    const trail = readTrail(c, e);
+    expect(trail[0]?.diffPreview).toContain("-const a = 1;");
+    expect(trail[0]?.diffPreview).toContain("+const a = 2;");
+    expect(trail[1]?.diffPreview).toBeUndefined();
+  });
+
   it("spawn-level: dist/cli.js hook reads piped stdin, exits 0, records a trail row", () => {
     const cliJs = join(import.meta.dirname, "..", "dist", "cli.js");
-    expect(existsSync(cliJs), "dist/cli.js missing — run pnpm build first").toBe(true);
+    expect(existsSync(cliJs), "dist/cli.js missing - run pnpm build first").toBe(true);
     const e = env(); const c = cwd();
     const r = spawnSync(process.execPath, [cliJs, "hook", "--host", "claude"], {
       input: claudePayload("Bash", { command: "ls" }),

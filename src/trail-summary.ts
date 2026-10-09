@@ -127,13 +127,13 @@ export function scrubUrl(value: string): string {
 }
 
 /**
- * Shell lines: keep bin + arg count only — never the full command
+ * Shell lines: keep bin + arg count only - never the full command
  * (env assignments, -p passwords, Basic auth headers).
  */
 export function summarizeShellCommand(cmd: string): string {
   const trimmed = cmd.trim();
   if (!trimmed) return "shell";
-  // Space-free URL masquerading as a "command" — scrub query before binning.
+  // Space-free URL masquerading as a "command" - scrub query before binning.
   if (!/\s/.test(trimmed) && (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) || /[?&#].*=/.test(trimmed))) {
     return finalize([`shell`, pathLike(trimmed)]) ?? "shell";
   }
@@ -236,7 +236,7 @@ export function deriveTrailSummary(toolId: string, args?: unknown): string | und
   }
 
   if (typeof args === "string") {
-    // Treat bare strings as opaque — only length, avoid dumping secrets.
+    // Treat bare strings as opaque - only length, avoid dumping secrets.
     return finalize([verb || "args", `(${args.length} chars)`]);
   }
 

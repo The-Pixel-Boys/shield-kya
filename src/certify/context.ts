@@ -45,7 +45,7 @@ export function assembleEvidenceContext(
   return {
     now,
     events,
-    // The shared resolver the gate itself uses (config.ts) — certify can
+    // The shared resolver the gate itself uses (config.ts) - certify can
     // never report a mode the gate would not actually run.
     gateMode: resolveGateMode({ cwd, env }),
     wiredHostCount: wiredHosts.filter((h) => h.wired !== "none").length,

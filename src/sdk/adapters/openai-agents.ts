@@ -1,5 +1,5 @@
 /**
- * OpenAI Agents TS function-tool adapter. Structural only — no
+ * OpenAI Agents TS function-tool adapter. Structural only - no
  * @openai/agents import. Matches the `{ name, description, parameters,
  * invoke }` function-tool shape where invoke receives the run context and a
  * JSON string input; returns the same shape with a governed invoke. The

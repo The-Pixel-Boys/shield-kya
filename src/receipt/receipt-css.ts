@@ -12,7 +12,7 @@
  * #overview/#activity/#changes/#certify/#gateway/#system and :target shows the
  * matching zone. The hide rules are gated behind
  * `@supports selector(body:has(*))`, so a browser without :has() simply shows
- * every zone stacked — degraded, but nothing is ever hidden unreachable.
+ * every zone stacked - degraded, but nothing is ever hidden unreachable.
  */
 export function receiptCss(): string {
   return `
@@ -250,16 +250,66 @@ export function receiptCss(): string {
   }
   /* Hero result pill reads larger than inline status pills. */
   .hero-certify .pill { font-size: 0.82rem; padding: 0.22rem 0.75rem; }
-  /* Status legend + attested summary: small muted single lines under the count tiles. */
-  .hero-certify .legend, .hero-certify .att-line {
-    margin: 0.3rem 0 0; font-size: 0.72rem; color: var(--mute);
+  /* Status legend as a compact definition list under the count tiles. */
+  .cert-legend {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 0.35rem 1rem; margin: 0.5rem 0 0; padding: 0.55rem 0.7rem;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: color-mix(in srgb, var(--bg) 60%, var(--card));
+    font-size: 0.72rem; color: var(--mute);
+  }
+  .cert-legend > div { display: flex; gap: 0.35rem; align-items: baseline; }
+  .cert-legend dt {
+    font-weight: 700; color: var(--fg); text-transform: capitalize; min-width: 4.5rem;
+  }
+  .cert-legend dd { margin: 0; overflow-wrap: break-word; }
+  /* Attested summary line under the legend. */
+  .hero-certify .att-line {
+    margin: 0.4rem 0 0; font-size: 0.72rem; color: var(--mute);
     overflow-wrap: break-word;
   }
-  /* Evidence one-liner sits beneath its gap row. */
-  .hero-certify .rows .gap-ev {
-    flex-basis: 100%; color: var(--mute); font-size: 0.74rem;
-    overflow-wrap: break-word;
+  /* Expandable requirement rows: summary stays compact, body shows full detail. */
+  .cert-rows { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.6rem 0 0; }
+  .req-row {
+    border: 1px solid var(--line); border-radius: 6px;
+    background: color-mix(in srgb, var(--bg) 55%, var(--card));
+    font-size: 0.84rem;
   }
+  .req-row summary {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem;
+    padding: 0.5rem 0.7rem; cursor: pointer; list-style: none;
+  }
+  .req-row summary::-webkit-details-marker { display: none; }
+  .req-row summary::after {
+    content: "Show details"; margin-left: auto;
+    font-size: 0.7rem; color: var(--mute); text-decoration: underline;
+  }
+  .req-row[open] summary::after { content: "Hide details"; }
+  .req-row .req-body {
+    padding: 0 0.7rem 0.6rem; border-top: 1px solid var(--line);
+    font-size: 0.78rem; color: var(--fg);
+  }
+  .req-row .req-body p { margin: 0.45rem 0 0; line-height: 1.45; }
+  .req-row .req-mean { color: var(--mute); }
+  .req-row .req-evi code,
+  .req-row .req-cta code {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.74rem; background: var(--card); padding: 0.15rem 0.35rem;
+    border-radius: 4px; border: 1px solid var(--line);
+  }
+  .req-row .req-hint { color: var(--mute); font-size: 0.7rem; }
+  /* CTA row at the bottom of the Certify hero. */
+  .cert-cta {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem;
+    margin: 0.7rem 0 0;
+  }
+  .cert-cta .btn {
+    display: inline-flex; align-items: center;
+    padding: 0.45rem 0.9rem; border-radius: 6px;
+    background: var(--fg); color: var(--card);
+    font-size: 0.78rem; font-weight: 700; text-decoration: none;
+  }
+  .cert-cta .btn:hover { opacity: 0.9; }
   .kpi-row { display: flex; flex-wrap: wrap; gap: 0.8rem 1.2rem; }
   .kpi { display: flex; flex-direction: column; gap: 0.1rem; min-width: 2.8rem; }
   .kpi-num {
@@ -274,7 +324,7 @@ export function receiptCss(): string {
     font-size: 0.66rem; font-weight: 700; letter-spacing: 0.07em;
     text-transform: uppercase; color: var(--mute);
   }
-  /* Static verdict mix bars (hero) — same visual language as .db-item but
+  /* Static verdict mix bars (hero) - same visual language as .db-item but
      non-interactive: no hover, no aria-pressed, no data-fgroup. */
   .mix { display: flex; flex-direction: column; gap: 0.32rem; }
   .mix-row {
@@ -459,7 +509,7 @@ export function receiptCss(): string {
     border-color: color-mix(in srgb, var(--ok) 55%, var(--line));
     background: color-mix(in srgb, var(--ok) 12%, var(--card));
   }
-  /* Vertical mini-bar timeline (not clickable — no time filter exists). */
+  /* Vertical mini-bar timeline (not clickable - no time filter exists). */
   .db-tl { display: flex; align-items: stretch; gap: 2px; height: 4.6rem; }
   .db-tl .col {
     flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
@@ -530,6 +580,17 @@ export function receiptCss(): string {
     overflow-wrap: break-word;
   }
   .certify-detail .att { color: var(--fg); }
+  /* Long evidence/attestation text: a clipped preview line that expands in
+     place to the full text. Used by the Certify hero attestation line and the
+     Certify tab's requirement table. */
+  .req-more summary { cursor: pointer; list-style: none; }
+  .req-more summary::-webkit-details-marker { display: none; }
+  .req-more summary::after {
+    content: "Read more"; margin-left: 0.35rem; font-size: 0.68rem;
+    color: var(--fg); text-decoration: underline; white-space: nowrap;
+  }
+  .req-more[open] summary::after { content: "Hide"; }
+  .req-more .full { margin-top: 0.2rem; overflow-wrap: break-word; }
   .wdot {
     width: 0.5rem; height: 0.5rem; border-radius: 50%; flex: none;
     align-self: center; background: var(--mute);
@@ -570,7 +631,7 @@ export function receiptCss(): string {
   .pill.orr-green { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
   .pill.orr-amber { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
   .pill.orr-red { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
-  /* Attested tone: neutral foreground — a signed statement, not evidence. */
+  /* Attested tone: neutral foreground - a signed statement, not evidence. */
   .pill.att { color: var(--fg); border-color: color-mix(in srgb, var(--fg) 35%, transparent); }
   .orrline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.55rem; }
   .orrline .disp { font-size: 0.84rem; font-weight: 600; }

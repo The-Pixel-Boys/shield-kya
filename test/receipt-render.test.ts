@@ -350,7 +350,7 @@ describe("renderReceiptHtml sections", () => {
     expect(html).toContain('aria-label="Showback"');
     // Identity line: name/id · host · baseUrl, as inert text (no link).
     expect(html).toContain("refund-bot/agt-1 · ide · http://127.0.0.1:8090");
-    // Loader output is never linked — the only anchors in the page are the
+    // Loader output is never linked - the only anchors in the page are the
     // in-page tab nav (#overview/#certify/#activity/#system).
     expect(html).not.toMatch(/<a [^>]*href="(?!#)/);
     // Mode chips are distinct from the Hold verdict chip.
@@ -367,9 +367,9 @@ describe("renderReceiptHtml sections", () => {
     // Reasons chips.
     expect(html).toContain("HIGH_STAKES_WRITE");
     // Wired hosts: wired row, manual-setup recipe row, muted unwired row.
-    expect(html).toContain("Cursor (IDE + Agent CLI) — wired (global) · auto · running");
+    expect(html).toContain("Cursor (IDE + Agent CLI) - wired (global) · auto · running");
     expect(html).toContain("manual setup");
-    expect(html).toContain("Codex — not wired");
+    expect(html).toContain("Codex - not wired");
     expect(html).not.toContain("mcp.json"); // status words only, no config detail
     // Sandboxes table.
     expect(html).toContain("sbx-0123456789abcdef".slice(0, 19));
@@ -542,7 +542,7 @@ describe("renderReceiptMarkdown sections", () => {
     expect(md).toContain("## Sessions");
     expect(md).toContain("## Reasons");
     expect(md).toContain("## Wired hosts");
-    expect(md).toContain("Cursor (IDE + Agent CLI) — wired (global) · auto · running");
+    expect(md).toContain("Cursor (IDE + Agent CLI) - wired (global) · auto · running");
     expect(md).toContain("## Sandboxes");
     expect(md).toContain("## Operational readiness");
     expect(md).toContain("overall: amber · disposition: conditional");

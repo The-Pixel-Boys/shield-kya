@@ -1,7 +1,7 @@
 /**
  * Registry of well-known third-party MCP servers for the offline evaluator
  * and the report's server facet. Advisory only: production authorization
- * stays with the control plane. Unknown server ids stay unknown — the
+ * stays with the control plane. Unknown server ids stay unknown - the
  * registry never guesses.
  */
 
@@ -280,7 +280,7 @@ export function mcpToolTier(serverId: string, toolName: string): McpToolTier | u
 
 /**
  * ADMIN-tier rule patterns (regex sources) for a known server, in registry
- * order. Undefined for unknown servers — the gate's CEL generation treats
+ * order. Undefined for unknown servers - the gate's CEL generation treats
  * those as "no server-specific deny rules" (destructive-name deny only).
  */
 export function mcpServerAdminPatterns(serverId: string): readonly string[] | undefined {

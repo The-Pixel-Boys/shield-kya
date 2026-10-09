@@ -16,12 +16,12 @@ export function dashboardBody(k: {
       ["kpi", "value"],
       [
         ["pending approvals", String(k.pendingApprovals)],
-        ["agents registered", Number.isFinite(k.agentCount) ? String(k.agentCount) : "—"],
-        ["observed sessions", String(k.sessionCount ?? "—")],
-        ["high-risk sessions", String(k.highRiskSessions ?? "—")],
-        ["policy denies", String(k.policyDeny ?? "—")],
-        ["approve required", String(k.approveRequired ?? "—")],
-        ["approve granted", String(k.approveGranted ?? "—")],
+        ["agents registered", Number.isFinite(k.agentCount) ? String(k.agentCount) : "-"],
+        ["observed sessions", String(k.sessionCount ?? "-")],
+        ["high-risk sessions", String(k.highRiskSessions ?? "-")],
+        ["policy denies", String(k.policyDeny ?? "-")],
+        ["approve required", String(k.approveRequired ?? "-")],
+        ["approve granted", String(k.approveGranted ?? "-")],
       ],
     ),
     "",
@@ -33,7 +33,7 @@ export function casesBody(
   rows: readonly { id: string; status?: string; amount?: string }[],
 ): string[] {
   return [
-    "Evidence & cases (optional disputes pack). Observational — does not approve submit.",
+    "Evidence & cases (optional disputes pack). Observational - does not approve submit.",
     "",
     ...table(
       ["id", "status", "amount"],
@@ -55,7 +55,7 @@ export function metricsBody(m: Record<string, string | number | boolean>): strin
 
 export function edgeBody(flags: Record<string, string | boolean | number>): string[] {
   return [
-    "Edge / Gatekeeper (read-only). Complement — not a second PEP.",
+    "Edge / Gatekeeper (read-only). Complement - not a second PEP.",
     "",
     ...table(
       ["flag", "value"],
@@ -66,7 +66,7 @@ export function edgeBody(flags: Record<string, string | boolean | number>): stri
 
 export function settingsBody(lines: readonly string[]): string[] {
   return [
-    "Settings (licensed). Team / SSO / keys / billing — same surfaces as the web console.",
+    "Settings (licensed). Team / SSO / keys / billing - same surfaces as the web console.",
     "",
     ...(lines.length ? lines : ["Connect a plane to load tenant settings."]),
   ];

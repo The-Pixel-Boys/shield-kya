@@ -1,5 +1,5 @@
 /**
- * LangGraph.js-style tool adapter. Structural only — no @langgraph imports.
+ * LangGraph.js-style tool adapter. Structural only - no @langgraph imports.
  * Matches the `{ name, description, schema, func }` tool shape; returns the
  * same shape with a governed func.
  */

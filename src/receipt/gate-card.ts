@@ -2,7 +2,7 @@
  * Gateway card for the Agent-activity report: the local kya gateway's setup
  * state (gateways.json + supervisor state file + installed binary) plus
  * per-server activity from the trail events in the current window. Fail-safe
- * like every receipt loader — unreadable or corrupt state degrades toward
+ * like every receipt loader - unreadable or corrupt state degrades toward
  * "not set up" / "stopped", never a throw.
  */
 import { inspectGateBinary } from "../gate/binary.js";
@@ -15,7 +15,7 @@ export type GateState = "not-set-up" | "configured-stopped" | "running";
 
 /** not-set-up quickstart line, shared by the HTML panel and the markdown artifact. */
 export const GATE_NOT_SETUP_QUICKSTART =
-  "Add any MCP server to a host config (or run `kya gate init` to pick from recipes) — `kya start` routes it through the gateway automatically.";
+  "Add any MCP server to a host config (or run `kya gate init` to pick from recipes) - `kya start` routes it through the gateway automatically.";
 
 export type GateServerWorst = "never" | "deny" | "hold" | "allow" | "none";
 
@@ -38,7 +38,7 @@ export interface GateCard {
   /** Listener URL/port when running (from the supervisor state file). */
   readonly url?: string;
   readonly port?: number;
-  /** Supervisor start timestamp — the uptime anchor when running. */
+  /** Supervisor start timestamp - the uptime anchor when running. */
   readonly startedAt?: string;
   readonly binaryPresent: boolean;
   readonly binaryVersion?: string;
@@ -58,7 +58,7 @@ export function loadGateCard(
   try {
     servers = readGateways(env).servers;
   } catch {
-    // Corrupt gateways.json — the report degrades to not-set-up, never throws.
+    // Corrupt gateways.json - the report degrades to not-set-up, never throws.
     servers = [];
   }
   const bin = inspectGateBinary(env);

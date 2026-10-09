@@ -82,7 +82,11 @@ interface Mount {
 }
 
 /** Parse chips/rows/days out of the rendered HTML and evaluate the filter script. */
-function mount(html: string, url: { search?: string; hash?: string } = {}): Mount {
+function mount(
+  html: string,
+  url: { search?: string; hash?: string } = {},
+  opts: { live?: boolean } = {},
+): Mount {
   const script = /<script id="kya-filters">([\s\S]*?)<\/script>/.exec(html)?.[1];
   expect(script, "filter script tag present").toBeTruthy();
 
@@ -120,10 +124,15 @@ function mount(html: string, url: { search?: string; hash?: string } = {}): Moun
   };
   const searchInput = new FakeEl({ id: "feed-search", class: "feed-search-input", type: "search" });
   const searchMeta = new FakeEl({ class: "feed-search-meta" });
+  const liveTokenEl = opts.live ? new FakeEl({ "data-live-token": "1" }) : null;
   const document = {
     getElementById: (id: string) =>
       id === "feed" ? feed : id === "clear-filters" ? clearBtn : id === "feed-search" ? searchInput : null,
-    querySelectorAll: (sel: string) => (sel === "[data-fgroup]" ? chips : []),
+    querySelectorAll: (sel: string) => {
+      if (sel === "[data-fgroup]") return chips;
+      if (sel === "main[data-live-token]") return liveTokenEl ? [liveTokenEl] : [];
+      return [];
+    },
     querySelector: (sel: string) => (sel === ".feed-search-meta" ? searchMeta : null),
   };
   new Function("document", "location", "history", script!)(document, location, history);
@@ -186,6 +195,14 @@ describe("receipt filter engine (inline script, shimmed DOM)", () => {
     expect(visible(m)).toBe(2); // OR within verdict: A + C
     chip(m, "product", "kimi").click(); // deselect -> verdict group only
     expect(visible(m)).toBe(4); // everything except E (REQUIRE_APPROVE)
+  });
+
+  it("filters client-side even on live reports (so chips feel instant before feedUpdate returns)", () => {
+    const m = mount(HTML, {}, { live: true });
+    expect(visible(m)).toBe(5);
+    chip(m, "product", "kimi").click();
+    expect(visible(m)).toBe(2); // A + C, no waiting for server
+    expect(m.location.search).toBe("?f=product:kimi");
   });
 
   it("does not let prototype-chain property names bypass an active filter", () => {
@@ -318,7 +335,7 @@ describe("receipt filter engine (inline script, shimmed DOM)", () => {
       buildReceiptModel("s", ENC_EVENTS, { live: true, liveToken: "test-token" }),
     );
 
-    // %2C decodes to a comma INSIDE the value — it must not split segments.
+    // %2C decodes to a comma INSIDE the value - it must not split segments.
     const comma = mount(ENC_HTML, { search: "?f=project:foo%2Cbar" });
     expect(visible(comma)).toBe(1);
     expect(row(comma, "data-project", "foo,bar").classList.contains("filtered-out")).toBe(false);

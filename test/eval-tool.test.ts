@@ -51,7 +51,7 @@ describe("eval-tool", () => {
     );
   });
 
-  it("calls evaluate with dry HTTP mock — DENY for never.event", async () => {
+  it("calls evaluate with dry HTTP mock - DENY for never.event", async () => {
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body));
       expect(body.toolId).toBe("org.sample.never.event");

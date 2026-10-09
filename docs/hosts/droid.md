@@ -7,7 +7,7 @@ Wire KYA into [Factory's Droid](https://factory.ai) so tool calls routed through
 ## Setup — preferred: `droid mcp add`
 
 ```bash
-droid mcp add shield-kya "npx --no-install @shield-agent/kya@0.22.0 serve-mcp --stdio" \
+droid mcp add shield-kya "npx --no-install @shield-agent/kya@0.23.0 serve-mcp --stdio" \
   --env KYA_BASE_URL=https://shield-agent.com \
   --env KYA_API_KEY=$KYA_API_KEY \
   --env KYA_HOST=ide

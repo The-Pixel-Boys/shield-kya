@@ -211,7 +211,7 @@ describe("changes tab rendering", () => {
       buildWindowReceiptModel([ev({ ts: iso(0), sessionId: "s", targetPath: "a.ts" })], 3),
     );
     expect(empty).toContain(
-      "No recorded changes yet — write/edit tool calls will show up here.",
+      "No recorded changes yet - write/edit tool calls will show up here.",
     );
     expect(empty).toContain('id="changes-list"');
   });
@@ -252,7 +252,7 @@ describe("changes markdown", () => {
     expect(md).not.toContain("## Changes");
   });
 
-  it("flattens hostile targetPath newlines — no raw HTML breakout from the header code span", () => {
+  it("flattens hostile targetPath newlines - no raw HTML breakout from the header code span", () => {
     const md = renderReceiptMarkdown(
       buildWindowReceiptModel(
         [
@@ -269,7 +269,7 @@ describe("changes markdown", () => {
     expect(md).toContain("## Changes");
     const lines = md.split("\n");
     // The payload survives only as literal text inside the single-line
-    // `#### ` code-span header — never as its own raw-HTML line.
+    // `#### ` code-span header - never as its own raw-HTML line.
     const payloadLines = lines.filter((l) => l.includes("<script>alert(1)</script>"));
     expect(payloadLines).toHaveLength(1);
     expect(payloadLines[0]).toMatch(/^#### `/);

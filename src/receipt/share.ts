@@ -1,10 +1,10 @@
 /**
- * `kya receipt --share` — publish a redacted summary of the current report
+ * `kya receipt --share` - publish a redacted summary of the current report
  * window to the hosted platform and get back a public URL.
  *
  * The payload is built FROM THE RECEIPT MODEL, never from the raw trail:
  * aggregate counts and public labels only. No absolute paths, no session ids,
- * no tool arguments, no identity (baseUrl/IP) — anything that could identify
+ * no tool arguments, no identity (baseUrl/IP) - anything that could identify
  * a machine, project, or person stays local. Dependency-free: global fetch.
  */
 import { CLI_VERSION } from "../version.js";
@@ -27,7 +27,7 @@ export interface ShareStats {
   readonly review: number;
   readonly deny: number;
   readonly never: number;
-  /** Distinct sessions in the window — a count, never ids. */
+  /** Distinct sessions in the window - a count, never ids. */
   readonly sessions: number;
 }
 
@@ -136,7 +136,7 @@ export function clampShareRetries(raw: string | undefined): number {
   return Math.min(n, SHARE_MAX_RETRIES);
 }
 
-/** POST the payload; 15s timeout. Never throws — failures come back as {ok:false}. */
+/** POST the payload; 15s timeout. Never throws - failures come back as {ok:false}. */
 export async function shareReceiptPayload(
   payload: SharePayload,
   opts: { readonly baseUrl: string; readonly fetchImpl?: typeof fetch; readonly timeoutMs?: number },
@@ -169,8 +169,8 @@ export async function shareReceiptPayload(
           retryAfterSeconds,
           error:
             retryAfterSeconds != null
-              ? `share failed: rate limited — retry in ~${retryAfterSeconds}s`
-              : "share failed: rate limited — retry later",
+              ? `share failed: rate limited - retry in ~${retryAfterSeconds}s`
+              : "share failed: rate limited - retry later",
         };
       }
       return { ok: false, status: res.status, error: `share failed: HTTP ${res.status}` };
