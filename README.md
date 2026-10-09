@@ -84,7 +84,7 @@ Hosts without a `connect` target still work: `kya wrap --offline -- <agent comma
 
 ## Hook interception
 
-`kya start` also wires a `PreToolUse` hook into every installed hook-capable host it detects: Claude Code (`~/.claude/settings.json`, merge-only), Grok (`~/.grok/hooks/shield-kya.json`, kya-managed file), and Kimi Code (`~/.kimi-code/config.toml`, `[[hooks]]` append). Every tool call the agent makes then passes through `kya hook` first: evaluated locally (offline, sub-second, no network) and recorded on the global trail.
+`kya start` also wires a `PreToolUse` hook into every installed hook-capable host it detects: Claude Code (`~/.claude/settings.json`, merge-only), Grok (`~/.grok/hooks/shield-kya.json`, kya-managed file), and Kimi Code (`~/.kimi-code/config.toml`, `[[hooks]]` append). Every tool call the agent makes then passes through `kya hook` first: evaluated locally (offline, sub-second, no network) and recorded on the global trail. (If you opted in to anonymous usage stats, the hook also starts a detached helper at most once a day; see [Anonymous usage stats](#anonymous-usage-stats-opt-in-off-by-default).)
 
 Decision mapping: a local never-list **DENY** blocks the tool call (exit `2` plus `hookSpecificOutput` deny JSON with `permissionDecision: "deny"`). **ALLOW** and **REQUIRE_APPROVE** are recorded on the trail as advisory and the call proceeds. Manual wiring can pass `--strict` on the hook command to also block **REQUIRE_APPROVE**.
 
@@ -111,7 +111,7 @@ kya connect claude --gate   # point the host at the gateway (server key shield-k
 kya gate doctor   # binary, config, listener health, loopback-only posture
 ```
 
-`kya gate stop` stops the supervisor and the binary with it. Honest notes: `kya gate setup` (and `kya start`'s auto-bootstrap, only when it found servers to govern) downloads the pinned gateway binary from our releases — nothing else fetches anything; `run` never downloads. Observe mode means allowed calls are recorded, not blocked — the deny set above is the only hard stop, and plane enforcement stays with `kya.policy_evaluate`. `kya connect <host> --gate` covers the same hosts as plain `connect` — grok gets a `[mcp_servers.shield-kya-gate]` url table in its config.toml (Grok supports remote MCP servers over HTTP). Per-server tiers and recipes: [docs/mcp-servers.md](docs/mcp-servers.md).
+`kya gate stop` stops the supervisor and the binary with it. Honest notes: `kya gate setup` (and `kya start`'s auto-bootstrap, only when it found servers to govern) downloads the pinned gateway binary from our releases — nothing else downloads anything (the only other network use is the opt-in anonymous usage stats in [docs/telemetry.md](docs/telemetry.md), off unless you say yes); `run` never downloads. Observe mode means allowed calls are recorded, not blocked — the deny set above is the only hard stop, and plane enforcement stays with `kya.policy_evaluate`. `kya connect <host> --gate` covers the same hosts as plain `connect` — grok gets a `[mcp_servers.shield-kya-gate]` url table in its config.toml (Grok supports remote MCP servers over HTTP). Per-server tiers and recipes: [docs/mcp-servers.md](docs/mcp-servers.md).
 
 ## Longer path (optional)
 
@@ -137,6 +137,8 @@ The report itself is a dashboard: a hero row on top (live **Certify** result, ve
 ### Sharing a report
 
 `kya receipt --share` publishes a **redacted summary** of the current window (aggregate verdict counts, product and reason-code rollups, and the Certify status — no paths, no tool arguments, no session IDs) to shield-agent.com and prints a public URL (`/r/<id>`, expires after 7 days) anyone can open — every shared page carries the one-line install so readers can audit their own agents. Point it at a different collector with `--share-url <base>` or `KYA_SHARE_URL`.
+
+Sharing is a single attempt by design (storm-proof: no silent retries against the collector); `--share-retries <n>` (max 3) opts into bounded retries on 429/5xx/network failures with exponential backoff + jitter, honoring the server's `Retry-After`.
 
 ### Natural-language search
 
@@ -177,6 +179,8 @@ Tag sessions with `KYA_HOST=ide` or `KYA_HOST=runtime`. Same policy path either 
 | `KYA_RECEIPT_AUTO` | No | `0` disables auto-open receipt after wrap; `1` forces |
 | `KYA_SEARCH_SEMANTIC` | No | `off` disables MiniLM semantic reranking (BM25 still works) |
 | `KYA_SHARE_URL` | No | `kya receipt --share` collector base (default `https://shield-agent.com`) |
+| `KYA_TELEMETRY` | No | `0`/`off` forces anonymous usage stats off ([docs/telemetry.md](docs/telemetry.md)); they are off unless you opted in |
+| `DO_NOT_TRACK` | No | `1` forces anonymous usage stats off, same as `KYA_TELEMETRY=0` |
 
 Gate mode can also be pinned in the project's `.kya/config.json`:
 `{"gateMode": "hold"}` or `{"gateMode": "offline"}` (exact values only —
@@ -200,7 +204,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.21.0", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.22.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -240,7 +244,7 @@ Offline evaluate by default (no network, no hosted plane); an explicit config ho
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.21.0 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.22.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -251,7 +255,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.21.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.22.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -317,7 +321,7 @@ Certify is **evidence-only**. It never ALLOWs, DENYs, or blocks anything — the
 
 `--sign` emits `evidence-bundle.json`: canonical JSON, ed25519-signed by a locally generated key (`~/.kya/keys/evidence-ed25519.json`, mode 0600, auto-created on first use). Each `--sign` run prints the signing key fingerprint; when the key was just created the CLI notes that key continuity resets there (earlier bundles stay verifiable only under the old pubkey). A self-signed developer key proves bundle **integrity** and **continuity of a key** — **not identity**. Identity binding and the verified badge are the hosted verification product (separate). The bundle format is open and documented in `docs/certify.md`; anyone can verify a bundle offline with the embedded pubkey.
 
-Everything here is local, free, and offline: no account, no network calls, no license check. The catalog is MIT-licensed and PRs are welcome.
+`kya certify` is local, free, and offline: no account, no network calls, no license check (it never sends usage stats). The catalog is MIT-licensed and PRs are welcome.
 
 ## Optional sandbox wrap (Firecracker)
 
@@ -354,11 +358,24 @@ pnpm build
 - [Per-host recipes (23 hosts)](docs/hosts/)
 - [Top-20 MCP server support matrix (taxonomy + gate recipes)](docs/mcp-servers.md)
 - [OTLP metrics (OSS + hosted)](docs/otlp.md)
+- [Anonymous usage stats (opt-in): what is sent, controls, retention](docs/telemetry.md)
 - [OWASP MCP governance map](docs/owasp-mcp-governance.md)
 - [kya certify — Agent Trust Baseline gap reports](docs/certify.md)
 - [SDK & framework integrations (in-process shims)](docs/sdk-integrations.md)
 - [Hosted operator SSO / SCIM (not in OSS CLI)](docs/hosted-operator-sso.md)
 - See also `LIMITATIONS.md` in this repo
+
+## Anonymous usage stats (opt-in, off by default)
+
+The first time you run `kya start`, `kya init` or `kya connect` in a terminal, KYA asks once whether to share anonymous usage stats (`[y/N]`, the default is No). Only an explicit `y` or `yes` turns it on. Nothing is sent in CI, in non-interactive runs, with `--json`, or when `DO_NOT_TRACK=1` / `KYA_TELEMETRY=0` is set. `kya hook` itself never touches the network; when you opted in it starts a detached helper at most once a day that sends one `ping`, so hook-only installs still count as active.
+
+```bash
+kya telemetry show        # the exact payload, field by field
+kya telemetry status      # on / off / not asked, and what overrides it
+kya telemetry off --purge # turn off and erase what the server holds for this install
+```
+
+Full details, the payload, retention and how to self-host the endpoint: [docs/telemetry.md](docs/telemetry.md).
 
 ## OTLP (optional)
 

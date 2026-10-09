@@ -97,6 +97,12 @@ import {
 import { triggerHostedSyncFromEnv } from "./gate/hosted-sync.js";
 import { runGateServe } from "./commands/gate-serve.js";
 import { ensureSupportedNode } from "./node-upgrade.js";
+import {
+  maybePromptConsent,
+  maybeSpawnHookPing,
+  runTelemetryCommand,
+  startSessionBeacon,
+} from "./telemetry.js";
 
 const HELP = `Shield KYA light CLI — Know Your Agent (provider-agnostic)
 
@@ -137,6 +143,8 @@ Commands:
   sessions          List observed sessions
   shrink            Drop session clearance (--id --to BUILD|READ|DEPLOY)
   serve-mcp         Local MCP gate (HTTP default; --stdio for hosts)
+  telemetry         Opt-in anonymous usage stats, OFF by default
+                    (status | on | off [--purge] | show | reset) — see docs/telemetry.md
   orr run           Read-only ORR board (reporting only — not a second PEP)
                     Optional: --producer harness.agentshield [--agentshield-json <file>]
   dash              Terminal desk (FREE panes; actions on a TTY, --once for CI)
@@ -160,6 +168,7 @@ Options (shared):
   --q <query>       receipt: pre-fill the activity-feed search
   --share           receipt: publish a redacted summary, print the public URL
   --share-url <url> receipt: share endpoint base (or KYA_SHARE_URL; default https://shield-agent.com)
+  --share-retries <n> receipt: retry --share on 429/5xx/network with backoff (max 3; default 0 = single attempt)
   --once            dash: print one frame and exit (CI / pipes)
   --window <n>      certify: report window in days (default 30)
   --fail-on <m>     certify: gap (default, exit 1 on gaps) | never
@@ -203,6 +212,8 @@ export interface CliIo {
   /** TTY detection + confirm are injectable for tests (node-upgrade gate). */
   readonly isTty?: boolean;
   readonly confirm?: (question: string) => Promise<boolean>;
+  /** Raw-answer prompt seam for the telemetry consent question (default: readline on stdin/stderr). */
+  readonly ask?: (question: string) => Promise<string>;
 }
 
 const defaultIo: CliIo = {
@@ -250,6 +261,7 @@ export async function runCli(
           parsed.flags["no-open"] === true || parsed.flags["no-open"] === "true";
         const noGate =
           parsed.flags["no-gate"] === true || parsed.flags["no-gate"] === "true";
+        if (!config.json) await maybePromptConsent(io, env);
         const result = await runStart(config, { force, open: !noOpen, gate: !noGate });
         if (config.json) {
           io.log(JSON.stringify(result, null, 2));
@@ -281,10 +293,15 @@ export async function runCli(
           offline: true,
         });
         const input = receiptInputFromArgs(parsed);
-        await runReceiptServe(config, {
-          days: input.days ?? 3,
-          sessionId: input.sessionId,
-        });
+        const beacon = startSessionBeacon("report", { env, cwd });
+        try {
+          await runReceiptServe(config, {
+            days: input.days ?? 3,
+            sessionId: input.sessionId,
+          });
+        } finally {
+          await beacon.stop();
+        }
         return 0;
       }
 
@@ -313,6 +330,7 @@ export async function runCli(
           parsed.flags["project"] === true || parsed.flags["project"] === "true"
             ? ("project" as const)
             : ("global" as const);
+        if (!config.json) await maybePromptConsent(io, env);
         const result = await runConnect(
           config,
           { host, scope, force, hooks, ...(gate ? { gateUrl: gateMcpUrl(env) } : {}) },
@@ -398,11 +416,17 @@ export async function runCli(
 
       case "gate-serve": {
         // Internal: detached supervisor child of `kya gate run`.
-        await runGateServe(cwd);
+        const beacon = startSessionBeacon("gateway", { env, cwd });
+        try {
+          await runGateServe(cwd);
+        } finally {
+          await beacon.stop();
+        }
         return 0;
       }
 
       case "init": {
+        if (!flagBool(parsed.flags, "json")) await maybePromptConsent(io, env);
         const result = initFromArgs(parsed, cwd);
         if (parsed.flags["json"] === true || parsed.flags["json"] === "true") {
           io.log(JSON.stringify(result, null, 2));
@@ -488,6 +512,7 @@ export async function runCli(
               sessionId: input.sessionId,
               days: input.days,
               shareUrl: flagString(parsed.flags, "share-url"),
+              shareRetries: input.shareRetries,
             },
             env,
           );
@@ -584,30 +609,37 @@ export async function runCli(
         });
         const opts = serveMcpOptionsFromArgs(parsed);
         const result = await runServeMcp(config, opts);
-        if (result.mode === "http" && result.http) {
-          io.log(
-            `KYA MCP gate listening on ${result.http.url} (host=${config.host})`,
-          );
-          io.log(
-            `  token: ${result.http.token}  (header X-KYA-MCP-Token; /health is open)`,
-          );
-          io.log("  GET  /health");
-          io.log("  GET  /connectors/mcp.json");
-          io.log("  GET  /mcp/tools");
-          io.log("  POST /mcp  (JSON-RPC)");
-          io.log("  tools: kya.policy_evaluate | kya.session_ingest | kya.request_approval");
-          io.log(
-            "  fail-closed: evaluate/request only — no irreversible side effects without APPROVED",
-          );
-          await new Promise<void>((resolve) => {
-            const stop = () => {
-              void result.http?.close().finally(resolve);
-            };
-            process.once("SIGINT", stop);
-            process.once("SIGTERM", stop);
-          });
-        } else if (result.mode === "stdio" && result.stdio) {
-          await result.stdio.done;
+        // Opt-in anonymous session beacon. Silent by construction: no stdout/stderr, because an MCP
+        // stdio process owns stdout as its protocol channel.
+        const beacon = startSessionBeacon(result.mode === "http" ? "mcp-http" : "mcp-stdio", { env, cwd });
+        try {
+          if (result.mode === "http" && result.http) {
+            io.log(
+              `KYA MCP gate listening on ${result.http.url} (host=${config.host})`,
+            );
+            io.log(
+              `  token: ${result.http.token}  (header X-KYA-MCP-Token; /health is open)`,
+            );
+            io.log("  GET  /health");
+            io.log("  GET  /connectors/mcp.json");
+            io.log("  GET  /mcp/tools");
+            io.log("  POST /mcp  (JSON-RPC)");
+            io.log("  tools: kya.policy_evaluate | kya.session_ingest | kya.request_approval");
+            io.log(
+              "  fail-closed: evaluate/request only — no irreversible side effects without APPROVED",
+            );
+            await new Promise<void>((resolve) => {
+              const stop = () => {
+                void beacon.stop().then(() => result.http?.close()).finally(resolve);
+              };
+              process.once("SIGINT", stop);
+              process.once("SIGTERM", stop);
+            });
+          } else if (result.mode === "stdio" && result.stdio) {
+            await result.stdio.done;
+          }
+        } finally {
+          await beacon.stop();
         }
         return 0;
       }
@@ -783,6 +815,19 @@ export async function runCli(
         return await runSandboxCommand(parsed);
       }
 
+      case "telemetry": {
+        return runTelemetryCommand(
+          {
+            sub: parsed.positionals[0],
+            purge: flagBool(parsed.flags, "purge"),
+            json: flagBool(parsed.flags, "json"),
+          },
+          io,
+          env,
+          cwd,
+        );
+      }
+
       case "hook": {
         const host = flagString(parsed.flags, "host") ?? "other";
         const strict = flagBool(parsed.flags, "strict");
@@ -805,6 +850,8 @@ export async function runCli(
         const r = await runHook({ host, strict, stdinText, env, cwd });
         if (r.stdout) process.stdout.write(r.stdout);
         if (r.stderr) process.stderr.write(r.stderr);
+        // After the answer is out. Opt-in, at most daily, detached: the hook never waits on the network.
+        maybeSpawnHookPing({ env, cwd, host });
         return r.exitCode;
       }
 
