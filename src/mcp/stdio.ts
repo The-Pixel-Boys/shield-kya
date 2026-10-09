@@ -27,7 +27,7 @@ export interface StdioMcpHandle {
 }
 
 /**
- * MCP over stdio — newline-delimited JSON-RPC 2.0 (common host shape).
+ * MCP over stdio - newline-delimited JSON-RPC 2.0 (common host shape).
  * Also accepts Content-Length framed messages (LSP-style) when headers present.
  */
 export function startStdioMcp(options: StdioMcpOptions): StdioMcpHandle {
@@ -68,7 +68,7 @@ async function onLine(
   output: NodeJS.WritableStream,
 ): Promise<void> {
   if (!line || line.startsWith("Content-Length:")) {
-    // Content-Length framing without body on same line — skip header-only lines
+    // Content-Length framing without body on same line - skip header-only lines
     return;
   }
   let msg: JsonRpcRequest;

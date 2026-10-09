@@ -27,6 +27,7 @@ import {
   SHOWBACK_DISCLAIMER,
   type ShowbackReport,
 } from "../showback/cost-per-task.js";
+import { summarizeTrailUsage } from "../showback/trail-usage.js";
 import { computeDashboard, type Dashboard, type DashboardRow, type ToolWorst } from "./dashboard.js";
 import { buildChangesModel, type ChangesModel } from "./changes.js";
 import {
@@ -60,7 +61,7 @@ export interface ReceiptModel {
   readonly mcpSeen?: readonly { readonly server?: string; readonly toolId: string }[];
   /** When true, page connects to /events SSE for live refresh. */
   readonly live?: boolean;
-  /** Loopback SSE token — set only by the live server, never in static renders. */
+  /** Loopback SSE token - set only by the live server, never in static renders. */
   readonly liveToken?: string;
   /** Page number for the Activity feed (1-based). */
   readonly page: number;
@@ -430,7 +431,7 @@ function modeBadge(mode: TrailEvent["mode"] | undefined): string {
   return `<span class="modeb" title="${letter === "O" ? "observe" : letter === "H" ? "hold" : "offline"} mode">${letter}</span>`;
 }
 
-// project is attacker-controllable (trail files are user-editable) — always escaped.
+// project is attacker-controllable (trail files are user-editable) - always escaped.
 function projectMeta(project: string | undefined): string {
   const p = project?.trim();
   if (!p) return "";
@@ -442,8 +443,8 @@ function projectMeta(project: string | undefined): string {
 function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean, preserveOrder?: boolean): string {
   if (events.length === 0) {
     const hint = live
-      ? "No events yet — evaluate a tool call with <code>kya wrap</code> and this page will refresh."
-      : "No events yet — evaluate a tool call with <code>kya wrap</code>, then regenerate this receipt.";
+      ? "No events yet - evaluate a tool call with <code>kya wrap</code> and this page will refresh."
+      : "No events yet - evaluate a tool call with <code>kya wrap</code>, then regenerate this receipt.";
     return `<p class="empty">${hint}</p>`;
   }
 
@@ -507,7 +508,7 @@ function changeWorstPill(worst: ToolWorst): string {
  */
 function changesPanel(changes: ChangesModel, nowMs: number): string {
   if (changes.sessions.length === 0) {
-    return `<p class="empty">No recorded changes yet — write/edit tool calls will show up here.</p>`;
+    return `<p class="empty">No recorded changes yet - write/edit tool calls will show up here.</p>`;
   }
   return changes.sessions
     .map((s) => {
@@ -559,7 +560,7 @@ function identityLine(identity: KyaFileConfig | undefined): string {
     (b): b is string => typeof b === "string" && b.trim().length > 0,
   );
   if (bits.length === 0) return "";
-  // baseUrl is inert text here — never an anchor.
+  // baseUrl is inert text here - never an anchor.
   return `<div class="identity">${esc(clip(bits.join(" · "), 160))}</div>`;
 }
 
@@ -681,7 +682,7 @@ function worstTone(worst: ToolWorst): "ok" | "warn" | "bad" {
 /**
  * Analytics dashboard: four cards in a 2×2 grid. Every data row except the
  * timeline is a filter toggle on the same data-fgroup/data-fvalue contract as
- * the header chips — the engine picks them up via the [data-fgroup] query.
+ * the header chips - the engine picks them up via the [data-fgroup] query.
  */
 function dashboardPanel(db: Dashboard): string {
   if (db.verdictMix.total === 0) return "";
@@ -726,7 +727,7 @@ function dashboardPanel(db: Dashboard): string {
   const tlCols = buckets
     .map((b) => {
       const h = b.count === 0 ? 0 : Math.max(6, Math.round((b.count / maxCount) * 100));
-      return `<div class="col" title="${esc(b.label)} — ${b.count} event${b.count === 1 ? "" : "s"}"><span class="db-vbar" style="height:${h}%"></span><span class="lab">${esc(b.label)}</span></div>`;
+      return `<div class="col" title="${esc(b.label)} - ${b.count} event${b.count === 1 ? "" : "s"}"><span class="db-vbar" style="height:${h}%"></span><span class="lab">${esc(b.label)}</span></div>`;
     })
     .join("\n      ");
   const timelineCard = `<div class="db-card">
@@ -805,14 +806,14 @@ function wiredHostsPanel(hosts: readonly WiredHostRow[] | undefined): string {
     .sort((a, b) => rank(a) - rank(b))
     .map((h) => {
       if (h.recipeOnly) {
-        return `<li class="mute">${esc(h.label)} — manual setup <span class="hint" title="${esc(h.recipeOnly)}">docs recipe</span></li>`;
+        return `<li class="mute">${esc(h.label)} - manual setup <span class="hint" title="${esc(h.recipeOnly)}">docs recipe</span></li>`;
       }
       if (h.wired === "none") {
-        return `<li class="mute">${esc(h.label)} — not wired</li>`;
+        return `<li class="mute">${esc(h.label)} - not wired</li>`;
       }
       const reload = h.reload ? ` · ${esc(h.reload.reload)}` : "";
       const running = h.running ? "running" : "not running";
-      return `<li>${esc(h.label)} — wired (${h.wired})${reload} · ${running}</li>`;
+      return `<li>${esc(h.label)} - wired (${h.wired})${reload} · ${running}</li>`;
     })
     .join("\n    ");
   return `<section class="panel" aria-label="Wired hosts">
@@ -841,7 +842,7 @@ function gatePanel(card: GateCard | undefined, nowMs: number): string {
   }
   const binary = card.binaryPresent
     ? `binary ${card.binaryVersion ? esc(clip(card.binaryVersion, 40)) : "installed"}`
-    : "binary missing — kya gate setup";
+    : "binary missing - kya gate setup";
   const uptime = card.startedAt ? ` · up since ${esc(relativeTime(card.startedAt, nowMs))}` : "";
   const pill =
     card.state === "running"
@@ -960,7 +961,7 @@ function gateHomePage(page: GatePage, nowMs: number): string {
   if (page.state === "not-set-up") {
     return `<section class="zone gate-zone" id="gateway-home" aria-labelledby="tab-gateway-home">
   ${gateStatusHeader(page, nowMs)}
-  <p class="page-sub">Local MCP gate — every proxied tool call is evaluated and audited.</p>
+  <p class="page-sub">Local MCP gate - every proxied tool call is evaluated and audited.</p>
   <div class="card">
     <span class="pill">not set up</span>
     <p class="line">${esc(GATE_NOT_SETUP_QUICKSTART)}</p>
@@ -970,7 +971,7 @@ function gateHomePage(page: GatePage, nowMs: number): string {
   }
   return `<section class="zone gate-zone" id="gateway-home" aria-labelledby="tab-gateway-home">
   ${gateStatusHeader(page, nowMs)}
-  <p class="page-sub">Local MCP gate — every proxied tool call is evaluated and audited.</p>
+  <p class="page-sub">Local MCP gate - every proxied tool call is evaluated and audited.</p>
   ${gateStatCards(page)}
   <div class="card-grid">
     <div class="card">
@@ -978,7 +979,7 @@ function gateHomePage(page: GatePage, nowMs: number): string {
       <p class="line">${page.url ? `<code>${esc(clip(page.url, 80))}</code>` : `Listener port ${page.port ?? 3930}`} · ${page.state}</p>
       <p class="line">OTLP receiver port ${page.otlpPort}</p>
       <p class="line">Failure mode <span class="pill">${esc(page.failureMode)}</span></p>
-      ${page.binaryPresent ? `<p class="line">Binary <code>${page.binaryVersion ? esc(clip(page.binaryVersion, 40)) : "installed"}</code></p>` : `<p class="line">Binary missing — <code>kya gate setup</code></p>`}
+      ${page.binaryPresent ? `<p class="line">Binary <code>${page.binaryVersion ? esc(clip(page.binaryVersion, 40)) : "installed"}</code></p>` : `<p class="line">Binary missing - <code>kya gate setup</code></p>`}
     </div>
     <div class="card">
       <h3>Quick actions</h3>
@@ -998,7 +999,7 @@ function gateListenersPage(page: GatePage): string {
         <td>${esc(l.name)}</td>
         <td>${esc(l.protocol)}</td>
         <td><code>${esc(l.address)}</code></td>
-        <td>${l.uptime ? `<time datetime="${esc(l.uptime)}">${esc(relativeTime(l.uptime, Date.now()))}</time>` : '<span class="mute">—</span>'}</td>
+        <td>${l.uptime ? `<time datetime="${esc(l.uptime)}">${esc(relativeTime(l.uptime, Date.now()))}</time>` : '<span class="mute">-</span>'}</td>
         <td>${esc(l.detail ?? "")}</td>
       </tr>`,
     )
@@ -1023,7 +1024,7 @@ function gateRoutesPage(page: GatePage): string {
   <h2 class="page-title">Routes</h2>
   <p class="page-sub">One route per configured backend server.</p>
   <div class="card">
-    <p class="empty small">No servers configured — add one to .kya/gateways.json or run <code>kya gate init</code>.</p>
+    <p class="empty small">No servers configured - add one to .kya/gateways.json or run <code>kya gate init</code>.</p>
   </div>
 </section>`;
   }
@@ -1032,7 +1033,7 @@ function gateRoutesPage(page: GatePage): string {
       const dot = r.worst === "none" ? "" : `<span class="wdot ${r.worst}"></span>`;
       const denied =
         r.deniedTools.length === 0
-          ? '<span class="mute">—</span>'
+          ? '<span class="mute">-</span>'
           : r.deniedTools.map((t) => `<span class="chip bad">${esc(t)}</span>`).join("");
       return `      <tr data-server="${esc(r.backendLabel)}">
         <td><code>${esc(r.pattern)}</code></td>
@@ -1064,7 +1065,7 @@ function gateBackendsPage(page: GatePage): string {
   <h2 class="page-title">Backends</h2>
   <p class="page-sub">Configured upstream MCP servers.</p>
   <div class="card">
-    <p class="empty small">No servers configured — add one to .kya/gateways.json or run <code>kya gate init</code>.</p>
+    <p class="empty small">No servers configured - add one to .kya/gateways.json or run <code>kya gate init</code>.</p>
   </div>
 </section>`;
   }
@@ -1078,7 +1079,7 @@ function gateBackendsPage(page: GatePage): string {
       const dot = s.worst === "none" ? "" : `<span class="wdot ${s.worst}"></span>`;
       const denied =
         s.deniedTools.length === 0
-          ? '<span class="mute">—</span>'
+          ? '<span class="mute">-</span>'
           : s.deniedTools.map((t) => `<span class="chip bad">${esc(t)}</span>`).join("");
       return `      <tr data-server="${esc(s.serverFacet)}">
         <td><span class="wdot ${s.worst === "none" ? "mute" : s.worst}"></span> <code>${esc(s.id)}</code></td>
@@ -1133,7 +1134,7 @@ function gatePoliciesPage(page: GatePage): string {
             (s) =>
               `<div class="card">
   <h3><code>${esc(s.id)}</code> · ${s.policy.denyPatterns.length} pattern${s.policy.denyPatterns.length === 1 ? "" : "s"}</h3>
-  ${s.policy.denyPatterns.length === 0 ? '<p class="mute small">No deny patterns — all tools observed.</p>' : `<pre><code>${esc(s.policy.denyPatterns.join("\n"))}</code></pre>`}
+  ${s.policy.denyPatterns.length === 0 ? '<p class="mute small">No deny patterns - all tools observed.</p>' : `<pre><code>${esc(s.policy.denyPatterns.join("\n"))}</code></pre>`}
 </div>`,
           )
           .join("\n");
@@ -1164,7 +1165,7 @@ function gatePlaygroundPage(page: GatePage): string {
       : `<p class="mute small">Recent tools: ${page.playgroundSamples.map((t) => `<code>${esc(t)}</code>`).join(" ")}</p>`;
   return `<section class="zone gate-zone" id="gateway-playground" aria-labelledby="tab-gateway-playground">
   <h2 class="page-title">Playground</h2>
-  <p class="page-sub">Dry-run a tool call against the generated policy — no tool is executed.</p>
+  <p class="page-sub">Dry-run a tool call against the generated policy - no tool is executed.</p>
   <div class="card">
     <form class="playground-form" id="gate-play-form">
       <label class="sr-only" for="gate-play-server">Server</label>
@@ -1259,7 +1260,7 @@ function usdText(usd: number | null): string {
 }
 
 /** KPI tile: big tabular number over a small caps label. The tone class is
- * only applied above zero — a zero count never reads as a signal. */
+ * only applied above zero - a zero count never reads as a signal. */
 function kpiTile(label: string, value: string | number, cls = ""): string {
   const v = typeof value === "number" ? value : esc(value);
   const toned = typeof value === "number" && value > 0 && cls ? ` ${cls}` : "";
@@ -1275,17 +1276,21 @@ function kpiTile(label: string, value: string | number, cls = ""): string {
 function heroCertifyPanel(certify: CertifyCard | undefined): string {
   if (!certify) {
     return `<section class="panel hero-certify none" aria-label="Certify">
-  <h2>Certify — Agent Trust Baseline</h2>
+  <h2>Certify - Agent Trust Baseline</h2>
   <div class="orrline">
     <span class="pill">not evaluated</span>
   </div>
-  <p class="mute small">No live evaluation available — wrap tool calls and run kya certify to build the baseline.</p>
+  <p class="mute small">No live evaluation available - wrap tool calls and run kya certify to build the baseline.</p>
 </section>`;
   }
   const state = certify.result === "pass" ? "pass" : "gap";
-  // Status legend: one muted line under the count tiles so the four numbers
-  // read as definitions, not bare counters.
-  const legend = `<p class="legend">gap = requirement failing — your work plan · insufficient = not enough local evidence to evaluate (never counts as pass) · attested = your signed statement, unverified</p>`;
+  // Status legend as a definition list so each counter is explained on first
+  // glance, not hidden in a dense sentence.
+  const legend = `<dl class="cert-legend">
+    <div><dt>Gap</dt><dd>requirement is failing - this is your work plan</dd></div>
+    <div><dt>Insufficient</dt><dd>not enough local evidence to evaluate (never counts as a pass)</dd></div>
+    <div><dt>Attested</dt><dd>your signed statement, unverified until audited</dd></div>
+  </dl>`;
   // Attested summary: the hero's gap rows are gap-status only, so attestations
   // surface as one line naming the first attested requirement (+N more) with
   // its attestation text.
@@ -1294,32 +1299,45 @@ function heroCertifyPanel(certify: CertifyCard | undefined): string {
     certify.attested === 0
       ? ""
       : firstAttested
-        ? `<p class="att-line">attested: <code>${esc(firstAttested.id)}</code>${
+        ? `<div class="att-line">attested: <code>${esc(firstAttested.id)}</code>${
             certify.attested > 1 ? ` (+${certify.attested - 1} more)` : ""
-          } — "${esc(
-            clip(firstAttested.attestation?.text ?? firstAttested.evidence, 100),
-          )}"</p>`
-        : `<p class="att-line">attested: ${certify.attested} — your signed statement, unverified</p>`;
+          } - "${expandableText(
+            "att-quote",
+            firstAttested.attestation?.text ?? firstAttested.evidence,
+            100,
+          )}"</div>`
+        : `<p class="att-line">attested: ${certify.attested} - your signed statement, unverified</p>`;
   // topGaps arrives severity-ordered from the loader; cap defensively at 5.
-  // Each row is id — title + severity chip, with the redacted evidence
-  // one-liner beneath (clipped so the hero stays compact).
+  // Each gap is an expandable <details> row: summary stays compact, the body
+  // reveals the full requirement title, what the status means, the unclipped
+  // evidence, and the exact CLI command to close the gap.
   const gaps =
     certify.topGaps.length === 0
       ? ""
-      : `<ul class="rows">
+      : `<div class="cert-rows">
 ${certify.topGaps
   .slice(0, 5)
-  .map(
-    (g) =>
-      `    <li><code>${esc(g.id)}</code> — ${esc(g.title)} <span class="sev ${esc(g.severity)}">${esc(g.severity)}</span>${
-        g.evidence ? `<span class="gap-ev">${esc(clip(g.evidence, 140))}</span>` : ""
-      }</li>`,
-  )
+  .map((g) => {
+    const cmd = `kya certify --attest ${g.id} --text "…"`;
+    return `    <details class="req-row">
+      <summary><code>${esc(g.id)}</code> - ${esc(g.title)} <span class="sev ${esc(g.severity)}">${esc(g.severity)}</span></summary>
+      <div class="req-body">
+        <p class="req-mean">Gap means this requirement is currently failing against the local evidence in the ${certify.windowDays}-day window.</p>
+        ${g.evidence ? `<p class="req-evi"><strong>Evidence:</strong> ${esc(g.evidence)}</p>` : ""}
+        <p class="req-cta"><strong>Close it:</strong> <code>${esc(cmd)}</code> <span class="req-hint">(replace "…" with your accountable statement or fix the underlying control)</span></p>
+      </div>
+    </details>`;
+  })
   .join("\n")}
-  </ul>`;
+  </div>`;
+  // Call-to-action: one primary command and one secondary link to the detail tab.
+  const cta = `<div class="cert-cta">
+    <a class="btn" href="#certify">Open full requirement table</a>
+    <span class="mute small">or run <code>kya certify --open</code> for the signed bundle</span>
+  </div>`;
   // Pill tones reuse the ORR palette: pass is green, gap is amber.
   return `<section class="panel hero-certify ${state}" aria-label="Certify">
-  <h2>Certify — Agent Trust Baseline</h2>
+  <h2>Certify - Agent Trust Baseline</h2>
   <div class="orrline">
     <span class="pill orr-${state === "pass" ? "green" : "amber"}">${esc(certify.result)}</span>
   </div>
@@ -1332,7 +1350,8 @@ ${certify.topGaps
   ${legend}
   ${attestedLine}
   ${gaps}
-  <p class="mute small">live evaluation — window ${certify.windowDays}d, ${certify.trailEvents} trail events · the Certify tab has the full live requirement table · kya certify for the gap report + signed bundle</p>
+  ${cta}
+  <p class="mute small">live evaluation - window ${certify.windowDays}d, ${certify.trailEvents} trail events · the Certify tab has the complete gap report · <code>kya certify</code> writes the signed evidence bundle</p>
 </section>`;
 }
 
@@ -1346,15 +1365,27 @@ const DETAIL_PILL_TONE: Record<RequirementStatus, string> = {
   attested: "att",
 };
 
-const CERTIFY_DETAIL_TITLE_CLIP = 120;
 const CERTIFY_DETAIL_CLIP = 160;
 
 /**
- * Certify tab body: the full live requirement table — every evaluated
+ * Long evidence/attestation text renders in full behind a Read more toggle;
+ * at or under the preview length it stays a plain inline span. The preview
+ * keeps the old clip length, so collapsed rows look exactly as before.
+ */
+function expandableText(cls: string, text: string, previewLen = CERTIFY_DETAIL_CLIP): string {
+  const clean = stripEscapes(text).replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ").trim();
+  if (clean.length <= previewLen) return `<span class="${cls}">${esc(clean)}</span>`;
+  return `<details class="req-more ${cls}"><summary>${esc(
+    clip(clean, previewLen),
+  )}</summary><div class="full">${esc(clean)}</div></details>`;
+}
+
+/**
+ * Certify tab body: the full live requirement table - every evaluated
  * requirement grouped by domain, domains in catalog order (the card's
  * requirements arrive in catalog order, so first-seen order IS the catalog
  * order). Each domain gets a heading row with mini-counts, then one row per
- * requirement: status pill, id, title, and a muted evidence line beneath —
+ * requirement: status pill, id, title, and a muted evidence line beneath -
  * or the attestation text for attested rows. Empty input yields "" so the
  * caller falls back to the zone-empty hint (fail-closed: no table without
  * data).
@@ -1380,15 +1411,11 @@ function certifyDetailPanel(
             r.status.replace(/_/g, " "),
           )}</span>`;
           const detail = r.attestation
-            ? `<span class="att">attested ${esc(r.attestation.at)} — "${esc(
-                clip(r.attestation.text, CERTIFY_DETAIL_CLIP),
-              )}"</span>`
+            ? expandableText("att", `attested ${r.attestation.at} - "${r.attestation.text}"`)
             : r.evidence
-              ? `<span class="evi">${esc(clip(r.evidence, CERTIFY_DETAIL_CLIP))}</span>`
+              ? expandableText("evi", r.evidence)
               : "";
-          return `      <li>${pill} <code>${esc(r.id)}</code> — ${esc(
-            clip(r.title, CERTIFY_DETAIL_TITLE_CLIP),
-          )}${detail}</li>`;
+          return `      <li>${pill} <code>${esc(r.id)}</code> - ${esc(r.title)}${detail}</li>`;
         })
         .join("\n");
       const label = DOMAIN_LABELS[domain] ?? domain;
@@ -1401,7 +1428,7 @@ ${items}
     })
     .join("\n");
   return `<section class="panel certify-detail" aria-label="Certify detail">
-  <h2>Every requirement — live evaluation</h2>
+  <h2>Every requirement - live evaluation</h2>
 ${sections}
 </section>`;
 }
@@ -1419,7 +1446,7 @@ function verdictsHeroCard(
 ): string {
   // Base 100% = total events, matching dashboard.ts's verdictMix contract:
   // verdict is a free-form string from untrusted JSONL, so an event may land
-  // in no bucket (bogus verdict) while still counting in `never` — only the
+  // in no bucket (bogus verdict) while still counting in `never` - only the
   // raw event count keeps every bar inside the base the Overview card uses.
   const pct = (n: number): number => (total > 0 ? Math.round((n / total) * 100) : 0);
   const mixRow = (label: string, n: number, fill: "ok" | "warn" | "bad"): string =>
@@ -1441,7 +1468,7 @@ const SPARK_H = 24;
 /**
  * Inline 7-bar sparkline (no JS): the last 7 activity buckets, left-padded
  * with zeros, heights normalized so the max bucket is full height. Empty
- * input renders a flat baseline — heights are guarded, never NaN/Infinity.
+ * input renders a flat baseline - heights are guarded, never NaN/Infinity.
  */
 function activitySparkline(activity: Dashboard["activity"]): string {
   const counts = activity.buckets.slice(-SPARK_BARS).map((b) => b.count);
@@ -1469,9 +1496,19 @@ function activityHeroCard(agg: EventAggregates, db: Dashboard, total: number): s
 }
 
 /** Hero-styled showback: same fields as the old panel (tokens in/out, est.
- * USD, top runs, disclaimer), omitted entirely when no report exists. */
-function showbackHeroCard(report: ShowbackReport | undefined): string {
+ * USD, top runs, disclaimer), omitted entirely when no report exists. When
+ * window events carry host-reported token usage, a line states how much of
+ * the total is real vs the static per-event estimate. */
+function showbackHeroCard(
+  report: ShowbackReport | undefined,
+  events: readonly TrailEvent[] = [],
+): string {
   if (!report) return "";
+  const usage = summarizeTrailUsage(events);
+  const realLine =
+    usage.realUsageEvents === 0
+      ? ""
+      : `<p class="mute small">real host-reported usage on ${usage.realUsageEvents} of ${usage.events} window events (${usage.realTokensIn} in / ${usage.realTokensOut} out tokens); the rest is priced at the static estimate</p>`;
   const topRuns = [...report.perRun]
     .sort((a, b) => (b.estimatedUsd ?? -1) - (a.estimatedUsd ?? -1))
     .slice(0, 5);
@@ -1481,7 +1518,7 @@ function showbackHeroCard(report: ShowbackReport | undefined): string {
       : `<ul class="rows">
 ${topRuns
   .map(
-    (r) => `    <li><code title="${esc(r.runId)}">${esc(clip(r.runId, 32))}</code> — ${r.steps} step${r.steps === 1 ? "" : "s"} · ${esc(usdText(r.estimatedUsd))}</li>`,
+    (r) => `    <li><code title="${esc(r.runId)}">${esc(clip(r.runId, 32))}</code> - ${r.steps} step${r.steps === 1 ? "" : "s"} · ${esc(usdText(r.estimatedUsd))}</li>`,
   )
   .join("\n")}
   </ul>`;
@@ -1493,6 +1530,7 @@ ${topRuns
     ${kpiTile("Est. USD", usdText(report.estimatedUsd))}
   </div>
   ${runs}
+  ${realLine}
   <p class="mute small">${esc(SHOWBACK_DISCLAIMER)}</p>
 </section>`;
 }
@@ -1509,7 +1547,7 @@ export function gatewayHeroCard(page: GatePage | undefined, _nowMs: number): str
 
   const binary = page.binaryPresent
     ? `binary ${page.binaryVersion ? esc(clip(page.binaryVersion, 40)) : "installed"}`
-    : "binary missing — kya gate setup";
+    : "binary missing - kya gate setup";
 
   const detail =
     page.state === "running"
@@ -1680,7 +1718,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   ${tools.map((t) => `<code>${esc(t)}</code>`).join("")}
 </footer>`;
 
-  // liveToken is minted base64url by the live server — safe in a JS string
+  // liveToken is minted base64url by the live server - safe in a JS string
   // literal; static renders omit it. No post-hoc html.replace (spoofable).
   const eventsUrl = model.liveToken ? `/events?t=${encodeURIComponent(model.liveToken)}` : "/events";
   const liveScript = model.live
@@ -1805,21 +1843,26 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   }
   function apply(){
     var on = Object.keys(state).some(function(g){ return Object.keys(state[g]).length > 0; });
-    // Guard: the script is only emitted for live reports, so the feed is
-    // always server-rendered; changes entries still filter client-side.
-    if (!LIVE) {
-      feed.querySelectorAll('.ev').forEach(function(row){
-        row.classList.toggle('filtered-out', !rowVisible(row, on));
-      });
-      var day = null, dayHasRows = false;
-      function flush(){ if (day) day.classList.toggle('filtered-out', on && !dayHasRows); }
-      for (var i = 0; i < feed.children.length; i++) {
-        var el = feed.children[i];
-        if (el.classList.contains('day')) { flush(); day = el; dayHasRows = false; }
-        else if (el.classList.contains('ev') && !el.classList.contains('filtered-out')) dayHasRows = true;
-      }
-      flush();
+    // Feed rows: filter client-side immediately so the UI reacts without
+    // waiting for the server round-trip. For live/paginated reports the server
+    // still returns the authoritative page via feedUpdate(), but this keeps
+    // the Activity tab responsive and survives SSE reloads that would otherwise
+    // overwrite the server response before the user sees it.
+    var toggled = 0;
+    feed.querySelectorAll('.ev').forEach(function(row){
+      var visible = rowVisible(row, on);
+      if (!visible) toggled++;
+      row.classList.toggle('filtered-out', !visible);
+    });
+    try { window.__kyaFilterDebug = { toggled: toggled, feedRows: feed.querySelectorAll('.ev').length }; } catch(e){}
+    var day = null, dayHasRows = false;
+    function flush(){ if (day) day.classList.toggle('filtered-out', on && !dayHasRows); }
+    for (var i = 0; i < feed.children.length; i++) {
+      var el = feed.children[i];
+      if (el.classList.contains('day')) { flush(); day = el; dayHasRows = false; }
+      else if (el.classList.contains('ev') && !el.classList.contains('filtered-out')) dayHasRows = true;
     }
+    flush();
     // Changes tab: entries filter individually; file/session groups collapse
     // when no entry inside survives.
     if (chg) {
@@ -1846,10 +1889,17 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   function feedUpdate(){
     var T = readToken();
     if (!T) return;
+    // Server expects { group: [value, ...] }, but client state stores
+    // { group: { value: true } } for fast lookup. Convert before sending.
+    var serverFilters = {};
+    for (var g in state) {
+      var vals = Object.keys(state[g]);
+      if (vals.length) serverFilters[g] = vals;
+    }
     fetch('/feed?t=' + encodeURIComponent(T), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filters: state, page: page, q: q })
+      body: JSON.stringify({ filters: serverFilters, page: page, q: q })
     })
     .then(function(r){ return r.json(); })
     .then(function(data){
@@ -2175,11 +2225,11 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       : `<p class="mute small zone-empty">${empty}</p>`;
   const overviewBody = zoneBody(
     [dashboardPanel(dashboard), sessionsPanel(agg, nowMs, changes), reasonsPanel(agg)],
-    "No activity in this window yet — analytics appear once events land.",
+    "No activity in this window yet - analytics appear once events land.",
   );
   const certifyBody = zoneBody(
     [model.certify ? certifyDetailPanel(model.certify.requirements) : ""],
-    "No live evaluation yet — wrap tool calls and run kya certify to build the baseline.",
+    "No live evaluation yet - wrap tool calls and run kya certify to build the baseline.",
   );
   const systemBody = zoneBody(
     [
@@ -2189,7 +2239,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       orrPanel(model.orr, nowMs),
       toolsHtml,
     ],
-    "No system state yet — wire a host, configure a sandbox, or run an ORR.",
+    "No system state yet - wire a host, configure a sandbox, or run an ORR.",
   );
 
   const html = `<!DOCTYPE html>
@@ -2245,7 +2295,7 @@ ${model.liveToken ? '<main data-live-token="1">' : '<main>'}
         ${verdictsHeroCard(c, events.length)}
         ${activityHeroCard(agg, dashboard, events.length)}
         ${gatewayHeroCard(model.gate, nowMs)}
-        ${showbackHeroCard(model.showback)}
+        ${showbackHeroCard(model.showback, model.events)}
       </div>
     </div>
     ${overviewBody}
@@ -2367,11 +2417,11 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     if (c.topGaps.length > 0) {
       lines.push("Top gaps:");
       for (const g of c.topGaps) {
-        lines.push(`- \`${mdInline(g.id)}\` — ${mdText(g.title)} (${mdText(g.severity)})`);
+        lines.push(`- \`${mdInline(g.id)}\` - ${mdText(g.title)} (${mdText(g.severity)})`);
       }
     }
     lines.push(
-      `live evaluation — window ${c.windowDays}d, ${c.trailEvents} trail events · the Certify tab has the full live requirement table · kya certify for the gap report + signed bundle`,
+      `live evaluation - window ${c.windowDays}d, ${c.trailEvents} trail events · the Certify tab has the full live requirement table · kya certify for the gap report + signed bundle`,
       "",
     );
   }
@@ -2427,7 +2477,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
         const sum = e.summary?.trim() ? ` - ${mdText(e.summary.trim())}` : "";
         const head = `- **${mdText(verdictWord(e.verdict))}** \`${mdInline(e.toolId)}\`${sum} - ${productLabel(e.product)} - ${mdText(e.reasonCode)}`;
         if (!e.diffPreview?.trim()) return [head];
-        // Fenced content is verbatim (stripEscapes only — backslash escapes
+        // Fenced content is verbatim (stripEscapes only - backslash escapes
         // are literal in code fences); the dynamically sized tilde fence
         // prevents breakout and backticks cannot close a tilde fence.
         const diff = stripEscapes(e.diffPreview.trim());
@@ -2444,12 +2494,12 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     lines.push("## Changes", "");
     for (const s of changes.sessions) {
       lines.push(
-        `### \`${mdInline(s.sessionId)}\` — ${s.fileCount} file${s.fileCount === 1 ? "" : "s"}, ${s.changeCount} change${s.changeCount === 1 ? "" : "s"}, last ${relativeTime(s.lastTs, nowMs)}`,
+        `### \`${mdInline(s.sessionId)}\` - ${s.fileCount} file${s.fileCount === 1 ? "" : "s"}, ${s.changeCount} change${s.changeCount === 1 ? "" : "s"}, last ${relativeTime(s.lastTs, nowMs)}`,
         "",
       );
       for (const f of s.files) {
         lines.push(
-          `#### \`${mdInline(f.path)}\` — ${f.writes} write${f.writes === 1 ? "" : "s"}, worst: ${f.worst}`,
+          `#### \`${mdInline(f.path)}\` - ${f.writes} write${f.writes === 1 ? "" : "s"}, worst: ${f.worst}`,
           "",
         );
         for (const e of f.entries) {
@@ -2458,7 +2508,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
           const diff = stripEscapes(e.preview);
           const fence = mdFence(diff);
           lines.push(
-            `- **${mdText(verdictWord(e.verdict))}** \`${mdInline(e.toolId)}\` — ${mdText(e.ts)}`,
+            `- **${mdText(verdictWord(e.verdict))}** \`${mdInline(e.toolId)}\` - ${mdText(e.ts)}`,
             "",
             fence,
             diff,
@@ -2475,7 +2525,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
       "## Sessions",
       ...agg.sessions.map(
         (s) =>
-          `- \`${mdInline(s.sessionId)}\` — ${s.events} event${s.events === 1 ? "" : "s"}, worst: ${s.worst}, last ${relativeTime(s.lastTs, nowMs)}`,
+          `- \`${mdInline(s.sessionId)}\` - ${s.events} event${s.events === 1 ? "" : "s"}, worst: ${s.worst}, last ${relativeTime(s.lastTs, nowMs)}`,
       ),
       "",
     );
@@ -2493,22 +2543,22 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     const g = model.gate;
     lines.push("## Gateway");
     if (g.state === "not-set-up") {
-      lines.push(`not set up — ${GATE_NOT_SETUP_QUICKSTART}`);
+      lines.push(`not set up - ${GATE_NOT_SETUP_QUICKSTART}`);
     } else {
       const binary = g.binaryPresent
         ? `binary ${g.binaryVersion ? mdInline(clip(g.binaryVersion, 40)) : "installed"}`
-        : "binary missing — kya gate setup";
+        : "binary missing - kya gate setup";
       lines.push(
         g.state === "running"
-          ? `running — \`${mdInline(clip(g.url ?? "", 60))}\` · ${binary} · ${g.events} event${g.events === 1 ? "" : "s"} in window`
-          : `stopped — \`kya gate run\` · ${binary}`,
+          ? `running - \`${mdInline(clip(g.url ?? "", 60))}\` · ${binary} · ${g.events} event${g.events === 1 ? "" : "s"} in window`
+          : `stopped - \`kya gate run\` · ${binary}`,
       );
       if (g.state === "running" && g.servers.length === 0) {
-        lines.push("running, no servers configured — add servers to .kya/gateways.json and restart");
+        lines.push("running, no servers configured - add servers to .kya/gateways.json and restart");
       }
       for (const s of g.servers) {
         lines.push(
-          `- \`${mdInline(s.id)}\` — ${mdText(s.transport)} · ${s.events} event${s.events === 1 ? "" : "s"}${s.worst === "none" ? "" : `, worst: ${s.worst}`}`,
+          `- \`${mdInline(s.id)}\` - ${mdText(s.transport)} · ${s.events} event${s.events === 1 ? "" : "s"}${s.worst === "none" ? "" : `, worst: ${s.worst}`}`,
         );
       }
     }
@@ -2520,13 +2570,13 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     lines.push("## Wired hosts");
     for (const h of hosts) {
       if (h.recipeOnly) {
-        lines.push(`- ${mdText(h.label)} — manual setup (docs recipe)`);
+        lines.push(`- ${mdText(h.label)} - manual setup (docs recipe)`);
       } else if (h.wired === "none") {
-        lines.push(`- ${mdText(h.label)} — not wired`);
+        lines.push(`- ${mdText(h.label)} - not wired`);
       } else {
         const reload = h.reload ? ` · ${mdText(h.reload.reload)}` : "";
         lines.push(
-          `- ${mdText(h.label)} — wired (${h.wired})${reload} · ${h.running ? "running" : "not running"}`,
+          `- ${mdText(h.label)} - wired (${h.wired})${reload} · ${h.running ? "running" : "not running"}`,
         );
       }
     }
@@ -2539,7 +2589,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     if (sb.backend) lines.push(`Configured backend: ${mdText(sb.backend)}`);
     for (const s of sb.sandboxes) {
       lines.push(
-        `- \`${mdInline(s.sandboxId)}\` — ${mdText(s.backend)} · ${mdText(s.status)} · created ${relativeTime(s.createdAt, nowMs)}`,
+        `- \`${mdInline(s.sandboxId)}\` - ${mdText(s.backend)} · ${mdText(s.status)} · created ${relativeTime(s.createdAt, nowMs)}`,
       );
     }
     lines.push("");
@@ -2569,7 +2619,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
       .sort((a, b) => (b.estimatedUsd ?? -1) - (a.estimatedUsd ?? -1))
       .slice(0, 5);
     for (const r of topRuns) {
-      lines.push(`- \`${mdInline(r.runId)}\` — ${r.steps} step${r.steps === 1 ? "" : "s"} · ${usdText(r.estimatedUsd)}`);
+      lines.push(`- \`${mdInline(r.runId)}\` - ${r.steps} step${r.steps === 1 ? "" : "s"} · ${usdText(r.estimatedUsd)}`);
     }
     lines.push(SHOWBACK_DISCLAIMER, "");
   }

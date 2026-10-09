@@ -3,7 +3,7 @@
  * `engines.node: >=24`; on an older runtime the CLI warns, and on a TTY it
  * offers to install Node 24 via the detected version manager, reinstall the
  * global package under it, and re-run the original command. Declining (or a
- * non-TTY run) continues with a warning — the gate never blocks outright.
+ * non-TTY run) continues with a warning - the gate never blocks outright.
  *
  * Escape hatches: KYA_SKIP_NODE_CHECK=1 skips entirely; KYA_NODE_CHECKED=1 is
  * set by the upgrade re-exec and by the receipt daemon child so the check
@@ -119,7 +119,7 @@ function managerVersionsDir(manager: NodeManager, env: NodeJS.ProcessEnv): strin
 /**
  * Newest already-installed Node that satisfies the requirement, per the
  * manager's own versions dir. The gate uses this to never re-offer an install
- * that already succeeded — a repeat prompt means the shell is shadowing the
+ * that already succeeded - a repeat prompt means the shell is shadowing the
  * manager's node, not that the upgrade is missing.
  */
 export function findInstalledNode(
@@ -168,7 +168,7 @@ function switchHint(manager: NodeManager, installed: string): string {  switch (
 /**
  * Absolute path to the node binary for an installed version, per manager
  * layout. Lets the gate re-exec the current command under the compliant
- * runtime directly — no shell sourcing, immune to the user's PATH order.
+ * runtime directly - no shell sourcing, immune to the user's PATH order.
  */
 export function installedNodeBin(
   manager: NodeManager,
@@ -286,7 +286,7 @@ export async function ensureSupportedNode(
   const warn = `KYA needs Node.js ${REQUIRED_NODE_MAJOR}+ (you have ${version}).`;
   const manager = detectNodeManager(env, deps);
 
-  // Upgrade already done once? Don't re-offer the install — re-exec this
+  // Upgrade already done once? Don't re-offer the install - re-exec this
   // command under the installed runtime directly (immune to PATH order).
   // Only the shadow case (binary missing on disk) falls back to a message.
   const installed = manager ? findInstalledNode(manager, env, deps) : undefined;
@@ -300,7 +300,7 @@ export async function ensureSupportedNode(
       const cliJs = deps.cliJs ?? defaultCliJs();
       const run = deps.run ?? defaultRun;
       io.error(
-        `Running under Node ${installed} (already installed via ${manager}; this shell defaults to ${version} — ${switchHint(manager, installed)} makes it permanent).`,
+        `Running under Node ${installed} (already installed via ${manager}; this shell defaults to ${version} - ${switchHint(manager, installed)} makes it permanent).`,
       );
       return run(bin, [cliJs, ...argv], {
         ...env,
@@ -316,7 +316,7 @@ export async function ensureSupportedNode(
         : "";
     io.error(
       `Node ${installed} is already installed via ${manager}, but this shell runs ${version}${shadow}. ` +
-        `Run \`${switchHint(manager, installed)}\` or open a new terminal — then this warning stops. ` +
+        `Run \`${switchHint(manager, installed)}\` or open a new terminal - then this warning stops. ` +
         `Continuing on ${version}.`,
     );
     return undefined;
@@ -325,7 +325,7 @@ export async function ensureSupportedNode(
   const isTty = io.isTty ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const confirm = io.confirm ?? defaultConfirm;
   if (!isTty) {
-    io.error(`${warn} Continuing anyway — some features may break.`);
+    io.error(`${warn} Continuing anyway - some features may break.`);
     return undefined;
   }
 
@@ -334,7 +334,7 @@ export async function ensureSupportedNode(
     : `${warn} No version manager found (nodejs.org/en/download). Continue anyway? [Y/n]`;
   const ok = await confirm(question);
   if (!ok) {
-    io.error("Continuing on an unsupported Node — some features may break.");
+    io.error("Continuing on an unsupported Node - some features may break.");
     return undefined;
   }
   if (!manager) return undefined;
@@ -344,7 +344,7 @@ export async function ensureSupportedNode(
   const code = await run(script.shell, script.args, env);
   if (code === 0) {
     io.error(
-      `Node 24 installed and set as default. This terminal still runs ${version} — ` +
+      `Node 24 installed and set as default. This terminal still runs ${version} - ` +
         "open a new terminal next time (your command above already finished on Node 24).",
     );
   }

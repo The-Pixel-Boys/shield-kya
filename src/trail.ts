@@ -1,5 +1,5 @@
 /**
- * Local session trail (JSONL). Observe path — not a second PEP.
+ * Local session trail (JSONL). Observe path - not a second PEP.
  */
 import {
   appendFileSync,
@@ -45,6 +45,12 @@ export interface TrailEvent {
   readonly diffPreview?: string;
   /** Clipped redacted target file path (never raw args). */
   readonly targetPath?: string;
+  /** Wall latency of the evaluate call in ms. Observe-only; never a verdict input. */
+  readonly latencyMs?: number;
+  /** Real input tokens reported by the host. Observe-only showback. */
+  readonly tokensIn?: number;
+  /** Real output tokens reported by the host. Observe-only showback. */
+  readonly tokensOut?: number;
 }
 
 export function globalTrailPath(env: NodeJS.ProcessEnv = process.env): string {
@@ -56,7 +62,7 @@ export function legacyTrailPath(cwd: string): string {
   return join(configDir(cwd), "trail.jsonl");
 }
 
-/** The trail is global since 0.3.0 — one file for all projects. */
+/** The trail is global since 0.3.0 - one file for all projects. */
 export function trailPath(_cwd: string, env: NodeJS.ProcessEnv = process.env): string {
   return globalTrailPath(env);
 }
@@ -153,7 +159,7 @@ const TRAIL_PRODUCTS = new Set<string>([
 
 /**
  * Validate one parsed JSONL line against the TrailEvent shape. Untrusted
- * fields (wrong type, unknown mode/product) drop the line or the field —
+ * fields (wrong type, unknown mode/product) drop the line or the field -
  * a single malformed line must never brick the report render.
  */
 function parseTrailEvent(raw: unknown): TrailEvent | undefined {
@@ -188,10 +194,24 @@ function parseTrailEvent(raw: unknown): TrailEvent | undefined {
     ...(typeof e.summary === "string" ? { summary: e.summary } : {}),
     ...(typeof e.diffPreview === "string" ? { diffPreview: e.diffPreview } : {}),
     ...(typeof e.targetPath === "string" ? { targetPath: e.targetPath } : {}),
+    ...(nonNegNumber(e.latencyMs) !== undefined
+      ? { latencyMs: nonNegNumber(e.latencyMs) }
+      : {}),
+    ...(nonNegNumber(e.tokensIn) !== undefined
+      ? { tokensIn: nonNegNumber(e.tokensIn) }
+      : {}),
+    ...(nonNegNumber(e.tokensOut) !== undefined
+      ? { tokensOut: nonNegNumber(e.tokensOut) }
+      : {}),
   };
 }
 
-/** trail.jsonl read cap — oversized files are tail-read (recent events win). */
+/** Usage/latency fields pass only as finite non-negative numbers. */
+function nonNegNumber(v: unknown): number | undefined {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : undefined;
+}
+
+/** trail.jsonl read cap - oversized files are tail-read (recent events win). */
 export const MAX_TRAIL_BYTES = 1024 * 1024;
 
 function readTrailText(path: string): string {
@@ -209,7 +229,7 @@ function readTrailText(path: string): string {
   } finally {
     closeSync(fd);
   }
-  // First line is partial (possibly mid-multibyte) — drop it.
+  // First line is partial (possibly mid-multibyte) - drop it.
   const nl = tail.indexOf("\n");
   return nl === -1 ? "" : tail.slice(nl + 1);
 }

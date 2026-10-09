@@ -1,6 +1,6 @@
 /**
  * Agent Trust Baseline evaluators. Pure functions over a pre-assembled
- * EvidenceContext — no I/O here; all loading lives in certify/context.ts.
+ * EvidenceContext - no I/O here; all loading lives in certify/context.ts.
  * Evidence only: never a second PEP, never ALLOWs anything. Empty evidence
  * windows yield insufficient_evidence, never a vacuous pass.
  */
@@ -114,7 +114,7 @@ export function countRequirements(
 
 /**
  * Fail-closed overall: zero certifiable evidence (all insufficient_evidence)
- * must never headline as pass — a green badge requires real evidence.
+ * must never headline as pass - a green badge requires real evidence.
  * Shared by runCertify and computeLiveCertify so they can never diverge.
  */
 export function computeOverall(
@@ -268,7 +268,7 @@ export function evaluateRequirement(
       if (ctx.gateMode === check.not) {
         return result(
           "gap",
-          `gate mode is ${ctx.gateMode} — set KYA_HOLD=1 / KYA_OFFLINE=1 or "gateMode" in .kya/config.json`,
+          `gate mode is ${ctx.gateMode} - set KYA_HOLD=1 / KYA_OFFLINE=1 or "gateMode" in .kya/config.json`,
         );
       }
       return result("pass", `gate mode is ${ctx.gateMode}`);
@@ -279,7 +279,7 @@ export function evaluateRequirement(
       }
       return result(
         "gap",
-        `${ctx.wiredHostCount} wired host(s), need ${check.min} — kya connect <host> --hooks`,
+        `${ctx.wiredHostCount} wired host(s), need ${check.min} - kya connect <host> --hooks`,
       );
     }
     case "sandbox_inventory": {
@@ -288,30 +288,30 @@ export function evaluateRequirement(
       }
       return result(
         "gap",
-        `no sandbox inventory — KYA_SANDBOX=mock kya sandbox spawn`,
+        `no sandbox inventory - KYA_SANDBOX=mock kya sandbox spawn`,
       );
     }
     case "receipts_present": {
       if (ctx.receiptCount >= check.min) {
         return result("pass", `${ctx.receiptCount} receipt file(s) in .kya/receipts`);
       }
-      return result("gap", `no receipts yet — run kya receipt`);
+      return result("gap", `no receipts yet - run kya receipt`);
     }
     case "showback_present": {
       return ctx.showbackPresent
         ? result("pass", "showback card present (.kya/usage.json)")
-        : result("gap", "no showback card — add .kya/usage.json or run orr with --usage");
+        : result("gap", "no showback card - add .kya/usage.json or run orr with --usage");
     }
     case "attest": {
       if (attestation) return result("attested", `attested ${attestation.at}`);
       return result(
         "gap",
-        `no attestation recorded — kya certify --attest ${req.id} --text "…" (${check.prompt})`,
+        `no attestation recorded - kya certify --attest ${req.id} --text "…" (${check.prompt})`,
       );
     }
     case "orr_overall": {
       if (!ctx.orr) {
-        return result("insufficient_evidence", "no ORR report — kya orr run --path .");
+        return result("insufficient_evidence", "no ORR report - kya orr run --path .");
       }
       if (RATING_RANK[ctx.orr.overall] <= RATING_RANK[check.max]) {
         return result("pass", `ORR overall ${ctx.orr.overall} (max ${check.max})`);
@@ -320,7 +320,7 @@ export function evaluateRequirement(
     }
     case "orr_category": {
       if (!ctx.orrCategories) {
-        return result("insufficient_evidence", "no ORR report — kya orr run --path .");
+        return result("insufficient_evidence", "no ORR report - kya orr run --path .");
       }
       const rating = ctx.orrCategories[check.id];
       if (!rating) {
@@ -336,7 +336,7 @@ export function evaluateRequirement(
     }
     case "orr_fresh": {
       if (!ctx.orr || !ctx.orr.generatedAt) {
-        return result("insufficient_evidence", "no ORR report — kya orr run --path .");
+        return result("insufficient_evidence", "no ORR report - kya orr run --path .");
       }
       const t = Date.parse(ctx.orr.generatedAt);
       if (Number.isNaN(t)) {
@@ -346,7 +346,7 @@ export function evaluateRequirement(
       if (t > nowMs) {
         return result(
           "insufficient_evidence",
-          "ORR generatedAt is in the future — clock skew, re-run kya orr run",
+          "ORR generatedAt is in the future - clock skew, re-run kya orr run",
         );
       }
       const ageMs = nowMs - t;
@@ -357,7 +357,7 @@ export function evaluateRequirement(
       }
       return result(
         "gap",
-        `ORR is ${ageDays}d old (max ${check.maxAgeDays}d) — re-run kya orr run`,
+        `ORR is ${ageDays}d old (max ${check.maxAgeDays}d) - re-run kya orr run`,
       );
     }
   }

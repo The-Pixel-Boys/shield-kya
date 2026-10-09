@@ -1,8 +1,8 @@
 /**
- * Signed evidence bundles (v1) — the OSS half of hosted verification.
+ * Signed evidence bundles (v1) - the OSS half of hosted verification.
  * Self-signed by a locally generated ed25519 key: proves bundle integrity and
  * continuity of a key, NOT identity. Identity binding is a hosted claim.
- * node:crypto only — the package dependency list is locked.
+ * node:crypto only - the package dependency list is locked.
  */
 import {
   createHash,
@@ -34,7 +34,7 @@ export const EVIDENCE_BUNDLE_VERSION = 1;
 export interface EvidenceKey {
   readonly publicKey: KeyObject;
   readonly privateKey: KeyObject;
-  /** base64url(SPKI DER) — the `pubkey` field of every bundle. */
+  /** base64url(SPKI DER) - the `pubkey` field of every bundle. */
   readonly pubkeyB64u: string;
   /** First 16 hex chars of sha256(SPKI DER). */
   readonly fingerprint: string;
@@ -102,7 +102,7 @@ export function evidenceKeyFromSerialized(raw: unknown): EvidenceKey {
     };
   } catch {
     throw new UsageError(
-      "evidence key file is corrupt — regenerating (old bundles stay verifiable only with the old pubkey)",
+      "evidence key file is corrupt - regenerating (old bundles stay verifiable only with the old pubkey)",
     );
   }
 }
@@ -150,7 +150,7 @@ export function loadOrCreateEvidenceKey(
   };
 }
 
-/** sig = base64url( ed25519_sign( canonicalJson(body) ) ) — canonicalJson from src/hash.ts. */
+/** sig = base64url( ed25519_sign( canonicalJson(body) ) ) - canonicalJson from src/hash.ts. */
 export function signCanonicalPayload(body: unknown, privateKey: KeyObject): string {
   const payload = Buffer.from(canonicalJson(body), "utf8");
   return sign(null, payload, privateKey).toString("base64url");
@@ -190,7 +190,7 @@ export interface BundleAgent {
 
 export interface EvidenceBundleInput {
   readonly report: CertifyReport;
-  /** Events inside report.window — the digest binds the bundle to the tape. */
+  /** Events inside report.window - the digest binds the bundle to the tape. */
   readonly windowEvents: readonly TrailEvent[];
   readonly agent?: BundleAgent;
 }
@@ -209,7 +209,7 @@ function clipBundleEvidence(evidence: string): string {
 }
 
 /**
- * Build a signed evidence bundle v1 (hard cross-repo contract — see
+ * Build a signed evidence bundle v1 (hard cross-repo contract - see
  * docs/certify.md). sig = base64url(ed25519_sign(canonicalJson(body))) where
  * body is the bundle without the sig and pubkey fields (same stripping as
  * verifyBundleSignature). Self-signed: integrity + key continuity, NOT identity.

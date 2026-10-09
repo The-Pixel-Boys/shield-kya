@@ -1,6 +1,6 @@
 /**
  * Local live receipt: serve HTML + SSE on loopback only, watch trail.jsonl, reload on change.
- * Requires a minted token (?t=) — same pattern as HTTP MCP shared secret.
+ * Requires a minted token (?t=) - same pattern as HTTP MCP shared secret.
  */
 import { randomBytes } from "node:crypto";
 import { mkdirSync, watch, type FSWatcher } from "node:fs";
@@ -96,10 +96,24 @@ export function startLiveReceiptServer(
   const cache = new EventEmbeddingCache();
   const provider = options.embeddingProvider ?? new LocalMiniLmProvider(process.env);
   let embeddings = new Map<string, number[]>();
+  let embeddingRefreshPromise: Promise<void> | undefined;
 
   const refreshEmbeddings = async (): Promise<void> => {
     const model = loadReceiptModel({ cwd, sessionId: options.sessionId, days: options.days });
-    embeddings = await buildEventEmbeddings(model.events, provider, cache);
+    // Embed newest events first so plain-language search returns recent matches
+    // while older events continue to warm in the background.
+    const events = [...model.events].reverse();
+    embeddings = await buildEventEmbeddings(events, provider, cache);
+  };
+
+  const ensureEmbeddingsWarming = (): void => {
+    // Start embedding generation in the background; do NOT block the current
+    // request. Semantic results will appear on the next search once the cache
+    // is warm. This keeps plain-language search responsive on first open.
+    if (embeddingRefreshPromise) return;
+    embeddingRefreshPromise = refreshEmbeddings().finally(() => {
+      embeddingRefreshPromise = undefined;
+    });
   };
 
   const embedQuery = async (q: string): Promise<number[] | undefined> => {
@@ -278,7 +292,7 @@ export function startLiveReceiptServer(
               days: options.days,
             });
             if (q.trim() && embeddings.size === 0) {
-              await refreshEmbeddings();
+              ensureEmbeddingsWarming();
             }
             const queryEmbedding = await embedQuery(q);
             const result = renderFeedPage(
@@ -313,7 +327,7 @@ export function startLiveReceiptServer(
       }
 
       if (req.method === "GET" && url.pathname === "/healthz") {
-        // Cheap liveness + version handshake for daemon reuse — never renders,
+        // Cheap liveness + version handshake for daemon reuse - never renders,
         // so a render-time failure (e.g. assertNoSecrets) cannot wedge it. The
         // version lets a newer CLI refuse to reuse a stale daemon left running
         // by an older install.
@@ -425,18 +439,18 @@ export function startLiveReceiptServer(
         watcher = watch(dirname(path), { persistent: true }, (_event, filename) => {
           if (!filename || String(filename).endsWith("trail.jsonl")) {
             scheduleBroadcast();
-            void refreshEmbeddings();
           }
         });
         watcher.on("error", () => {
-          /* FS errors — page stays up; next start remounts */
+          /* FS errors - page stays up; next start remounts */
         });
       } catch {
         /* still serve; live reload may be degraded */
       }
 
-      // Warm the embedding cache in the background; failures degrade to BM25.
-      void refreshEmbeddings();
+      // Embeddings are warmed lazily on the first search (see ensureEmbeddingsWarming
+      // in POST /feed). Eager startup warming competes with query embeddings and can
+      // make the first plain-language search feel hung on large trails.
 
       const waitUntilClosed = new Promise<void>((waitResolve) => {
         onSignal = (): void => {

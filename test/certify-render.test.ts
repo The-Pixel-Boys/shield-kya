@@ -30,7 +30,7 @@ function reportWith(over: Partial<CertifyReport>): CertifyReport {
         title: "Agent tool calls are intercepted",
         severity: "high",
         status: "gap",
-        evidence: "0 wired host(s), need 1 — kya connect <host> --hooks",
+        evidence: "0 wired host(s), need 1 - kya connect <host> --hooks",
       },
       {
         id: "SOC-01",
@@ -94,7 +94,7 @@ describe("renderCertifyHtml", () => {
           title: "ORR freshness",
           severity: "medium",
           status: "insufficient_evidence",
-          evidence: "no ORR report — kya orr run --path .",
+          evidence: "no ORR report - kya orr run --path .",
         },
       ],
       overall: { pass: 0, gap: 0, insufficientEvidence: 1, attested: 0, result: "gap" },

@@ -1,6 +1,6 @@
 /**
  * Offline sample policy evaluate for light-install demos.
- * Not a second production PEP — production injects HTTP evaluate against Shield.
+ * Not a second production PEP - production injects HTTP evaluate against Shield.
  * Same sample tools as docs/dev/kya-custom-tools-sample.md (R8: packs off),
  * plus the well-known host tool vocabulary in host-tools.ts.
  */
@@ -34,7 +34,7 @@ function baseTier(
   }
 
   // Clearly destructive admin names on a KNOWN MCP server deny outright, even
-  // when the caller declared risk signals — mirroring sample-tool NEVER.
+  // when the caller declared risk signals - mirroring sample-tool NEVER.
   const mcp = parseMcpToolId(toolId);
   if (mcp && /drop|truncate|purge|transfer/.test(mcp.tool)) {
     return { verdict: "DENY", reasonCode: "NEVER_EVENT" };
@@ -99,7 +99,7 @@ export function applySessionRisk(
 }
 
 /**
- * Local fixture evaluate — day-1 offline demo without paid cloud or full console.
+ * Local fixture evaluate - day-1 offline demo without paid cloud or full console.
  * Doctrine: sole production PEP remains Shield HTTP; this is demo/CT only.
  */
 export function evaluateOffline(

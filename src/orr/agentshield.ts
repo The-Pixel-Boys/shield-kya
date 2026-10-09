@@ -1,6 +1,6 @@
 /**
  * Optional ORR producer for affaan-m/agentshield (CLI `agentshield`).
- * Evidence only — never a PEP. Never `--fix`, never MiniClaw, never npx -y.
+ * Evidence only - never a PEP. Never `--fix`, never MiniClaw, never npx -y.
  */
 
 import { spawnSync } from "node:child_process";
@@ -112,7 +112,7 @@ export function looksLikeRealSecret(s: string): boolean {
   return false;
 }
 
-/** Secrets category: judge evidence / fix.before only — never path/title text. */
+/** Secrets category: judge evidence / fix.before only - never path/title text. */
 export function secretsValueLooksReal(evidence: string, fixBefore: string): boolean {
   const value = [evidence, fixBefore].filter(Boolean).join("\n");
   if (!value.trim()) return false;
@@ -169,7 +169,7 @@ export function ingestAgentShieldReport(parsed: unknown): OrrFinding[] {
       category: "engineering_craft",
       severity: "info",
       title: "AgentShield report ingested as evidence",
-      detail: `${mapped.length} finding(s) mapped. Evidence only — not a PEP.`,
+      detail: `${mapped.length} finding(s) mapped. Evidence only - not a PEP.`,
       evidence: "harness.agentshield JSON ingest",
       source_tool: AGENTSHIELD_PRODUCER_ID,
     },
@@ -186,7 +186,7 @@ export function readAgentShieldJson(path: string): OrrFinding[] {
         category: "engineering_craft",
         severity: "info",
         title: "AgentShield JSON not found",
-        detail: `${path} was requested as an optional producer. Evidence only — not a PEP.`,
+        detail: `${path} was requested as an optional producer. Evidence only - not a PEP.`,
         evidence: abs,
         source_tool: AGENTSHIELD_PRODUCER_ID,
       },

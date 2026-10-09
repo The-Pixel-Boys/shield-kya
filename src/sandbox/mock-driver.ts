@@ -1,6 +1,6 @@
 import type { SandboxDriver } from "./types.js";
 
-/** In-memory driver for unit tests — never talks to a real VMM. */
+/** In-memory driver for unit tests - never talks to a real VMM. */
 export function createMockDriver(): SandboxDriver & {
   readonly live: Set<string>;
 } {

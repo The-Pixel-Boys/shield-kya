@@ -15,7 +15,7 @@
  * resolution, except where a command explicitly threads its parsed env
  * (currently only the eval-tool case in cli.ts → appendTrail). CLI-level
  * tests that pass a synthetic env to runCli MUST set KYA_HOME in it
- * (freshTestHome below) — an env without KYA_HOME falls back to
+ * (freshTestHome below) - an env without KYA_HOME falls back to
  * os.homedir() and would append to the real ~/.kya/trail.jsonl.
  */
 import { appendFileSync, mkdtempSync } from "node:fs";

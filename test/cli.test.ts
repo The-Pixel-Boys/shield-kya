@@ -76,7 +76,7 @@ describe("runCli", () => {
   it("eval-tool --offline DENY then REQUIRE_APPROVE without API key", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "kya-cli-"));
     dirs.push(cwd);
-    // eval-tool threads this env into appendTrail — without KYA_HOME the
+    // eval-tool threads this env into appendTrail - without KYA_HOME the
     // trail write would land in the developer's real ~/.kya.
     const env = { KYA_HOME: freshTestHome() };
     const { io, logs } = captureIo();

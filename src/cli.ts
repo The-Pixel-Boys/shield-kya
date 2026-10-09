@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * @shield-agent/kya — light install CLI
+ * @shield-agent/kya - light install CLI
  * Commands: init | register-agent | eval-tool | wrap | hook | invoke | approve | reject
  *   | agents | agent | passport | kill | approvals | sessions | shrink
  *   | serve-mcp | orr run | dash | certify
@@ -81,6 +81,12 @@ import {
 } from "./commands/invoke.js";
 import { runSandboxCommand } from "./commands/sandbox.js";
 import { runHook } from "./commands/hook.js";
+import { importOptionsFromArgs, runImport } from "./commands/import-traces.js";
+import {
+  investigateOptionsFromArgs,
+  runInvestigate,
+} from "./commands/investigate.js";
+import { runNotifyFlush } from "./commands/notify-flush.js";
 import { formatStopHuman, runStop } from "./commands/stop.js";
 import { runReceiptServe } from "./commands/receipt-serve.js";
 import { maybePrintStarCta } from "./star-cta.js";
@@ -98,20 +104,26 @@ import { triggerHostedSyncFromEnv } from "./gate/hosted-sync.js";
 import { runGateServe } from "./commands/gate-serve.js";
 import { ensureSupportedNode } from "./node-upgrade.js";
 import {
+  checkForUpdate,
+  formatUpdateBanner,
+  shouldSkipUpdateCheck,
+} from "./update-check.js";
+import { runUpdate } from "./commands/update.js";
+import {
   maybePromptConsent,
   maybeSpawnHookPing,
   runTelemetryCommand,
   startSessionBeacon,
 } from "./telemetry.js";
 
-const HELP = `Shield KYA light CLI — Know Your Agent (provider-agnostic)
+const HELP = `Shield KYA light CLI - Know Your Agent (provider-agnostic)
 
 Usage:
   kya <command> [options]
 
 Commands:
   start             ONE LINER: init + wire local MCP + open live report
-                    (report runs in the background — returns your terminal)
+                    (report runs in the background - returns your terminal)
                     Auto-bootstraps the gateway for third-party MCP servers
                     found in host configs (--no-gate or KYA_GATE=off skips)
   stop              Stop the background report server started by kya start
@@ -124,6 +136,8 @@ Commands:
   gate              Local MCP gateway: govern + audit tool calls to any MCP server
                     (init | setup | doctor | status | run | stop)
   init              Scaffold .kya/ config + sample tools + .env.example
+  update            Self-update to the latest npm version (kya start warns when
+                    a newer release exists; --no-update-check / KYA_UPDATE_CHECK=0 opts out)
   register-agent    POST /api/v1/kya/agents (human mint; server applies allow/break-glass/approve)
   eval-tool         Policy evaluate (HTTP plane or --offline sample)
   wrap              Evaluate + record trail. Never executes.
@@ -144,8 +158,8 @@ Commands:
   shrink            Drop session clearance (--id --to BUILD|READ|DEPLOY)
   serve-mcp         Local MCP gate (HTTP default; --stdio for hosts)
   telemetry         Opt-in anonymous usage stats, OFF by default
-                    (status | on | off [--purge] | show | reset) — see docs/telemetry.md
-  orr run           Read-only ORR board (reporting only — not a second PEP)
+                    (status | on | off [--purge] | show | reset) - see docs/telemetry.md
+  orr run           Read-only ORR board (reporting only - not a second PEP)
                     Optional: --producer harness.agentshield [--agentshield-json <file>]
   dash              Terminal desk (FREE panes; actions on a TTY, --once for CI)
   sandbox           Opt-in Firecracker wrap (spawn|exec|kill|status). Not MCP.
@@ -155,10 +169,14 @@ Commands:
                     --attest REQ-ID --text "…" records a local attestation
                     --sign also writes an ed25519-signed evidence-bundle.json
                     (self-signed: integrity + key continuity, NOT identity)
+  import            Import foreign traces into the local trail so the receipt
+                    and certify see them (--from langsmith|langfuse|phoenix|otel <file>)
+  investigate       Deterministic trail analysis: detectors, grouped incidents,
+                    markdown fix briefs for coding agents (--json)
 
 Options (shared):
   --base-url <url>  Control plane origin (or KYA_BASE_URL)
-  --api-key <key>   API key (or KYA_API_KEY) — required for network commands
+  --api-key <key>   API key (or KYA_API_KEY) - required for network commands
   --host <ide|runtime>  Dual-plane host (or KYA_HOST, default ide)
   --offline         Sample evaluate / dash without network
   --hold            wrap: open Hold ticket on REQUIRE_APPROVE (org path; default off)
@@ -173,6 +191,7 @@ Options (shared):
   --window <n>      certify: report window in days (default 30)
   --fail-on <m>     certify: gap (default, exit 1 on gaps) | never
   --pane <name>     dash pane (home|policy|agents|approvals|sessions|orr|mcp|dashboard|…)
+  --from <source>   import: trace format (langsmith|langfuse|phoenix|otel)
   --json            Machine-readable output
   --help, -h        Show help
 
@@ -200,6 +219,8 @@ Examples:
   npx @shield-agent/kya shrink --id <session-id> --to BUILD
   npx @shield-agent/kya dash --once --offline
   npx @shield-agent/kya dash --once --pane policy
+  npx @shield-agent/kya import --from langfuse ./langfuse-export.json
+  npx @shield-agent/kya investigate
 
 Docs: https://shield-agent.com/install · docs/guides/kya-light-install.md
 Doctrine: sole PEP is Shield; DENY is hard; missing APPROVED ⇒ no irreversible side effect.
@@ -222,7 +243,7 @@ const defaultIo: CliIo = {
   exit: (c) => process.exit(c),
 };
 
-/** Testable entry — does not call process.exit when custom io.exit is provided that throws. */
+/** Testable entry - does not call process.exit when custom io.exit is provided that throws. */
 export async function runCli(
   argv: readonly string[],
   io: CliIo = defaultIo,
@@ -268,8 +289,17 @@ export async function runCli(
         } else {
           io.log(formatStartHuman(result));
           if (result.liveUrl) maybePrintStarCta(cwd, 3, io.log);
+          // Cached 24h; silent on any failure. Skipped in CI / --json / opt-out.
+          if (!shouldSkipUpdateCheck(parsed.command, parsed.flags, env)) {
+            const update = await checkForUpdate({ env });
+            if (update) io.log(formatUpdateBanner(update));
+          }
         }
         return 0;
+      }
+
+      case "update": {
+        return await runUpdate();
       }
 
       case "stop": {
@@ -406,7 +436,7 @@ export async function runCli(
           io.log(JSON.stringify(result, null, 2));
         } else {
           io.log(`kya gateway listening on ${result.url}/mcp (pid ${result.pid})`);
-          io.log(`  servers: ${result.servers.length ? result.servers.join(", ") : "(none — edit gateways.json)"}`);
+          io.log(`  servers: ${result.servers.length ? result.servers.join(", ") : "(none - edit gateways.json)"}`);
           io.log(`  config: ${result.configPath}`);
           io.log(`  logs: ${result.logPath}`);
           io.log(result.next);
@@ -626,7 +656,7 @@ export async function runCli(
             io.log("  POST /mcp  (JSON-RPC)");
             io.log("  tools: kya.policy_evaluate | kya.session_ingest | kya.request_approval");
             io.log(
-              "  fail-closed: evaluate/request only — no irreversible side effects without APPROVED",
+              "  fail-closed: evaluate/request only - no irreversible side effects without APPROVED",
             );
             await new Promise<void>((resolve) => {
               const stop = () => {
@@ -653,7 +683,7 @@ export async function runCli(
           );
           return 1;
         }
-        // Re-parse with flags after "orr run" — positionals after subcommand already in flags from original parse
+        // Re-parse with flags after "orr run" - positionals after subcommand already in flags from original parse
         const opts = orrRunOptionsFromArgs(parsed);
         const result = runOrr(opts);
         if (opts.jsonStdout || parsed.flags["json"] === true) {
@@ -663,7 +693,7 @@ export async function runCli(
             `ORR ${result.report.overall} / ${result.report.disposition} → ${result.reportJsonPath ?? result.reportMdPath ?? opts.out}`,
           );
           io.log(
-            `(reporting only — sole PEP remains Shield KYA; scanners are evidence)`,
+            `(reporting only - sole PEP remains Shield KYA; scanners are evidence)`,
           );
         }
         return result.exitCode;
@@ -682,7 +712,7 @@ export async function runCli(
             if (p) io.log(`  wrote ${p}`);
           }
           io.log(
-            "(evidence only — sole PEP remains Shield KYA; certify never allows or blocks)",
+            "(evidence only - sole PEP remains Shield KYA; certify never allows or blocks)",
           );
         }
         // Attestation confirmation is safety-relevant (proof the attest write
@@ -700,7 +730,7 @@ export async function runCli(
         if (result.keyFingerprint) {
           const notice =
             `signed: ${result.bundlePath} (key fp=${result.keyFingerprint}` +
-            (result.keyCreated ? " — new key created, continuity resets here)" : ")");
+            (result.keyCreated ? " - new key created, continuity resets here)" : ")");
           if (jsonOut) io.error(notice);
           else io.log(notice);
         }
@@ -834,11 +864,11 @@ export async function runCli(
         let stdinText = "";
         if (!process.stdin.isTTY) {
           stdinText = await new Promise<string>((res) => {
-            // Buffer chunks, not string concat — a multibyte UTF-8 char can
+            // Buffer chunks, not string concat - a multibyte UTF-8 char can
             // straddle a chunk boundary.
             const chunks: Buffer[] = [];
             process.stdin.on("data", (c: Buffer) => chunks.push(c));
-            // Pipe errors must not hang the hook — resolve with what arrived.
+            // Pipe errors must not hang the hook - resolve with what arrived.
             process.stdin.on("error", () =>
               res(Buffer.concat(chunks).toString("utf8")),
             );
@@ -853,6 +883,19 @@ export async function runCli(
         // After the answer is out. Opt-in, at most daily, detached: the hook never waits on the network.
         maybeSpawnHookPing({ env, cwd, host });
         return r.exitCode;
+      }
+
+      case "import": {
+        return await runImport(importOptionsFromArgs(parsed), io, cwd, env);
+      }
+
+      case "investigate": {
+        return await runInvestigate(investigateOptionsFromArgs(parsed), io, cwd, env);
+      }
+
+      case "notify-flush": {
+        // Internal: spawned detached by hook/wrap (src/notify/dispatch.ts).
+        return await runNotifyFlush(env, cwd);
       }
 
       default:
@@ -872,7 +915,7 @@ export async function runCli(
 }
 
 // Only auto-run when executed as CLI entry (not when imported by tests).
-// Bin links resolve as ".../bin/kya" not ".../cli.js" — compare realpaths.
+// Bin links resolve as ".../bin/kya" not ".../cli.js" - compare realpaths.
 function isCliEntry(): boolean {
   if (typeof process.argv[1] !== "string") return false;
   try {

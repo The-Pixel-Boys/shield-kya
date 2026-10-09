@@ -284,14 +284,14 @@ async function loadCases(client: KyaHttpClient): Promise<readonly string[]> {
     if (!Array.isArray(rows)) {
       return [
         "Cases list is not available on this plane.",
-        "Use the web console /app/kya/cases (observational — not a PEP).",
+        "Use the web console /app/kya/cases (observational - not a PEP).",
       ];
     }
     return casesBody(rows);
   } catch {
     return [
       "GET /api/v1/kya/cases is not on this plane yet.",
-      "Use the web console /app/kya/cases. Observational only — does not approve submit.",
+      "Use the web console /app/kya/cases. Observational only - does not approve submit.",
     ];
   }
 }
@@ -315,7 +315,7 @@ async function loadEdge(client: KyaHttpClient): Promise<Record<string, string | 
   }
 }
 
-/** Offline sample used by tests — production PEP is HTTP. */
+/** Offline sample used by tests - production PEP is HTTP. */
 export function offlinePolicyPair(): {
   deny: PolicyEvaluateResponse;
   requireApprove: PolicyEvaluateResponse;

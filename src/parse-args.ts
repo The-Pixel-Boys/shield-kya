@@ -1,5 +1,5 @@
 /**
- * Minimal argv parser — no external CLI framework.
+ * Minimal argv parser - no external CLI framework.
  * Supports: flags (--foo), values (--foo bar | --foo=bar), boolean (--stdio), positionals.
  */
 

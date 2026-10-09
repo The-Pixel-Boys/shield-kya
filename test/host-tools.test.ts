@@ -55,7 +55,7 @@ describe("evaluateOffline host tool vocabulary", () => {
   });
 
   it("MCP-qualified names bypass the host vocabulary (registry decides)", () => {
-    // Unknown servers stay UNKNOWN_TOOL — the host vocabulary never claims
+    // Unknown servers stay UNKNOWN_TOOL - the host vocabulary never claims
     // `__`-qualified names, and the MCP registry never guesses.
     const unknown = evaluateOffline({ toolId: "mcp__acme-internal__save" });
     expect(unknown.verdict).toBe("REQUIRE_APPROVE");

@@ -8,7 +8,7 @@
  * name, session id). Tool arguments are never extracted, and the persisted
  * fields pass through the secret scanner before hitting the trail.
  *
- * Known limitation: the receiver is unauthenticated — any local process can
+ * Known limitation: the receiver is unauthenticated - any local process can
  * POST spans and inject trail events. That is the same trust boundary as the
  * user-writable trail file itself (any local process can append to
  * ~/.kya/trail.jsonl), so no new privilege is granted; remote injection is
@@ -33,7 +33,7 @@ const TWIN_TTL_MS = 30_000;
 // refused as `-32602 Unknown tool` over HTTP 400; the span carries ERROR
 // status and an "Unknown tool" error message. Downstream API denials (a
 // tool's own 403/"forbidden" result) are NOT policy denials and must not
-// match this signal — they classify as TOOL_ERROR.
+// match this signal - they classify as TOOL_ERROR.
 const DENIAL_SIGNAL = /\bunknown tool\b/i;
 
 export interface SpanMapContext {
@@ -122,7 +122,7 @@ function readBody(req: import("node:http").IncomingMessage): Promise<Buffer> {
 
 /**
  * Accept OTLP trace exports on 127.0.0.1 and append tools/call spans to the
- * trail. Malformed payloads get a 400 and are dropped — the receiver never
+ * trail. Malformed payloads get a 400 and are dropped - the receiver never
  * dies on bad input (the gateway keeps exporting).
  */
 export async function startOtlpReceiver(opts: OtlpReceiverOptions): Promise<OtlpReceiver> {

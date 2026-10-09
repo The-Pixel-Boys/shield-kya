@@ -1,7 +1,7 @@
 /**
  * Hidden daemon entry: runs the live receipt server in the foreground and
  * publishes `.kya/receipt-server.json` (pid, url, token) once listening.
- * Spawned detached by `ensureReceiptDaemon` — never invoked by users directly.
+ * Spawned detached by `ensureReceiptDaemon` - never invoked by users directly.
  */
 import type { ResolvedConfig } from "../config.js";
 import { startLiveReceiptServer } from "../receipt/live-server.js";
@@ -26,7 +26,7 @@ export async function runReceiptServe(
   try {
     await live.waitUntilClosed;
   } finally {
-    // Only remove the state file if it is still ours — a successor daemon
+    // Only remove the state file if it is still ours - a successor daemon
     // spawned during our slow shutdown must not lose its state.
     clearDaemonState(config.cwd, process.pid);
   }

@@ -1,6 +1,6 @@
 /**
  * Optional ORR producer for OpenSSF Scorecard (CLI `scorecard`).
- * Evidence only — never a PEP. Never --fix, never npx -y.
+ * Evidence only - never a PEP. Never --fix, never npx -y.
  */
 
 import { spawnSync } from "node:child_process";
@@ -55,7 +55,7 @@ export function ingestScorecardJson(
       detail:
         score === undefined
           ? "Scorecard dump loaded. Does not ALLOW side effects."
-          : `Scorecard score=${score} (evidence only — not a PEP).`,
+          : `Scorecard score=${score} (evidence only - not a PEP).`,
       evidence: evidencePath,
       source_tool: SCORECARD_PRODUCER_ID,
     },
@@ -70,7 +70,7 @@ export function ingestScorecardJson(
       category: "enterprise_readiness",
       severity: "info",
       title: `Scorecard ${name}`,
-      detail: `score=${String(checkScore ?? "n/a")} — evidence only`,
+      detail: `score=${String(checkScore ?? "n/a")} - evidence only`,
       evidence: evidencePath,
       source_tool: SCORECARD_PRODUCER_ID,
     });

@@ -1,5 +1,5 @@
 /**
- * `kya stop` — stop the background live-receipt server started by `kya start`.
+ * `kya stop` - stop the background live-receipt server started by `kya start`.
  * `--all` additionally sweeps orphaned `receipt-serve` daemons from other
  * cwds or older installs that the cwd state file does not know about.
  */
@@ -58,7 +58,7 @@ export async function runStop(cwd: string, options: StopOptions = {}): Promise<S
   let stale = false;
   if (state) {
     if (pidAlive(state.pid) && !isReceiptDaemonProcess(state.pid)) {
-      // Planted or recycled pid — never signal a foreign process.
+      // Planted or recycled pid - never signal a foreign process.
       clearDaemonState(cwd);
       stale = true;
     } else {
@@ -78,7 +78,7 @@ export async function runStop(cwd: string, options: StopOptions = {}): Promise<S
   if (options.all) {
     const platform = options.platform ?? process.platform;
     if (platform === "win32") {
-      // tasklist exposes no command lines, so orphans cannot be identified —
+      // tasklist exposes no command lines, so orphans cannot be identified -
       // report the limitation instead of claiming none are running.
       sweepUnsupported = true;
       extraStopped = [];
@@ -98,7 +98,7 @@ export async function runStop(cwd: string, options: StopOptions = {}): Promise<S
     }
   }
 
-  // --all also stops the local gateway (kya gate run) — supervisor, binary
+  // --all also stops the local gateway (kya gate run) - supervisor, binary
   // child, plus orphan sweeps of stray gate-serve supervisors and kya-gate
   // binaries.
   let gateStopped = false;
@@ -139,7 +139,7 @@ export async function runStop(cwd: string, options: StopOptions = {}): Promise<S
 export function formatStopHuman(r: StopResult): string {
   const lines: string[] = [];
   if (r.stale) {
-    lines.push(`state file was stale (pid ${r.pid} is not the report server) — cleared it`);
+    lines.push(`state file was stale (pid ${r.pid} is not the report server) - cleared it`);
   } else {
     lines.push(
       r.stopped ? `stopped report server (pid ${r.pid})` : "no report server running",
@@ -147,7 +147,7 @@ export function formatStopHuman(r: StopResult): string {
   }
   if (r.sweepUnsupported) {
     lines.push(
-      "sweep of other receipt daemons is not supported on this platform (win32) — any orphans must be stopped manually",
+      "sweep of other receipt daemons is not supported on this platform (win32) - any orphans must be stopped manually",
     );
   } else if (r.extraStopped) {
     lines.push(

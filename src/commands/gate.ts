@@ -1,5 +1,5 @@
 /**
- * `kya gate` — local MCP gateway: govern + audit tool calls to any MCP server.
+ * `kya gate` - local MCP gateway: govern + audit tool calls to any MCP server.
  *
  *   init    scaffold .kya/gateways.json (recipes for the well-known servers)
  *   setup   install the pinned gateway binary to .kya/bin (only downloader)
@@ -57,7 +57,7 @@ export function runGateInit(env: NodeJS.ProcessEnv = process.env): GateInitResul
     created: r.created,
     next: r.created
       ? "move a recipe into \"servers\" and fill its placeholders, then `kya gate setup && kya gate run`"
-      : "gateways.json already exists — edit it, then `kya gate run`",
+      : "gateways.json already exists - edit it, then `kya gate run`",
   };
 }
 
@@ -95,7 +95,7 @@ export function bindScopeFromYaml(env: NodeJS.ProcessEnv): { loopbackOnly: boole
   try {
     yaml = readFileSync(gateYamlPath(env), "utf8");
   } catch {
-    return { loopbackOnly: false, detail: "no generated config yet — `kya gate run` generates one" };
+    return { loopbackOnly: false, detail: "no generated config yet - `kya gate run` generates one" };
   }
   const hasRule =
     yaml.includes("networkAuthorization:") && yaml.includes("127.0.0.0/8") && yaml.includes("::1");
@@ -106,7 +106,7 @@ export function bindScopeFromYaml(env: NodeJS.ProcessEnv): { loopbackOnly: boole
     loopbackOnly,
     detail: loopbackOnly
       ? "loopback-only (L4 allowlist 127.0.0.0/8 + ::1; stats/readiness/admin listeners off)"
-      : "WARNING: generated config is missing the loopback allowlist or listener offs — re-run `kya gate run`",
+      : "WARNING: generated config is missing the loopback allowlist or listener offs - re-run `kya gate run`",
   };
 }
 
@@ -161,7 +161,7 @@ export interface GateRunResult {
 
 /**
  * Generate the gateway YAML from gateways.json, then spawn the detached
- * supervisor (OTLP receiver + gateway binary child). Requires the binary —
+ * supervisor (OTLP receiver + gateway binary child). Requires the binary -
  * never downloads; `kya gate setup` is the only downloader. Success is
  * reported only after the listener actually answers.
  */
@@ -173,7 +173,7 @@ export async function runGateRun(
   const bin = inspectGateBinary(env);
   if (!bin.present) {
     throw new KyaError(
-      `gateway binary not installed — run \`kya gate setup\` first (expected at ${gateBinaryPath(env)})`,
+      `gateway binary not installed - run \`kya gate setup\` first (expected at ${gateBinaryPath(env)})`,
       "GATE_BINARY_MISSING",
     );
   }
@@ -200,7 +200,7 @@ export async function runGateRun(
 
   const existing = readGateState(env);
   if (existing && pidAlive(existing.pid) && isGateDaemonProcess(existing.pid)) {
-    // Never rewrite gate.yaml under a live process — the gateway watches the
+    // Never rewrite gate.yaml under a live process - the gateway watches the
     // file. Compare and report drift instead.
     let drift = false;
     try {
@@ -225,8 +225,8 @@ export async function runGateRun(
       reused: true,
       ...(drift ? { drift } : {}),
       next: drift
-        ? "config changed since gateway started — `kya gate stop && kya gate run` to apply"
-        : "gateway already running — `kya gate stop` first to reload config",
+        ? "config changed since gateway started - `kya gate stop && kya gate run` to apply"
+        : "gateway already running - `kya gate stop` first to reload config",
     };
   }
   clearGateState(env);
@@ -248,7 +248,7 @@ export async function runGateRun(
   const fail = async (): Promise<never> => {
     await killGateProcessTree(pid, readGateState(env)?.childPid);
     clearGateState(env);
-    throw new KyaError(`gateway failed to start — see ${logPath}`, "GATE_START_FAILED");
+    throw new KyaError(`gateway failed to start - see ${logPath}`, "GATE_START_FAILED");
   };
 
   let probingSince = -1;
@@ -278,7 +278,7 @@ export async function runGateRun(
         logPath,
         reused: false,
         next:
-          `point your host at ${state.url}/mcp (server key shield-kya-gate) — ` +
+          `point your host at ${state.url}/mcp (server key shield-kya-gate) - ` +
           "`kya connect <host> --gate` wires it; `kya gate stop` stops everything.",
       };
     }
@@ -349,7 +349,7 @@ export async function runGateStop(
     return { stopped: false };
   }
   if (pidAlive(state.pid) && !isGateDaemonProcess(state.pid)) {
-    // Planted or recycled pid — never signal a foreign process.
+    // Planted or recycled pid - never signal a foreign process.
     clearGateState(env);
     triggerHostedSyncFromEnv({ cwd: input.cwd ?? process.cwd(), env, state: "configured-stopped" });
     return { stopped: false, pid: state.pid, stale: true };
@@ -379,12 +379,12 @@ export function formatGateDoctorHuman(r: GateDoctorResult): string {
     "KYA gate doctor",
     r.binary.present
       ? `binary: ${r.binary.path}${r.binary.version ? ` (${r.binary.version})` : ""}`
-      : `binary: missing — run \`kya gate setup\``,
+      : `binary: missing - run \`kya gate setup\``,
     `config: ${r.config.path} (${r.config.servers} server${r.config.servers === 1 ? "" : "s"})`,
     `bind scope: ${r.bindScope.detail}`,
     r.listener.running
       ? `listener: ${r.listener.url} (${r.listener.healthy ? "healthy" : "not answering"})`
-      : "listener: not running — `kya gate run`",
+      : "listener: not running - `kya gate run`",
     syncLine,
   ].join("\n");
 }
@@ -392,14 +392,14 @@ export function formatGateDoctorHuman(r: GateDoctorResult): string {
 function formatLastSync(last: GateDoctorResult["hostedSync"]["lastSync"]): string {
   if (!last) return "";
   const status = last.ok ? "ok" : "failed";
-  const detail = last.error ? ` — ${last.error}` : "";
+  const detail = last.error ? ` - ${last.error}` : "";
   return ` (last sync: ${status}${detail})`;
 }
 
 export function gateSubcommand(parsed: { positionals: readonly string[] }): string {
   const sub = parsed.positionals[0];
   if (sub === "init" || sub === "setup" || sub === "doctor" || sub === "status" || sub === "run" || sub === "stop") {
-    // `status` is an alias for `doctor` — same output, hosted sync line included.
+    // `status` is an alias for `doctor` - same output, hosted sync line included.
     return sub === "status" ? "doctor" : sub;
   }
   throw new UsageError("Usage: kya gate <init|setup|doctor|status|run|stop>");

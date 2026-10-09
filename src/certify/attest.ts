@@ -1,5 +1,5 @@
 /**
- * Operator attestations — the explicit escape hatch for requirements a machine
+ * Operator attestations - the explicit escape hatch for requirements a machine
  * cannot check. Local file only (<cwd>/.kya/attestations.json); never uploaded,
  * never a PEP. Latest attestation per requirement id wins.
  */
@@ -20,7 +20,7 @@ const MAX_ATTESTATIONS_BYTES = 256 * 1024;
 const MAX_TEXT_CHARS = 2000;
 const REQ_ID = /^[A-Z]+-\d+$/;
 // Attestation text and timestamps are interpolated into single-line evidence
-// strings, reports, and signed bundles — same rule as catalog attest prompts.
+// strings, reports, and signed bundles - same rule as catalog attest prompts.
 const CONTROL_CHARS = /[\x00-\x1f\x7f]/;
 
 export function attestationsPath(cwd: string): string {
@@ -88,7 +88,7 @@ export function recordAttestation(
     assertNoSecrets(clean);
   } catch {
     throw new UsageError(
-      "--text looks like it contains a secret — attestations describe policy, never credentials",
+      "--text looks like it contains a secret - attestations describe policy, never credentials",
     );
   }
   const record: AttestationRecord = {
@@ -102,11 +102,11 @@ export function recordAttestation(
   const store = { version: 1, attestations: [...others, record] };
   mkdirSync(configDir(cwd), { recursive: true, mode: 0o700 });
   // Atomic tmp+rename: a crash or concurrent run must never truncate the
-  // store — the fail-safe load would silently discard all attestation history.
+  // store - the fail-safe load would silently discard all attestation history.
   const path = attestationsPath(cwd);
   atomicWriteSync(path, `${JSON.stringify(store, null, 2)}\n`);
   try {
-    chmodSync(path, 0o600); // operator statements are sensitive — evidence-bundle perms
+    chmodSync(path, 0o600); // operator statements are sensitive - evidence-bundle perms
   } catch {
     /* best-effort on non-POSIX */
   }

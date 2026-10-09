@@ -99,7 +99,7 @@ describe("assembleEvidenceContext", () => {
     const ctx = assembleEvidenceContext(cwd, env, NOW);
 
     expect(ctx.now).toBe(NOW);
-    // 0.6.0 parity: the full trail is passed through unfiltered — in-window,
+    // 0.6.0 parity: the full trail is passed through unfiltered - in-window,
     // out-of-window, and the unparseable-ts event (readTrail keeps it; it is
     // simply outside every window). ts-ascending, unparseable last.
     expect(ctx.events.map((e) => e.toolId)).toEqual(["Bash", "Write", "Read", "Edit"]);

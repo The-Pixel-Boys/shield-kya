@@ -105,7 +105,7 @@ const GAP_CARD: CertifyCard = {
   ],
 };
 
-/** Two attested requirements — pins the "(+N more)" collapse. */
+/** Two attested requirements - pins the "(+N more)" collapse. */
 const ATTESTED_CARD: CertifyCard = {
   result: "gap",
   pass: 24,
@@ -119,7 +119,7 @@ const ATTESTED_CARD: CertifyCard = {
       id: "SEC-01",
       title: "Gate enforces, not observe-only",
       severity: "high",
-      evidence: 'gate mode is observe — set KYA_HOLD=1 / KYA_OFFLINE=1 or "gateMode" in .kya/config.json',
+      evidence: 'gate mode is observe - set KYA_HOLD=1 / KYA_OFFLINE=1 or "gateMode" in .kya/config.json',
     },
   ],
   requirements: [
@@ -188,7 +188,7 @@ describe("hero Certify panel", () => {
     const hero = section(html, "Certify");
     expect(hero).toContain('hero-certify pass');
     expect(hero).toContain('<span class="pill orr-green">pass</span>');
-    expect(hero).toContain("Certify — Agent Trust Baseline");
+    expect(hero).toContain("Certify - Agent Trust Baseline");
     // Tiles: pass 26 is toned ok; gap 0 carries no tone class.
     expect(hero).toContain('<span class="kpi-num ok">26</span><span class="kpi-lab">Pass</span>');
     expect(hero).toContain('<span class="kpi-num">0</span><span class="kpi-lab">Gap</span>');
@@ -197,7 +197,7 @@ describe("hero Certify panel", () => {
     );
     expect(hero).toContain('<span class="kpi-num">0</span><span class="kpi-lab">Attested</span>');
     expect(hero).toContain(
-      "live evaluation — window 30d, 7 trail events · the Certify tab has the full live requirement table · kya certify for the gap report + signed bundle",
+      "live evaluation - window 30d, 7 trail events · the Certify tab has the complete gap report · <code>kya certify</code> writes the signed evidence bundle",
     );
     // A pass card has no gap rows.
     expect(hero).not.toContain('class="sev ');
@@ -208,7 +208,7 @@ describe("hero Certify panel", () => {
     const hero = section(html, "Certify");
     expect(hero).toContain('hero-certify gap');
     expect(hero).toContain('<span class="pill orr-amber">gap</span>');
-    // Exactly 5 rows — the sixth (ZZZ-99) is cut.
+    // Exactly 5 rows - the sixth (ZZZ-99) is cut.
     expect(hero.match(/class="sev /g)).toHaveLength(5);
     expect(hero).toContain("SEC-04");
     expect(hero).toContain("LOG-03");
@@ -223,25 +223,28 @@ describe("hero Certify panel", () => {
     expect(iMedium).toBeGreaterThan(iHigh);
     expect(iLow).toBeGreaterThan(iMedium);
     // Tiles: gap 6 is toned warn; attested 1 stays muted (signed statement,
-    // unverified — the neutral tone matches the legend and the Certify tab).
+    // unverified - the neutral tone matches the legend and the Certify tab).
     expect(hero).toContain('<span class="kpi-num warn">6</span><span class="kpi-lab">Gap</span>');
     expect(hero).toContain('<span class="kpi-num mute">1</span><span class="kpi-lab">Attested</span>');
     expect(hero).toContain("window 30d, 42 trail events");
   });
 
-  it("legend defines gap / insufficient / attested in one muted line", () => {
+  it("legend defines gap / insufficient / attested in a definition list", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3, { certify: GAP_CARD }));
     const hero = section(html, "Certify");
-    expect(hero).toContain("gap = requirement failing — your work plan");
+    expect(hero).toContain("<dl class=\"cert-legend\">");
+    expect(hero).toContain("<dt>Gap</dt><dd>requirement is failing - this is your work plan</dd>");
     expect(hero).toContain(
-      "insufficient = not enough local evidence to evaluate (never counts as pass)",
+      "<dt>Insufficient</dt><dd>not enough local evidence to evaluate (never counts as a pass)</dd>",
     );
-    expect(hero).toContain("attested = your signed statement, unverified");
-    // One legend row, straight under the count tiles, before the gap rows.
-    expect(hero.match(/class="legend/g)).toHaveLength(1);
+    expect(hero).toContain(
+      "<dt>Attested</dt><dd>your signed statement, unverified until audited</dd>",
+    );
+    // One legend block, under the count tiles, before the gap rows.
+    expect(hero.match(/class="cert-legend/g)).toHaveLength(1);
     const iTiles = hero.indexOf('class="kpi-row"');
-    const iLegend = hero.indexOf("gap = requirement failing");
-    const iFirstRow = hero.indexOf('<ul class="rows">');
+    const iLegend = hero.indexOf('class="cert-legend"');
+    const iFirstRow = hero.indexOf('<div class="cert-rows">');
     expect(iLegend).toBeGreaterThan(iTiles);
     expect(iLegend).toBeLessThan(iFirstRow);
   });
@@ -250,21 +253,21 @@ describe("hero Certify panel", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3, { certify: GAP_CARD }));
     const hero = section(html, "Certify");
     for (const g of GAP_CARD.topGaps.slice(0, 5)) {
-      expect(hero).toContain(`<code>${g.id}</code> — ${g.title}`);
+      expect(hero).toContain(`<code>${g.id}</code> - ${g.title}`);
     }
     // The cut sixth row leaks neither title nor evidence.
     expect(hero).not.toContain("overflow row must not render");
     expect(hero).not.toContain("overflow evidence must not render");
   });
 
-  it("renders the evidence one-liner under the gap row, muted", () => {
+  it("renders the full evidence inside the expandable gap row body", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3, { certify: GAP_CARD }));
     const hero = section(html, "Certify");
     expect(hero).toContain(
-      '<span class="gap-ev">3 write events with verdict=ALLOW in window</span>',
+      '<p class="req-evi"><strong>Evidence:</strong> 3 write events with verdict=ALLOW in window</p>',
     );
     expect(hero).toContain(
-      '<span class="gap-ev">no retention setting in .kya/config.json</span>',
+      '<p class="req-evi"><strong>Evidence:</strong> no retention setting in .kya/config.json</p>',
     );
   });
 
@@ -273,7 +276,7 @@ describe("hero Certify panel", () => {
     const hero = section(html, "Certify");
     // attested: 1 → no collapse suffix.
     expect(hero).toContain("attested: <code>SEC-09</code>");
-    expect(hero).toContain('"Our on-call rota covers agent incidents; reviewed quarterly."');
+    expect(hero).toContain("Our on-call rota covers agent incidents; reviewed quarterly.");
     expect(hero).not.toContain("more)");
   });
 
@@ -281,7 +284,7 @@ describe("hero Certify panel", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3, { certify: ATTESTED_CARD }));
     const hero = section(html, "Certify");
     expect(hero).toContain("attested: <code>SEC-09</code> (+1 more)");
-    expect(hero).toContain('"Our on-call rota covers agent incidents; reviewed quarterly."');
+    expect(hero).toContain("Our on-call rota covers agent incidents; reviewed quarterly.");
     // The second attestation is summarized by the count, not rendered.
     expect(hero).not.toContain("Nightly restores tested in staging.");
   });
@@ -314,8 +317,8 @@ describe("hero Certify panel", () => {
     expect(hero).toContain("&lt;img src=x onerror=alert(1)&gt;");
   });
 
-  it("clips an overlong evidence one-liner to ~140 chars", () => {
-    const longEvidence = `gate mode is observe — ${"x".repeat(300)}`;
+  it("renders the full evidence inside the expandable body, no longer clipped", () => {
+    const longEvidence = `gate mode is observe - ${"x".repeat(300)}`;
     const longCard: CertifyCard = {
       ...GAP_CARD,
       attested: 0,
@@ -324,11 +327,11 @@ describe("hero Certify panel", () => {
     };
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3, { certify: longCard }));
     const hero = section(html, "Certify");
-    expect(hero).not.toContain(longEvidence);
-    expect(hero).toContain(`gate mode is observe — ${"x".repeat(110)}`);
+    expect(hero).toContain(longEvidence);
+    expect(hero).toContain('<p class="req-evi"><strong>Evidence:</strong>');
   });
 
-  it("absent card: neutral fail-closed state — never green", () => {
+  it("absent card: neutral fail-closed state - never green", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3));
     const hero = section(html, "Certify");
     expect(hero).toContain('hero-certify none');
@@ -339,7 +342,7 @@ describe("hero Certify panel", () => {
   });
 });
 
-describe("verdicts hero card — static mix bars", () => {
+describe("verdicts hero card - static mix bars", () => {
   // 2 allow + 1 deny + 1 review: total 4 → 50% / 25% / 25%.
   const EVENTS: TrailEvent[] = [
     ev({ ts: iso(0), sessionId: "s" }),
@@ -356,7 +359,7 @@ describe("verdicts hero card — static mix bars", () => {
     expect(hero).toContain('<span class="mix-fill warn" style="width:25%"></span>');
     expect(hero).toContain('<span class="mix-num">2</span>');
     expect(hero).toContain('<span class="mix-num">1</span>');
-    // Static markup only — filter chips live in the Activity tab.
+    // Static markup only - filter chips live in the Activity tab.
     expect(hero).not.toContain("data-fgroup");
     expect(hero).not.toContain("<button");
   });
@@ -415,7 +418,7 @@ describe("verdicts hero card — static mix bars", () => {
   });
 });
 
-describe("activity hero card — 7-bucket sparkline", () => {
+describe("activity hero card - 7-bucket sparkline", () => {
   it("emits exactly 7 rects with the max bucket at full height", () => {
     // Three daily buckets: 2 events, gap day, 4 events.
     // Buckets are LOCAL calendar days (the receipt is a local, human-facing report). Offsets from
@@ -510,7 +513,7 @@ describe("gateway hero card", () => {
     const hero = section(html, "Gateway");
     expect(hero).toContain('<span class="pill">not set up</span>');
     expect(hero).toContain("0 backends configured");
-    expect(hero).toContain("binary missing — kya gate setup");
+    expect(hero).toContain("binary missing - kya gate setup");
   });
 
   it("is omitted entirely when model.gate is absent", () => {
