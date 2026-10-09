@@ -115,7 +115,10 @@ function endpointAllowed(cfg: OtlpExportConfig): boolean {
 }
 
 function tracesUrl(cfg: OtlpExportConfig): string {
-  const base = cfg.endpoint.replace(/\/+$/, "");
+  // No regex here: trailing-slash stripping with a loop keeps static
+  // analyzers (and reviewers) sure this is linear on uncontrolled input.
+  let base = cfg.endpoint;
+  while (base.endsWith("/")) base = base.slice(0, -1);
   return base.endsWith("/v1/traces") ? base : `${base}/v1/traces`;
 }
 
