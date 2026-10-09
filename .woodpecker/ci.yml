@@ -6,7 +6,7 @@
 
 when:
   - event: push
-    branch: [main, chore/woodpecker-migration]  # migration branch is temporary — removed at cutover
+    branch: [main]
   - event: pull_request
     branch: main
 

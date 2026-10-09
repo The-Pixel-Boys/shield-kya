@@ -6,10 +6,8 @@ name: version-drift
 # that code is broken.
 
 on:
-  schedule:
-    - cron: '43 5 * * *' # daily, off-peak
+  # Migrated to Woodpecker (ci.shield-agent.com) — manual-only safety net.
   workflow_dispatch:
-
 permissions:
   contents: read
 

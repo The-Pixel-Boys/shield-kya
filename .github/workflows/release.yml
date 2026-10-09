@@ -7,20 +7,8 @@ name: release-npm
 # (Do not use secrets.* in if: — that invalidates the workflow file.)
 
 on:
-  push:
-    tags:
-      - 'v*'
+  # Migrated to Woodpecker (ci.shield-agent.com) — manual-only safety net.
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Test + pack only (no npm publish)'
-        required: false
-        default: 'true'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-
 permissions:
   contents: read
 
