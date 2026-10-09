@@ -4,7 +4,7 @@
  * performs the send. `a2a` is a registry-unknown server, so offline evaluate
  * lands on the safe REQUIRE_APPROVE/UNKNOWN path unless the action is
  * declared irreversible. Fleet-level A2A governance (mTLS identity, org
- * policy between runtimes) is the kya gateway's job — this is the
+ * policy between runtimes) is the kya gateway's job - this is the
  * single-process complement.
  */
 
@@ -16,7 +16,7 @@ export interface GovernA2aSendOptions {
   readonly peerId: string;
   readonly peerUrl?: string;
   readonly action: string;
-  /** Short human description of the payload — trail summary only, never the body. */
+  /** Short human description of the payload - trail summary only, never the body. */
   readonly payloadSummary?: string;
   readonly irreversible?: boolean;
   readonly config?: ResolvedConfig;

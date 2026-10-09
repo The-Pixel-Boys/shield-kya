@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveConfig, type ResolvedConfig } from "../src/config.js";
@@ -33,10 +33,13 @@ class FakeEmbeddingProvider {
 describe("live receipt server search", () => {
   let dir: string;
   let config: ResolvedConfig;
+  let searchIndexFile: string;
   const servers: Awaited<ReturnType<typeof startLiveReceiptServer>>[] = [];
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "kya-live-search-"));
+    searchIndexFile = join(dir, "search-index.json");
+    process.env.KYA_SEARCH_INDEX = searchIndexFile;
     config = resolveConfig({
       cwd: dir,
       offline: true,
@@ -55,7 +58,10 @@ describe("live receipt server search", () => {
         /* ignore */
       }
     }
+    if (existsSync(searchIndexFile)) rmSync(searchIndexFile);
     rmSync(dir, { recursive: true, force: true });
+    delete process.env.KYA_SEARCH_INDEX;
+    delete process.env.KYA_SEARCH_SEMANTIC;
   });
 
   async function start(
@@ -103,26 +109,36 @@ describe("live receipt server search", () => {
     const s = await start(new FakeEmbeddingProvider());
     writeEvents();
 
-    const res = await fetch(`http://127.0.0.1:${s.port}/feed?t=${s.token}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filters: {}, page: 1, q: "opened a GitHub ticket" }),
-    });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      ok?: boolean;
-      feedHtml?: string;
-      total?: number;
-    };
-    expect(body.ok).toBe(true);
-    expect(body.total).toBe(3);
-    const html = body.feedHtml ?? "";
-    // The top result should be the GitHub event.
+    // Semantic embeddings warm in the background; poll until they influence ranking.
+    let html = "";
+    let total = 0;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const res = await fetch(`http://127.0.0.1:${s.port}/feed?t=${s.token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filters: {}, page: 1, q: "opened a GitHub ticket" }),
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        ok?: boolean;
+        feedHtml?: string;
+        total?: number;
+      };
+      expect(body.ok).toBe(true);
+      html = body.feedHtml ?? "";
+      total = body.total ?? 0;
+      if (total === 3 && html.match(/<article[^>]*>/)?.[0]?.includes("mcp__github__create_issue")) {
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(total).toBe(3);
     const firstArticle = html.match(/<article[^>]*>/)?.[0] ?? "";
     expect(firstArticle).toContain("mcp__github__create_issue");
   });
 
   it("returns lexical matches when semantic search is disabled", async () => {
+    process.env.KYA_SEARCH_SEMANTIC = "off";
     const s = await start();
     writeEvents();
 

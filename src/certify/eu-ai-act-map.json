@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "articles": {
+    "art-9": {
+      "title": "Risk management system",
+      "requirements": [
+        "DP-02",
+        "SEC-01",
+        "SEC-04",
+        "SEC-05",
+        "SAFE-01",
+        "SAFE-02",
+        "SAFE-03",
+        "SAFE-05",
+        "REL-02",
+        "SOC-01"
+      ]
+    },
+    "art-10": {
+      "title": "Data and data governance",
+      "requirements": ["DP-04", "DP-05", "SOC-04"]
+    },
+    "art-11": {
+      "title": "Technical documentation",
+      "requirements": ["ACC-03"]
+    },
+    "art-12": {
+      "title": "Record-keeping",
+      "requirements": ["DP-01", "DP-05", "REL-01", "REL-05", "ACC-01", "ACC-02"]
+    },
+    "art-13": {
+      "title": "Transparency and provision of information to deployers",
+      "requirements": ["SOC-03", "SOC-05"]
+    },
+    "art-14": {
+      "title": "Human oversight",
+      "requirements": [
+        "DP-02",
+        "DP-03",
+        "SEC-03",
+        "SAFE-01",
+        "SAFE-04",
+        "SAFE-05",
+        "ACC-01",
+        "ACC-05",
+        "SOC-05"
+      ]
+    },
+    "art-15": {
+      "title": "Accuracy, robustness and cybersecurity",
+      "requirements": [
+        "DP-03",
+        "DP-04",
+        "SEC-01",
+        "SEC-02",
+        "SEC-04",
+        "SEC-05",
+        "SAFE-02",
+        "REL-02",
+        "REL-04"
+      ]
+    },
+    "art-26": {
+      "title": "Obligations of deployers of high-risk AI systems",
+      "requirements": ["DP-01", "ACC-04", "ACC-05", "SOC-01", "SOC-02", "SOC-04"]
+    },
+    "art-72": {
+      "title": "Post-market monitoring",
+      "requirements": ["SEC-02", "SAFE-03", "REL-03", "REL-04", "ACC-03", "SOC-02"]
+    }
+  },
+  "requirementToArticles": {
+    "DP-01": ["art-12", "art-26"],
+    "DP-02": ["art-14", "art-9"],
+    "DP-03": ["art-14", "art-15"],
+    "DP-04": ["art-10", "art-15"],
+    "DP-05": ["art-10", "art-12"],
+    "SEC-01": ["art-15", "art-9"],
+    "SEC-02": ["art-15", "art-72"],
+    "SEC-03": ["art-14"],
+    "SEC-04": ["art-15", "art-9"],
+    "SEC-05": ["art-9", "art-15"],
+    "SAFE-01": ["art-9", "art-14"],
+    "SAFE-02": ["art-15", "art-9"],
+    "SAFE-03": ["art-9", "art-72"],
+    "SAFE-04": ["art-14"],
+    "SAFE-05": ["art-14", "art-9"],
+    "REL-01": ["art-12"],
+    "REL-02": ["art-15", "art-9"],
+    "REL-03": ["art-72"],
+    "REL-04": ["art-72", "art-15"],
+    "REL-05": ["art-12"],
+    "ACC-01": ["art-12", "art-14"],
+    "ACC-02": ["art-12"],
+    "ACC-03": ["art-11", "art-72"],
+    "ACC-04": ["art-26"],
+    "ACC-05": ["art-14", "art-26"],
+    "SOC-01": ["art-26", "art-9"],
+    "SOC-02": ["art-72", "art-26"],
+    "SOC-03": ["art-13"],
+    "SOC-04": ["art-10", "art-26"],
+    "SOC-05": ["art-14", "art-13"]
+  }
+}

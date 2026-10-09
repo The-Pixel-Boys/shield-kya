@@ -1,5 +1,5 @@
 /**
- * MCP tool surface for local gate — proxies to Shield KYA (sole PEP).
+ * MCP tool surface for local gate - proxies to Shield KYA (sole PEP).
  * Does not execute irreversible side effects; only evaluate / ingest / request approval.
  * Host-agnostic: stdio or HTTP transport.
  */
@@ -14,7 +14,11 @@ import { AuthRequiredError, clientSafeError, HttpError } from "../errors.js";
 import { CLI_VERSION } from "../version.js";
 import { parseUsageRecords } from "../showback/cost-per-task.js";
 import { appendTrail, defaultSessionId } from "../trail.js";
+import { kyaHome, readFileConfig } from "../config.js";
 import { deriveTargetPath } from "../trail-summary.js";
+import { deriveWireChangeFields } from "../diff-preview.js";
+import { notifyOnTrailEvent, type NotifyFileConfig } from "../notify/index.js";
+import { exportVerdictSpan, resolveOtlpExportConfig } from "../otel/exporter.js";
 
 export const MCP_SERVER_INFO = {
   name: "shield-kya",
@@ -112,7 +116,7 @@ export interface McpHandlerContext {
   readonly client: KyaHttpClient;
   readonly host: Host;
   readonly agentId?: string;
-  /** Offline sample evaluate (KYA_OFFLINE=1) — no HTTP, never fails on a dead plane. */
+  /** Offline sample evaluate (KYA_OFFLINE=1) - no HTTP, never fails on a dead plane. */
   readonly offline?: boolean;
   /** Trail recording target; absent in contexts that must not record. */
   readonly trail?: McpTrailContext;
@@ -136,23 +140,43 @@ function recordMcpTrail(
     readonly reasonCode: string;
     readonly argsHash?: string;
     readonly targetPath?: string;
+    readonly summary?: string;
+    readonly diffPreview?: string;
+    /** Wall latency of the evaluate call in ms (observe-only). */
+    readonly latencyMs?: number;
   },
 ): void {
   const trail = ctx.trail;
   if (!trail) return;
   try {
-    appendTrail(trail.cwd, {
+    const trailEvent = {
       ts: new Date().toISOString(),
       sessionId: defaultSessionId(),
       host: ctx.host,
       toolId: event.toolId,
       verdict: event.verdict,
       reasonCode: event.reasonCode,
-      mode: trail.offline ? "offline" : trail.holdEnabled ? "hold" : "observe",
+      mode: (trail.offline ? "offline" : trail.holdEnabled ? "hold" : "observe") as
+        | "offline"
+        | "hold"
+        | "observe",
       neverEvent: event.reasonCode === "NEVER_EVENT",
       ...(event.argsHash ? { argsHash: event.argsHash } : {}),
       ...(event.targetPath ? { targetPath: event.targetPath } : {}),
-    });
+      ...(event.summary ? { summary: event.summary } : {}),
+      ...(event.diffPreview ? { diffPreview: event.diffPreview } : {}),
+      ...(event.latencyMs !== undefined ? { latencyMs: event.latencyMs } : {}),
+    };
+    appendTrail(trail.cwd, trailEvent);
+    // Long-lived process: notify + OTLP export fire in-process (never awaited),
+    // so the module-level rate limiter / circuit breaker actually work here.
+    const fileConfig = {
+      ...readFileConfig(kyaHome()),
+      ...readFileConfig(trail.cwd),
+    } as NotifyFileConfig;
+    void notifyOnTrailEvent(trailEvent, fileConfig).catch(() => undefined);
+    const otlp = resolveOtlpExportConfig(process.env, fileConfig);
+    if (otlp) void exportVerdictSpan(trailEvent, otlp).catch(() => undefined);
   } catch {
     /* observe path is never allowed to break the gate */
   }
@@ -189,7 +213,7 @@ async function callPolicyEvaluate(
     return textResult({ error: "action or toolId required" }, true);
   }
   const sample = findSampleTool(toolId);
-  // Dual-plane host is operator config — never tool-attacker-controlled.
+  // Dual-plane host is operator config - never tool-attacker-controlled.
   const host = ctx.host;
   const argsObj =
     a.args && typeof a.args === "object" && !Array.isArray(a.args)
@@ -197,6 +221,9 @@ async function callPolicyEvaluate(
       : {};
   const argsHash = str(a.argsHash) ?? computeArgsHash(argsObj);
   const targetPath = deriveTargetPath(argsObj);
+  // Change fields (summary, diffPreview) make MCP-evaluated calls visible on
+  // the receipt's Changes tab; redaction + opt-out live in the deriver.
+  const changeFields = deriveWireChangeFields(toolId, argsObj);
   const irreversible = sample?.irreversible ?? true;
 
   const request = {
@@ -215,9 +242,13 @@ async function callPolicyEvaluate(
     },
   };
 
+  // Wall latency of the evaluate call (offline evaluator included). Floored
+  // at 1ms so sub-millisecond local evaluates still record a positive cost.
+  // Observe-only: never an input to the verdict.
+  const startedAt = Date.now();
   let response: PolicyEvaluateResponse;
   if (ctx.offline) {
-    // Same local evaluator as `kya eval-tool --offline` — a verdict, never a
+    // Same local evaluator as `kya eval-tool --offline` - a verdict, never a
     // network error, so the wired (keyless) path still lands on the trail.
     response = evaluateOffline(request, host);
   } else {
@@ -232,6 +263,9 @@ async function callPolicyEvaluate(
         reasonCode: planeFailureReason(err),
         argsHash,
         targetPath,
+        latencyMs: Math.max(1, Date.now() - startedAt),
+        ...(changeFields?.summary ? { summary: changeFields.summary } : {}),
+        ...(changeFields?.diffPreview ? { diffPreview: changeFields.diffPreview } : {}),
       });
       throw err;
     }
@@ -242,6 +276,9 @@ async function callPolicyEvaluate(
     reasonCode: response.reasonCode,
     argsHash,
     targetPath,
+    latencyMs: Math.max(1, Date.now() - startedAt),
+    ...(changeFields?.summary ? { summary: changeFields.summary } : {}),
+    ...(changeFields?.diffPreview ? { diffPreview: changeFields.diffPreview } : {}),
   });
   return textResult(response);
 }
@@ -335,7 +372,7 @@ async function callRequestApproval(
 
   return textResult({
     ...response,
-    note: "Approval opened only — no side effect executed (fail closed until APPROVED)",
+    note: "Approval opened only - no side effect executed (fail closed until APPROVED)",
     summary: str(a.summary),
   });
 }
@@ -393,7 +430,7 @@ export async function handleJsonRpc(
   ctx: McpHandlerContext,
 ): Promise<JsonRpcResponse | null> {
   const id = msg.id ?? null;
-  // notifications (no id) — process but no response for some
+  // notifications (no id) - process but no response for some
   try {
     switch (msg.method) {
       case "initialize":

@@ -1,5 +1,5 @@
 /**
- * Anthropic Agent SDK tool adapter. Structural only — no
+ * Anthropic Agent SDK tool adapter. Structural only - no
  * @anthropic-ai/claude-agent-sdk import. Matches the
  * `{ name, description, inputSchema, handler }` in-process tool shape where
  * handler receives parsed args plus SDK extras; returns the same shape with

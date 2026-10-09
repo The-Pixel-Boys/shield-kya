@@ -1,5 +1,5 @@
 /**
- * Live in-memory certify evaluation — the "certified right now" panel data.
+ * Live in-memory certify evaluation - the "certified right now" panel data.
  * Recomputes the full Agent Trust Baseline from local evidence on every call
  * and returns a real CertifyReport, identical in shape to `kya certify` output
  * so the receipt panel and any other consumer can treat them interchangeably.
@@ -25,7 +25,7 @@ export function computeLiveCertify(
   windowDays = 30,
   now: Date = new Date(),
 ): CertifyReport {
-  // Public SDK surface — enforce the same window rule as the CLI boundary.
+  // Public SDK surface - enforce the same window rule as the CLI boundary.
   if (!Number.isInteger(windowDays) || windowDays < 1 || windowDays > 366) {
     throw new UsageError("windowDays must be an integer between 1 and 366");
   }

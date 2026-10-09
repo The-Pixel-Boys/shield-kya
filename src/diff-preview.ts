@@ -1,6 +1,6 @@
 /**
  * Clipped, redacted change preview for the activity receipt.
- * Never persists full patches — hard caps + redaction only.
+ * Never persists full patches - hard caps + redaction only.
  */
 import { deriveTargetPath, deriveTrailSummary, redactTrailText } from "./trail-summary.js";
 import { assertNoSecrets } from "./dash/render.js";
@@ -244,7 +244,7 @@ export interface WireChangeFields {
 
 /**
  * The three change fields the hosted plane persists on the tool event.
- * Undefined when opted out or when nothing safe/useful was derivable —
+ * Undefined when opted out or when nothing safe/useful was derivable -
  * evaluate still happens, the fields are simply omitted from the body.
  */
 export function deriveWireChangeFields(

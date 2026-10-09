@@ -1,7 +1,7 @@
 /**
  * Background live-receipt daemon: `kya start` spawns it detached and returns
  * to the terminal. State (pid, url, token) lives in `.kya/receipt-server.json`
- * (mode 0600 — it carries the loopback auth token); stdout/stderr go to
+ * (mode 0600 - it carries the loopback auth token); stdout/stderr go to
  * `.kya/receipt-server.log`. The daemon child is the hidden `receipt-serve`
  * command, which writes the state file once it is listening and removes it on
  * shutdown.
@@ -60,7 +60,7 @@ export function readDaemonState(cwd: string): ReceiptDaemonState | undefined {
       return raw as ReceiptDaemonState;
     }
   } catch {
-    /* corrupt state — treat as absent */
+    /* corrupt state - treat as absent */
   }
   return undefined;
 }
@@ -84,14 +84,14 @@ function removeIfSymlink(path: string): void {
   try {
     if (lstatSync(path).isSymbolicLink()) rmSync(path, { force: true });
   } catch {
-    /* absent — nothing to remove */
+    /* absent - nothing to remove */
   }
 }
 
 /**
  * Remove the state file. With expectedPid set (daemon shutdown), removal is
  * skipped when the file was already replaced by a newer daemon (pid mismatch)
- * — a dying daemon must not delete its successor's state. Read errors /
+ * - a dying daemon must not delete its successor's state. Read errors /
  * missing / corrupt state still remove (we own the normal case).
  */
 export function clearDaemonState(cwd: string, expectedPid?: number): void {
@@ -108,7 +108,7 @@ export function pidAlive(pid: number): boolean {
     process.kill(pid, 0);
     return true;
   } catch (err) {
-    // EPERM: process exists but owned by someone else — still alive.
+    // EPERM: process exists but owned by someone else - still alive.
     return (err as NodeJS.ErrnoException).code === "EPERM";
   }
 }
@@ -121,7 +121,7 @@ function cliJsPath(): string {
   // dist/receipt/daemon.js → dist/cli.js
   const built = fileURLToPath(new URL("../cli.js", import.meta.url));
   if (existsSync(built)) return built;
-  // Running from src/ (vitest) — spawn the built CLI.
+  // Running from src/ (vitest) - spawn the built CLI.
   return fileURLToPath(new URL("../../dist/cli.js", import.meta.url));
 }
 
@@ -182,13 +182,13 @@ export function listOwnedProcesses(platform: NodeJS.Platform = process.platform)
 }
 
 /**
- * Pids of running `cli.js receipt-serve` daemons — any install path, any
- * cwd — so `stop --all` can sweep orphans the cwd state file does not know
+ * Pids of running `cli.js receipt-serve` daemons - any install path, any
+ * cwd - so `stop --all` can sweep orphans the cwd state file does not know
  * about. Never matches this process. `receipt-serve` must appear as a
  * standalone argv token (the daemon always spawns it as one), so an editor
  * with `receipt-serve-notes.txt` open does not match. Residual risk,
  * accepted: a same-uid process deliberately built to look like the daemon
- * (`node cli.js receipt-serve`) still matches — but the sweep is scoped to
+ * (`node cli.js receipt-serve`) still matches - but the sweep is scoped to
  * the current user's processes and only ever sends SIGTERM, so the worst
  * case is a graceful stop of a same-user lookalike.
  */
@@ -209,7 +209,7 @@ export function findReceiptDaemonPids(procs: readonly DaemonProc[]): number[] {
  * server behind it answers a token-authenticated handshake with 200.
  * Uses /healthz: O(1) and decoupled from render failures of the full page.
  * Every failure mode (non-200, unreadable body, missing field) yields a
- * probe without a version — callers must treat that as "unknown version",
+ * probe without a version - callers must treat that as "unknown version",
  * never as a match.
  */
 async function probeStoredDaemon(state: ReceiptDaemonState): Promise<DaemonProbe> {
@@ -225,7 +225,7 @@ async function probeStoredDaemon(state: ReceiptDaemonState): Promise<DaemonProbe
       res.body?.cancel().catch(() => undefined);
       return { ok: false };
     }
-    // Handshake passed; the version may still be unreadable — pre-0.4.1
+    // Handshake passed; the version may still be unreadable - pre-0.4.1
     // daemons answer plain "ok\n". A parse failure is an unknown version,
     // not a failed handshake.
     let version: string | undefined;
@@ -258,8 +258,8 @@ async function stopOwnedDaemon(pid: number): Promise<void> {
  * Reuse the running daemon only when its pid is alive, the stored loopback
  * url answers the token handshake, AND the daemon reports this exact package
  * version. A daemon from an older (or newer, or pre-version-handshake) build
- * may serve a stale trail layout, so any mismatch — including an absent or
- * unreadable version field — stops it and spawns a fresh one. A wedged
+ * may serve a stale trail layout, so any mismatch - including an absent or
+ * unreadable version field - stops it and spawns a fresh one. A wedged
  * daemon that IS ours is stopped first so failed handshakes cannot leak
  * orphans; a foreign pid is never signaled.
  */
@@ -274,7 +274,7 @@ export async function ensureReceiptDaemon(
       return { url: existing.url, pid: existing.pid, reused: true };
     }
     if (probe.ok) {
-      // Answered our token handshake with a stale/absent version — it is
+      // Answered our token handshake with a stale/absent version - it is
       // authenticated as a kya daemon even if an older install spawned it
       // from a different cli.js path, so the args check would miss it.
       await stopOwnedDaemon(existing.pid);
@@ -313,7 +313,7 @@ export async function ensureReceiptDaemon(
     await sleep(100);
   }
   throw new KyaError(
-    `receipt server failed to start — see ${daemonLogPath(config.cwd)}`,
+    `receipt server failed to start - see ${daemonLogPath(config.cwd)}`,
     "RECEIPT_DAEMON_FAILED",
   );
 }

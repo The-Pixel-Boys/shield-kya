@@ -28,10 +28,10 @@ export interface ResolvedConfig {
   readonly json: boolean;
   /** When true, empty api key is allowed only for pure local file ops (init). */
   readonly allowMissingApiKey: boolean;
-  /** Offline sample evaluate (demo / CT) — no network, no paid cloud. */
+  /** Offline sample evaluate (demo / CT) - no network, no paid cloud. */
   readonly offline: boolean;
   /**
-   * When false (default), REQUIRE_APPROVE is recorded only — no Hold ticket /
+   * When false (default), REQUIRE_APPROVE is recorded only - no Hold ticket /
    * second human prompt. Armed by --hold / KYA_HOLD=1 / "gateMode":"hold" in
    * .kya/config.json (flags > env > config > observe, see resolveGateMode).
    */
@@ -62,7 +62,7 @@ export function kyaHome(env: NodeJS.ProcessEnv = process.env): string {
   return env.KYA_HOME?.trim() || homedir();
 }
 
-/** Global KYA state dir: <KYA_HOME|home>/.kya — home of the global trail. */
+/** Global KYA state dir: <KYA_HOME|home>/.kya - home of the global trail. */
 export function globalConfigDir(env: NodeJS.ProcessEnv = process.env): string {
   return join(kyaHome(env), ".kya");
 }
@@ -125,7 +125,7 @@ function fileGateMode(file: KyaFileConfig): "hold" | "offline" | undefined {
 
 /**
  * Gate mode resolution, shared by the gate itself (wrap / hook / eval via
- * resolveConfig) and by `kya certify` — a certify "pass — gate mode is hold"
+ * resolveConfig) and by `kya certify` - a certify "pass - gate mode is hold"
  * is only an honest claim when both read this one resolver.
  *
  * Precedence: CLI flags (--offline / --hold) > env (KYA_OFFLINE / KYA_HOLD,
@@ -182,7 +182,7 @@ export function resolveConfig(options: ResolveOptions = {}): ResolvedConfig {
   const json = flags["json"] === true || flags["json"] === "true";
 
   // Gate mode: flags > env (KYA_OFFLINE/KYA_HOLD) > "gateMode" in
-  // .kya/config.json > observe — the same precedence resolveGateMode
+  // .kya/config.json > observe - the same precedence resolveGateMode
   // reports, so the gate and `kya certify` can never disagree. Flags/env
   // win as a tier: the config key applies only when no flag/env gate
   // switch is set.
@@ -194,14 +194,14 @@ export function resolveConfig(options: ResolveOptions = {}): ResolvedConfig {
     options.offline === true || flagEnvOffline || configMode === "offline";
   const holdEnabled = flagEnvHold || configMode === "hold";
 
-  // Offline sample evaluate never hits the control plane — no API key required.
+  // Offline sample evaluate never hits the control plane - no API key required.
   const requireApiKey =
     offline
       ? false
       : (options.requireApiKey ?? !options.allowMissingApiKey);
   if (requireApiKey && (!apiKey || apiKey.trim() === "")) {
     throw new AuthRequiredError(
-      "KYA_API_KEY is empty or missing — refuse silent allow-all against control plane (use --offline for local sample evaluate)",
+      "KYA_API_KEY is empty or missing - refuse silent allow-all against control plane (use --offline for local sample evaluate)",
     );
   }
 

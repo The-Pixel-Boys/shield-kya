@@ -124,7 +124,7 @@ function tomlStringArray(body: string, key: string): readonly string[] | undefin
     const v = JSON.parse(m[1]!) as unknown;
     if (Array.isArray(v) && v.every((s) => typeof s === "string")) return v as readonly string[];
   } catch {
-    /* single-quoted TOML strings etc. — no args */
+    /* single-quoted TOML strings etc. - no args */
   }
   return undefined;
 }
@@ -196,7 +196,7 @@ export function discoverGateServers(home: string): GateCandidate[] {
           ? candidatesFromToml(text)
           : candidatesFromJson(text, spec.rootKey);
     } catch {
-      continue; // unparseable host config — skip the host, keep the rest
+      continue; // unparseable host config - skip the host, keep the rest
     }
     for (const [rawKey, core] of entries) {
       const id = sanitizeServerId(rawKey);
@@ -221,7 +221,7 @@ export interface GateImportResult {
 /**
  * Merge discovered candidates into gateways.json `servers`. Hand-configured
  * entries and other top-level keys (recipes) are preserved; ids already
- * present are skipped — an already-imported entry only unions new source
+ * present are skipped - an already-imported entry only unions new source
  * hosts into its `importedFrom`, a hand-configured entry is left byte-identical.
  */
 export function importGateCandidates(
@@ -236,15 +236,15 @@ export function importGateCandidates(
     try {
       parsed = JSON.parse(readFileSync(path, "utf8"));
     } catch {
-      throw new UsageError(`${path} is not valid JSON — fix it by hand, then re-run kya start`);
+      throw new UsageError(`${path} is not valid JSON - fix it by hand, then re-run kya start`);
     }
     if (!isPlainObject(parsed)) {
-      throw new UsageError(`${path} must be a JSON object — fix it by hand, then re-run kya start`);
+      throw new UsageError(`${path} must be a JSON object - fix it by hand, then re-run kya start`);
     }
     raw = parsed;
   }
   if (raw["servers"] !== undefined && !Array.isArray(raw["servers"])) {
-    throw new UsageError(`${path}: "servers" must be an array — fix it by hand, then re-run kya start`);
+    throw new UsageError(`${path}: "servers" must be an array - fix it by hand, then re-run kya start`);
   }
   const servers = Array.isArray(raw["servers"]) ? [...raw["servers"]] : [];
   const imported: GatewayServer[] = [];
@@ -333,7 +333,7 @@ function removeTomlTables(text: string, ids: readonly string[]): { text: string;
 /**
  * Remove the given server ids from a host's user-level config, after copying
  * the full original under <global .kya>/backups. Only the listed ids are
- * touched — shield-kya entries and every other setting survive. Returns
+ * touched - shield-kya entries and every other setting survive. Returns
  * undefined (and writes nothing) when the file is missing, unparseable, or
  * carries none of the ids.
  */

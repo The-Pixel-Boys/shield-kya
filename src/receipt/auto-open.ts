@@ -55,7 +55,7 @@ export interface AutoOpenResult {
 
 /**
  * Write the latest receipt and optionally open it in the browser.
- * @param force — open even if already opened this cwd (use on DENY).
+ * @param force - open even if already opened this cwd (use on DENY).
  */
 export async function autoOpenReceiptAfterWrap(
   config: ResolvedConfig,

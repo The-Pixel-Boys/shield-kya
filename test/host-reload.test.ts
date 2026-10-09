@@ -18,7 +18,7 @@ const MCP_HOSTS = [
 ];
 
 describe("host reload registry", () => {
-  it("classifies every MCP host — no host silently falls back to restart copy", () => {
+  it("classifies every MCP host - no host silently falls back to restart copy", () => {
     for (const id of MCP_HOSTS) {
       const info = hostReload(id);
       expect(info, `missing reload behavior for ${id}`).toBeDefined();
@@ -77,7 +77,7 @@ describe("messaging integration", () => {
         allowMissingApiKey: true,
         flags: { offline: true },
       });
-      // Qwen: auto-reload — no restart wording even when running.
+      // Qwen: auto-reload - no restart wording even when running.
       const qwen = await runConnect(
         config,
         { host: "qwen", procs: new Set(["qwen"]) },

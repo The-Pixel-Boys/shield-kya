@@ -82,7 +82,7 @@ describe("computeLiveCertify", () => {
     expect(report.trail.modes).toEqual({ observe: 0, hold: 0, offline: 0 });
   });
 
-  it("writes NO files — no .kya/certify, no .kya at all on a fresh project", () => {
+  it("writes NO files - no .kya/certify, no .kya at all on a fresh project", () => {
     const cwd = tmp();
     const home = tmp();
     computeLiveCertify(cwd, { KYA_HOME: home }, 30, NOW);

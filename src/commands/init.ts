@@ -78,7 +78,7 @@ export function initFromArgs(
   return runInit({ cwd, baseUrl, host, force });
 }
 
-const ENV_EXAMPLE = `# Shield KYA light install — copy to .env (never commit secrets)
+const ENV_EXAMPLE = `# Shield KYA light install - copy to .env (never commit secrets)
 # Docs: docs/guides/kya-light-install.md
 
 # Control plane origin (hosted or local free console)

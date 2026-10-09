@@ -1,7 +1,7 @@
 /**
  * Markdown + standalone HTML rendering for the certify gap report.
  * Same visual language as the activity receipt (pills, panels, dark/light),
- * own minimal CSS — the certify page is fully standalone and offline.
+ * own minimal CSS - the certify page is fully standalone and offline.
  */
 import { assertNoSecrets, clip, stripEscapes } from "../dash/render.js";
 import type {
@@ -10,7 +10,7 @@ import type {
   RequirementStatus,
 } from "./evaluate.js";
 
-/** Shared domain display labels — the receipt Certify tab uses these too. */
+/** Shared domain display labels - the receipt Certify tab uses these too. */
 export const DOMAIN_LABELS: Record<string, string> = {
   "data-privacy": "Data & Privacy",
   security: "Security",
@@ -47,7 +47,7 @@ export function formatCertifyMarkdown(report: CertifyReport): string {
     `- **Result:** ${o.result === "gap" ? "GAP" : "PASS"}`,
     `- **Generated:** ${mdText(report.generatedAt)}`,
     `- **Window:** last ${report.window.days} days (${mdText(report.window.since)} → ${mdText(report.window.until)})`,
-    `- **Trail:** ${report.trail.eventCount} events in window — allow ${report.trail.verdictMix.ALLOW} · deny ${report.trail.verdictMix.DENY} · review ${report.trail.verdictMix.REQUIRE_APPROVE}`,
+    `- **Trail:** ${report.trail.eventCount} events in window - allow ${report.trail.verdictMix.ALLOW} · deny ${report.trail.verdictMix.DENY} · review ${report.trail.verdictMix.REQUIRE_APPROVE}`,
     `- **Tally:** ${o.pass} pass · ${o.gap} gap · ${o.insufficientEvidence} insufficient evidence · ${o.attested} attested`,
     "",
     "## Gaps (work plan)",
@@ -56,12 +56,12 @@ export function formatCertifyMarkdown(report: CertifyReport): string {
   if (gaps.length === 0) {
     lines.push(
       o.result === "gap"
-        ? "- No certifiable evidence in this window — every requirement is insufficient_evidence. Run the gate first (kya wrap / kya connect), then re-run kya certify."
+        ? "- No certifiable evidence in this window - every requirement is insufficient_evidence. Run the gate first (kya wrap / kya connect), then re-run kya certify."
         : "- (none)",
     );
   } else {
     for (const r of gaps) {
-      lines.push(`- **${r.id}** [${r.severity}] ${mdText(r.title)} — ${mdText(r.evidence)}`);
+      lines.push(`- **${r.id}** [${r.severity}] ${mdText(r.title)} - ${mdText(r.evidence)}`);
     }
   }
   lines.push("");
@@ -105,7 +105,7 @@ const STATUS_TONE: Record<RequirementStatus, string> = {
 
 function requirementRow(r: CertifyRequirementResult): string {
   const att = r.attestation
-    ? `<div class="att">attested ${esc(r.attestation.at)} — ${esc(clip(r.attestation.text, 200))}</div>`
+    ? `<div class="att">attested ${esc(r.attestation.at)} - ${esc(clip(r.attestation.text, 200))}</div>`
     : "";
   return `    <li class="req">
       <span class="pill ${STATUS_TONE[r.status]}">${esc(r.status.replace(/_/g, " "))}</span>
@@ -125,8 +125,8 @@ export function renderCertifyHtml(report: CertifyReport): string {
   const gapList =
     gaps.length === 0
       ? o.result === "gap"
-        ? `<p class="empty">No certifiable evidence in this window — every requirement is insufficient evidence. Run the gate first (kya wrap / kya connect), then re-run kya certify.</p>`
-        : `<p class="empty">No gaps. Evidence-only report — not a certificate.</p>`
+        ? `<p class="empty">No certifiable evidence in this window - every requirement is insufficient evidence. Run the gate first (kya wrap / kya connect), then re-run kya certify.</p>`
+        : `<p class="empty">No gaps. Evidence-only report - not a certificate.</p>`
       : `<ol class="gaps">
 ${gaps
   .map(
@@ -153,7 +153,7 @@ ${rows.map((r) => requirementRow(r)).join("\n")}
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Certify — ${esc(report.catalog.id)} v${esc(report.catalog.version)}</title>
+<title>Certify - ${esc(report.catalog.id)} v${esc(report.catalog.version)}</title>
 <style>
   :root {
     color-scheme: dark;
@@ -241,7 +241,7 @@ ${rows.map((r) => requirementRow(r)).join("\n")}
 </head>
 <body>
 <main>
-  <h1>Certify — <code>${esc(report.catalog.id)} v${esc(report.catalog.version)}</code></h1>
+  <h1>Certify - <code>${esc(report.catalog.id)} v${esc(report.catalog.version)}</code></h1>
   <div class="sub">generated ${esc(report.generatedAt)} · window last ${report.window.days} days (${esc(report.window.since)} → ${esc(report.window.until)}) · ${report.trail.eventCount} trail events in window</div>
   <span class="result ${o.result}">${o.result === "gap" ? "GAP" : "PASS"}</span>
   <div class="stats" role="group" aria-label="Tally">

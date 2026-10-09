@@ -35,7 +35,7 @@ const dayAgo = (i: number) => {
   return d.toISOString();
 };
 
-describe("computeDashboard — verdict mix", () => {
+describe("computeDashboard - verdict mix", () => {
   it("counts verdicts and never as a separate overlay", () => {
     const events: TrailEvent[] = [];
     for (let i = 0; i < 6; i++) events.push(ev({ ts: iso(i), sessionId: "s" }));
@@ -68,8 +68,8 @@ describe("computeDashboard — verdict mix", () => {
   });
 });
 
-describe("computeDashboard — activity timeline", () => {
-  // Fixed local wall-clock times (Sep 15/16 2026) — immune to when the suite runs.
+describe("computeDashboard - activity timeline", () => {
+  // Fixed local wall-clock times (Sep 15/16 2026) - immune to when the suite runs.
   const at = (day: 15 | 16, h: number) => new Date(2026, 8, day, h, 30).toISOString();
 
   it("uses hourly buckets when the span is ≤ 36h", () => {
@@ -165,7 +165,7 @@ describe("computeDashboard — activity timeline", () => {
   it("caps hourly buckets at 24, keeping the most recent", () => {
     const events: TrailEvent[] = [];
     for (let i = 0; i < 30; i++) events.push(ev({ ts: hourAgo(i), sessionId: "s" }));
-    // Same ts as hourAgo(0) — guaranteed to land in the most recent bucket.
+    // Same ts as hourAgo(0) - guaranteed to land in the most recent bucket.
     for (let i = 0; i < 5; i++) events.push(ev({ ts: hourAgo(0), sessionId: "s" }));
     const d = computeDashboard(events);
     expect(d.activity.granularity).toBe("hour");
@@ -188,7 +188,7 @@ describe("computeDashboard — activity timeline", () => {
   });
 });
 
-describe("computeDashboard — top tools", () => {
+describe("computeDashboard - top tools", () => {
   it("ranks by count desc, ties by toolId asc, capped at 8", () => {
     const events: TrailEvent[] = [];
     for (let t = 0; t < 10; t++) {
@@ -233,7 +233,7 @@ describe("computeDashboard — top tools", () => {
   });
 });
 
-describe("computeDashboard — risk hotspots", () => {
+describe("computeDashboard - risk hotspots", () => {
   it("counts deny + never per product and project, excluding clean entities", () => {
     const d = computeDashboard([
       ev({ ts: iso(0), sessionId: "s", product: "cursor", project: "web", verdict: "DENY", reasonCode: "NOPE" }),

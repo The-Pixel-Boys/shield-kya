@@ -89,7 +89,7 @@ function handshake(
   env: Record<string, string>,
 ): Promise<{ initialize: JsonRpcResponse; toolsList: JsonRpcResponse }> {
   return new Promise((resolvePromise, rejectPromise) => {
-    // vitest runs from src; a real install wires dist/cli.js — spawn exactly that.
+    // vitest runs from src; a real install wires dist/cli.js - spawn exactly that.
     const args = [...server.args];
     args[0] = cliJs;
     const child = spawn(server.command, args, {
@@ -163,7 +163,7 @@ describe("connect → host spawns serve-mcp → MCP handshake", () => {
       async () => {
         expect(
           existsSync(cliJs),
-          "dist/cli.js missing — run pnpm build first",
+          "dist/cli.js missing - run pnpm build first",
         ).toBe(true);
         const home = mkdtempSync(join(tmpdir(), "kya-connect-mcp-"));
         const cwd = mkdtempSync(join(tmpdir(), "kya-connect-mcp-cwd-"));

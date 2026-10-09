@@ -1,5 +1,5 @@
 /**
- * @shield-agent/kya — light install library surface + CLI helpers.
+ * @shield-agent/kya - light install library surface + CLI helpers.
  * Zero vertical packs required (R8). Provider-agnostic MCP / HTTP path.
  */
 

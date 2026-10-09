@@ -1,5 +1,5 @@
 /**
- * kya orr run — Phase O1 read-only ORR board emitter.
+ * kya orr run - Phase O1 read-only ORR board emitter.
  * Reporting orchestrator only: not a second PEP; never mints principals or allows side effects.
  */
 
@@ -109,9 +109,9 @@ export interface OrrRunOptions {
   readonly failOn?: "no_go" | "conditional";
   readonly quiet: boolean;
   readonly jsonStdout: boolean;
-  /** Optional OpenSSF Scorecard / readiness JSON. Evidence only — not a PEP. */
+  /** Optional OpenSSF Scorecard / readiness JSON. Evidence only - not a PEP. */
   readonly scorecardPath?: string;
-  /** Optional AgentShield SecurityReport JSON dump. Evidence only — not a PEP. */
+  /** Optional AgentShield SecurityReport JSON dump. Evidence only - not a PEP. */
   readonly agentshieldJsonPath?: string;
   /** Optional usage JSON (array). Observe-only showback. */
   readonly usagePath?: string;
@@ -344,7 +344,7 @@ export function readScorecardEvidence(scorecardPath: string): OrrFinding[] {
         severity: "info",
         title: "Scorecard file not found",
         detail:
-          `${scorecardPath} was requested as an optional producer. Evidence only — not a PEP.`,
+          `${scorecardPath} was requested as an optional producer. Evidence only - not a PEP.`,
         evidence: abs,
         source_tool: "openssf.scorecard",
       },
@@ -493,7 +493,7 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
       severity: "high",
       title: "Agent create path may be scope-auth only",
       detail:
-        "Factory doctrine: principal mint should be policy-gated (APPROVED). ORR reports only — does not mint.",
+        "Factory doctrine: principal mint should be policy-gated (APPROVED). ORR reports only - does not mint.",
       evidence: "sa.first_party text probe",
     });
   }
@@ -518,7 +518,7 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
       severity: "info",
       title: "No in-loop step/token/retry ceilings detected",
       detail:
-        "Look for max_steps, max_tokens, max_retries, or maxCost in the agent loop. Soft gate only — ORR does not kill spend.",
+        "Look for max_steps, max_tokens, max_retries, or maxCost in the agent loop. Soft gate only - ORR does not kill spend.",
       evidence: "sa.first_party text probe",
     });
   }
@@ -683,7 +683,7 @@ export function formatOrrMarkdown(report: OrrReport): string {
   const cards = report.scorecards
     .map(
       (s) =>
-        `- \`${s.category}\` / \`${s.name}\`: **${s.result}** (${s.hardness})${s.note ? ` — ${s.note}` : ""}`,
+        `- \`${s.category}\` / \`${s.name}\`: **${s.result}** (${s.hardness})${s.note ? ` - ${s.note}` : ""}`,
     )
     .join("\n");
 

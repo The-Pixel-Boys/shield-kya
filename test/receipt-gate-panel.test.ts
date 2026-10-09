@@ -258,7 +258,7 @@ describe("loadGateCard model", () => {
       const card = loadGateCard([], env(home));
       const md = renderReceiptMarkdown(buildWindowReceiptModel([], 3, { gate: card }));
       expect(md).not.toContain("\n# fake heading");
-      expect(md).toContain("running — `http://127.0.0.1:3930/mcp # fake heading`");
+      expect(md).toContain("running - `http://127.0.0.1:3930/mcp # fake heading`");
       // binaryVersion gets the same treatment.
       const md2 = renderReceiptMarkdown(
         buildWindowReceiptModel([], 3, {
@@ -385,7 +385,7 @@ describe("gateway panel render", () => {
     expect(html).toContain('id="gateway-backends"');
     expect(html).toContain("<span class=\"pill\">stopped</span>");
     expect(html).toContain("1 server configured");
-    expect(html).toContain("binary missing — kya gate setup");
+    expect(html).toContain("binary missing - kya gate setup");
     expect(html).toContain("<code>github</code>");
     expect(html).toContain("stdio");
   });
@@ -426,12 +426,12 @@ describe("gateway panel render", () => {
   it("markdown artifact carries the gateway section in every state", () => {
     const fresh = renderReceiptMarkdown(buildWindowReceiptModel([], 3, { gate: FRESH_CARD }));
     expect(fresh).toContain("## Gateway");
-    expect(fresh).toContain("not set up — Add any MCP server to a host config");
+    expect(fresh).toContain("not set up - Add any MCP server to a host config");
     expect(fresh).toContain("`kya start` routes it through the gateway automatically");
     const running = renderReceiptMarkdown(buildWindowReceiptModel([], 3, { gate: RUNNING_CARD }));
-    expect(running).toContain("running — `http://127.0.0.1:3930`");
-    expect(running).toContain("`github` — stdio · 2 events, worst: deny");
-    expect(running).toContain("`acme` — http · 0 events");
+    expect(running).toContain("running - `http://127.0.0.1:3930`");
+    expect(running).toContain("`github` - stdio · 2 events, worst: deny");
+    expect(running).toContain("`acme` - http · 0 events");
   });
 
   it("no gate card renders no gateway chrome (model extra is optional)", () => {

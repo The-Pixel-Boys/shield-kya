@@ -45,7 +45,7 @@ export interface ResolveEntitlementInput {
   readonly licensePublicKeyPem?: string;
 }
 
-/** Placeholder verify key — real issuers replace via KYA_LICENSE_PUBKEY. */
+/** Placeholder verify key - real issuers replace via KYA_LICENSE_PUBKEY. */
 export const DEFAULT_LICENSE_PUBKEY_PEM = `-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEA//////////////////////////////////////////8=
 -----END PUBLIC KEY-----

@@ -53,7 +53,7 @@ describe("CEL generation from the MCP server registry", () => {
     const gh = denyPatternsFor("github");
     expect(gh.length).toBeGreaterThan(1);
     expect(gh.join("|")).toContain("delete_");
-    // context7 has no ADMIN rules — destructive family only
+    // context7 has no ADMIN rules - destructive family only
     expect(denyPatternsFor("context7")).toEqual([DESTRUCTIVE_PATTERN]);
   });
 
@@ -63,7 +63,7 @@ describe("CEL generation from the MCP server registry", () => {
     expect(unmatchedAllowed("unknown-server")).toBe(true); // observe gateway: allow, audited
   });
 
-  it("rule shape: target match AND NOT matches(deny) — destructive deny always wins", () => {
+  it("rule shape: target match AND NOT matches(deny) - destructive deny always wins", () => {
     const rule = celAllowRule(stdio("github", ["npx", "gh-mcp"]));
     expect(rule).toMatch(/^mcp\.tool\.target == 'github' && !mcp\.tool\.name\.matches\('/);
     expect(rule).toContain("drop|truncate|purge|transfer");

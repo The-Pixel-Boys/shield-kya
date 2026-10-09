@@ -416,7 +416,7 @@ describe("kya connect claude", () => {
     },
   );
 
-  it("treats an existing shield-kya key (even null) as wired — no overwrite without --force", async () => {
+  it("treats an existing shield-kya key (even null) as wired - no overwrite without --force", async () => {
     const home = tmp();
     const cwd = tmp();
     try {
@@ -651,7 +651,7 @@ describe("kya connect --hooks", () => {
       expect(human).toContain("hooks created:");
       expect(r.next).toContain("Hooks take effect in new sessions.");
 
-      // Idempotent second run — no hooks note when nothing changed.
+      // Idempotent second run - no hooks note when nothing changed.
       const second = await runConnect(
         cfg(cwd),
         { host: "claude", hooks: true },

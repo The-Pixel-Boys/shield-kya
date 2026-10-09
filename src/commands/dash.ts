@@ -17,7 +17,7 @@ import { runOrr } from "./orr.js";
 
 const AUTO_REFRESH_MS = 5_000;
 
-/** TUI ORR stays first_party only — Scorecard spawn is CLI-explicit (no env leak / stdin race). */
+/** TUI ORR stays first_party only - Scorecard spawn is CLI-explicit (no env leak / stdin race). */
 function deskOrr(cwd: string) {
   return runOrr({
     path: cwd,
@@ -240,7 +240,7 @@ export async function runDash(
           pasteBuf = "";
           if (pending) {
             pending = undefined;
-            io.log("paste ignored — confirm cancelled");
+            io.log("paste ignored - confirm cancelled");
             void paint({ clear: false });
           }
         } else {
@@ -267,7 +267,7 @@ export async function runDash(
           void (async () => {
             try {
               if (!stillLive()) {
-                io.log("offline mid-flight — aborted");
+                io.log("offline mid-flight - aborted");
                 return;
               }
               if (job.kind === "kill") {
@@ -279,7 +279,7 @@ export async function runDash(
                 if (!stillLive()) return;
                 io.log(`clearance ${sh.from} → ${sh.to}`);
               } else if (job.kind === "decide") {
-                // Machine sk_* keys must not decide — JWT / kya.approve only.
+                // Machine sk_* keys must not decide - JWT / kya.approve only.
                 if (isMachineApiKey(config.apiKey ?? "")) {
                   io.log(
                     `Machine API keys cannot ${job.decision} from the TUI. Run: kya ${job.decision} --id ${job.id}`,

@@ -1,5 +1,5 @@
 /**
- * @shield-agent/kya/sdk — in-process governance shims for agent frameworks.
+ * @shield-agent/kya/sdk - in-process governance shims for agent frameworks.
  * Importing this surface starts no daemons, telemetry, or network clients;
  * evaluation defaults to the offline sample path.
  */

@@ -1,5 +1,5 @@
 /**
- * Hook wiring — install `kya hook --host <id>` as a PreToolUse hook in a
+ * Hook wiring - install `kya hook --host <id>` as a PreToolUse hook in a
  * coding host's user config. Same write discipline as connect.ts: merge-only
  * for host-owned files (claude settings.json, kimi config.toml), whole-file
  * ownership for the kya-managed grok hook file, all writes symlink-safe and
@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { UsageError } from "../errors.js";
 import { atomicWriteSync } from "../fs-atomic.js";
-// imports from connect.ts are call-time only (shared fs/registry helpers) — safe cycle
+// imports from connect.ts are call-time only (shared fs/registry helpers) - safe cycle
 import {
   cliJsPath,
   CONNECT_REGISTRY,
@@ -87,27 +87,27 @@ function wireClaudeSettings(path: string, force: boolean): ConnectStatus {
   try {
     raw = JSON.parse(readFileSync(target, "utf8")) as Record<string, unknown>;
   } catch {
-    // Never rewrite a host's real config we cannot parse — that destroys settings.
+    // Never rewrite a host's real config we cannot parse - that destroys settings.
     throw new UsageError(
-      `${path} is not valid JSON — fix it by hand or back it up and delete it, then re-run the hook wiring`,
+      `${path} is not valid JSON - fix it by hand or back it up and delete it, then re-run the hook wiring`,
     );
   }
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new UsageError(
-      `${path} is valid JSON but not an object — refusing to clobber it`,
+      `${path} is valid JSON but not an object - refusing to clobber it`,
     );
   }
   const hooks = raw["hooks"];
   if (hooks !== undefined && (typeof hooks !== "object" || hooks === null || Array.isArray(hooks))) {
     throw new UsageError(
-      `${path} has "hooks" but it is not an object — refusing to clobber it`,
+      `${path} has "hooks" but it is not an object - refusing to clobber it`,
     );
   }
   const hooksObj = (hooks ?? {}) as Record<string, unknown>;
   const preToolUse = hooksObj["PreToolUse"];
   if (preToolUse !== undefined && !Array.isArray(preToolUse)) {
     throw new UsageError(
-      `${path} has "hooks.PreToolUse" but it is not an array — refusing to clobber it`,
+      `${path} has "hooks.PreToolUse" but it is not an array - refusing to clobber it`,
     );
   }
   const entries = (preToolUse ?? []) as ClaudeSettingsHookEntry[];
@@ -149,7 +149,7 @@ function wireGrokHooks(path: string): ConnectStatus {
 const KIMI_HOOKS_HEADER_RE = /^[^\S\n]*\[\[hooks\]\][^\S\n]*(?:#.*)?$/m;
 
 // A plain [hooks] table or a top-level `hooks = …` scalar cannot coexist with
-// an appended [[hooks]] array — the result would be invalid TOML.
+// an appended [[hooks]] array - the result would be invalid TOML.
 const KIMI_PLAIN_HOOKS_TABLE_RE = /^[^\S\n]*\[hooks\]/m;
 // Deliberately stricter than its sibling: an indented `hooks = …` at top level
 // is rare, and a false-positive refusal is the safe direction here.
@@ -158,13 +158,13 @@ const KIMI_TOP_LEVEL_HOOKS_RE = /^hooks\s*=/m;
 /**
  * Build the [[hooks]] TOML block for a command string. The command goes into
  * a TOML literal string (single quotes) so the embedded JSON-quoted paths are
- * safe — but a literal string cannot hold a single quote or a newline, so
+ * safe - but a literal string cannot hold a single quote or a newline, so
  * refuse those instead of writing invalid TOML into the user's config.
  */
 export function kimiHooksBlockText(command: string): string {
   if (command.includes("'") || command.includes("\n") || command.includes("\r")) {
     throw new UsageError(
-      `the kya hook command contains a single quote or newline and cannot be embedded in Kimi's TOML config — move the kya install to a path without quotes and re-run the hook wiring`,
+      `the kya hook command contains a single quote or newline and cannot be embedded in Kimi's TOML config - move the kya install to a path without quotes and re-run the hook wiring`,
     );
   }
   return [
@@ -183,7 +183,7 @@ function kimiHooksBlock(hostId: string): string {
 function assertKimiAppendable(path: string, text: string): void {
   if (KIMI_PLAIN_HOOKS_TABLE_RE.test(text) || KIMI_TOP_LEVEL_HOOKS_RE.test(text)) {
     throw new UsageError(
-      `${path} already has a [hooks] table or a top-level hooks key — appending [[hooks]] would produce invalid TOML; fix the config by hand, then re-run the hook wiring`,
+      `${path} already has a [hooks] table or a top-level hooks key - appending [[hooks]] would produce invalid TOML; fix the config by hand, then re-run the hook wiring`,
     );
   }
 }
@@ -191,7 +191,7 @@ function assertKimiAppendable(path: string, text: string): void {
 /**
  * Minimal TOML wiring for Kimi: append a [[hooks]] array element at EOF, skip
  * when the command identity already appears anywhere in the file (idempotent
- * by substring — quoted variants of our own block still match), --force
+ * by substring - quoted variants of our own block still match), --force
  * replaces the containing block (header line through the next table header or
  * EOF). Writes exactly the fields Kimi's config loader accepts.
  */
@@ -217,7 +217,7 @@ function wireKimiToml(path: string, force: boolean): ConnectStatus {
   const headers = [...beforeIdentity.matchAll(new RegExp(KIMI_HOOKS_HEADER_RE.source, "gm"))];
   const start = headers.length === 0 ? -1 : headers[headers.length - 1]!.index;
   if (start === -1) {
-    // Identity outside any [[hooks]] block — not ours to rewrite.
+    // Identity outside any [[hooks]] block - not ours to rewrite.
     assertKimiAppendable(path, text);
     const sep = text.endsWith("\n") ? "" : "\n";
     atomicWriteSync(target, `${text}${sep}${block}`);
@@ -256,7 +256,7 @@ export function wireHook(input: WireHookInput): WireHookResult {
       break;
     default:
       throw new UsageError(
-        `unknown hook host "${input.host}" — supported: ${HOOK_HOSTS.join(", ")}`,
+        `unknown hook host "${input.host}" - supported: ${HOOK_HOSTS.join(", ")}`,
       );
   }
   return { host: key, label, path, status };
