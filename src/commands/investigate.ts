@@ -9,6 +9,10 @@ import {
   investigateTrail,
   renderInvestigateReport,
 } from "../investigate/index.js";
+import {
+  buildInvestigateLastRun,
+  writeInvestigateLastRun,
+} from "../investigate/last-run.js";
 
 export interface InvestigateCliOptions {
   readonly json: boolean;
@@ -26,6 +30,9 @@ export async function runInvestigate(
 ): Promise<number> {
   const events = readTrail(cwd, env);
   const result = investigateTrail(events);
+  // Persist a compact summary for the report's Investigations section;
+  // best-effort, a failed write never changes the command outcome.
+  writeInvestigateLastRun(buildInvestigateLastRun(result, events), env);
   if (opts.json) {
     io.log(
       JSON.stringify(

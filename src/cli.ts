@@ -144,6 +144,11 @@ Commands:
                     Default observe: no Hold ticket (no second approve). --hold / KYA_HOLD=1 for org Hold.
   hook              PreToolUse interception for native-hook hosts (claude|grok|kimi|…)
                     Reads the hook payload from stdin; exit 2 blocks. --strict denies advisory.
+                    --fail-closed (hosted): internal error, malformed payload or async
+                    evaluate timeout exits 2 instead of failing open; the host's own
+                    timeout needs onFailure=block in the plugin hooks.json.
+                    Records once per tool_use_id (dual-hook safe). Never-list DENY
+                    blocks in both modes.
   receipt           Activity report HTML/JSON/MD (default: last 3 days, all tools; --open)
                     --q pre-fills feed search · --share publishes a redacted summary (see --share-url)
   invoke            Authorize on the plane after Allow or APPROVED. Never runs the write here.
@@ -861,6 +866,11 @@ export async function runCli(
       case "hook": {
         const host = flagString(parsed.flags, "host") ?? "other";
         const strict = flagBool(parsed.flags, "strict");
+        // Strict boolean: parseArgs would otherwise swallow a following word
+        // (`--fail-closed x`) or read `=yes` as off, silently failing open.
+        // Present means on, except an explicit false/0.
+        const fcFlag = parsed.flags["fail-closed"];
+        const failClosed = fcFlag !== undefined && fcFlag !== false && !/^(false|0)$/i.test(String(fcFlag));
         let stdinText = "";
         if (!process.stdin.isTTY) {
           stdinText = await new Promise<string>((res) => {
@@ -877,11 +887,12 @@ export async function runCli(
             );
           });
         }
-        const r = await runHook({ host, strict, stdinText, env, cwd });
+        const r = await runHook({ host, strict, failClosed, stdinText, env, cwd });
         if (r.stdout) process.stdout.write(r.stdout);
         if (r.stderr) process.stderr.write(r.stderr);
         // After the answer is out. Opt-in, at most daily, detached: the hook never waits on the network.
-        maybeSpawnHookPing({ env, cwd, host });
+        // Skipped when another hook copy already handled this tool_use_id.
+        if (r.firstSeen !== false) maybeSpawnHookPing({ env, cwd, host });
         return r.exitCode;
       }
 

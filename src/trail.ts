@@ -24,6 +24,9 @@ export type TrailProduct =
   | "runtime"
   | "other";
 
+/** Foreign trace formats the importer accepts (host "import" events). */
+export type TrailImportFormat = "langsmith" | "langfuse" | "phoenix" | "otel";
+
 export interface TrailEvent {
   readonly ts: string;
   readonly sessionId: string;
@@ -37,6 +40,8 @@ export interface TrailEvent {
   readonly reasonCode: string;
   readonly mode: "observe" | "hold" | "offline";
   readonly neverEvent?: boolean;
+  /** Source format on imported (host "import") events. */
+  readonly importFormat?: TrailImportFormat;
   readonly packId?: string;
   readonly argsHash?: string;
   /** Short redacted change line for the activity feed (never raw args). */
@@ -156,6 +161,7 @@ const TRAIL_PRODUCTS = new Set<string>([
   "runtime",
   "other",
 ]);
+const TRAIL_IMPORT_FORMATS = new Set<string>(["langsmith", "langfuse", "phoenix", "otel"]);
 
 /**
  * Validate one parsed JSONL line against the TrailEvent shape. Untrusted
@@ -189,6 +195,9 @@ function parseTrailEvent(raw: unknown): TrailEvent | undefined {
       : {}),
     ...(typeof e.project === "string" ? { project: e.project } : {}),
     ...(typeof e.neverEvent === "boolean" ? { neverEvent: e.neverEvent } : {}),
+    ...(typeof e.importFormat === "string" && TRAIL_IMPORT_FORMATS.has(e.importFormat)
+      ? { importFormat: e.importFormat as TrailImportFormat }
+      : {}),
     ...(typeof e.packId === "string" ? { packId: e.packId } : {}),
     ...(typeof e.argsHash === "string" ? { argsHash: e.argsHash } : {}),
     ...(typeof e.summary === "string" ? { summary: e.summary } : {}),

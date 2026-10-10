@@ -13,6 +13,20 @@ import { findSampleTool, type ActionClass, type PolicyVerdict } from "./sample-t
 
 export type SessionRisk = "LOW" | "MEDIUM" | "HIGH";
 
+/**
+ * THE never-list rule, on the tool name ALONE: a known sample tool answers by its
+ * policyTier; otherwise destructive admin names on a known MCP server match.
+ * `baseTier` (normal path) and the hook's error fallback both call this one
+ * function, so they cannot drift. No config, args or hashing, so the hook can
+ * enforce it even when config parsing or arg handling throws.
+ */
+export function matchesNeverList(toolId: string): boolean {
+  const known = findSampleTool(toolId);
+  if (known?.policyTier) return known.policyTier === "DENY";
+  const mcp = parseMcpToolId(toolId);
+  return Boolean(mcp && /drop|truncate|purge|transfer/.test(mcp.tool));
+}
+
 function baseTier(
   toolId: string,
   irreversible: boolean,
@@ -22,23 +36,21 @@ function baseTier(
     return { verdict: "DENY", reasonCode: "EMPTY_TOOL" };
   }
 
+  // Never-list first (clearly destructive admin names on a KNOWN MCP server deny
+  // outright, even with risk signals declared; sample DENY tools too).
+  if (matchesNeverList(toolId)) {
+    return { verdict: "DENY", reasonCode: "NEVER_EVENT" };
+  }
+
   const known = findSampleTool(toolId);
   if (known?.policyTier) {
-    if (known.policyTier === "DENY") {
-      return { verdict: "DENY", reasonCode: "NEVER_EVENT" };
-    }
     if (known.policyTier === "REQUIRE_APPROVE") {
       return { verdict: "REQUIRE_APPROVE", reasonCode: "HIGH_STAKES_WRITE" };
     }
     return { verdict: "ALLOW", reasonCode: "ALLOW" };
   }
 
-  // Clearly destructive admin names on a KNOWN MCP server deny outright, even
-  // when the caller declared risk signals - mirroring sample-tool NEVER.
   const mcp = parseMcpToolId(toolId);
-  if (mcp && /drop|truncate|purge|transfer/.test(mcp.tool)) {
-    return { verdict: "DENY", reasonCode: "NEVER_EVENT" };
-  }
 
   // Advisory vocabulary only applies when the caller declared no risk signals;
   // explicit irreversible/actionClass keep their stricter paths below.

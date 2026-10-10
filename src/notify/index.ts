@@ -14,6 +14,10 @@
  * Secrets hygiene: payloads are built from the allow-listed, already-redacted trail fields only
  * (see templates.ts) and the serialized body is checked with assertNoSecrets before sending; a
  * rejected body degrades to a four-field minimized payload instead of being dropped silently.
+ *
+ * Every delivery attempt is appended to <kya-home>/.kya/notify-log.jsonl (see log.ts) so the
+ * report can show per-target delivery health; the ledger records host[:port] labels only,
+ * never full webhook URLs (they can embed secrets in the path).
  */
 import { assertNoSecrets } from "../dash/render.js";
 import type { TrailEvent } from "../trail.js";
@@ -24,6 +28,20 @@ import {
   type NotifyTemplate,
 } from "./templates.js";
 import { sendWithRetry, type NotifyDeps } from "./sender.js";
+
+export {
+  appendNotifyLog,
+  NOTIFY_LOG_FILE,
+  NOTIFY_LOG_KEEP_LINES,
+  NOTIFY_LOG_MAX_LINES,
+  notifyLogPath,
+  notifyTargetLabel,
+  readNotifyLog,
+  summarizeNotifyLog,
+  type NotifyLogEntry,
+  type NotifyLogSummary,
+  type NotifyTargetRow,
+} from "./log.js";
 
 export {
   CIRCUIT_FAILURES_TO_OPEN,
@@ -180,6 +198,7 @@ export async function notifyOnTrailEvent(
               body: serializePayload(w.template, event),
               ...(w.headers ? { headers: w.headers } : {}),
               ...(w.timeoutMs !== undefined ? { timeoutMs: w.timeoutMs } : {}),
+              ledger: { env, verdict: event.verdict },
             },
             deps,
           );

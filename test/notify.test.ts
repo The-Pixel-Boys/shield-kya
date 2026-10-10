@@ -5,6 +5,9 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   NOTIFY_KIND,
@@ -109,6 +112,14 @@ const fastDeps = (extra: Partial<NotifyDeps> = {}): NotifyDeps => ({
   ...extra,
 });
 
+/**
+ * Test env rooted at a fresh KYA_HOME: delivery attempts are persisted to
+ * .kya/notify-log.jsonl, which must never land in the developer's real home.
+ */
+const tenv = (): NodeJS.ProcessEnv => ({
+  KYA_HOME: mkdtempSync(join(tmpdir(), "kya-notify-home-")),
+});
+
 beforeEach(() => resetNotifyState());
 
 afterEach(async () => {
@@ -197,25 +208,25 @@ describe("verdict filtering", () => {
   it("ALLOW never fires; DENY and REQUIRE_APPROVE fire", async () => {
     const stub = await startStub();
     const config = { notify: { webhooks: [{ url: stub.base }] } };
-    await notifyOnTrailEvent(baseEvent({ verdict: "ALLOW" }), config, {}, fastDeps());
+    await notifyOnTrailEvent(baseEvent({ verdict: "ALLOW" }), config, tenv(), fastDeps());
     expect(stub.requests).toHaveLength(0);
-    await notifyOnTrailEvent(baseEvent({ verdict: "DENY" }), config, {}, fastDeps());
-    await notifyOnTrailEvent(baseEvent({ verdict: "REQUIRE_APPROVE" }), config, {}, fastDeps());
+    await notifyOnTrailEvent(baseEvent({ verdict: "DENY" }), config, tenv(), fastDeps());
+    await notifyOnTrailEvent(baseEvent({ verdict: "REQUIRE_APPROVE" }), config, tenv(), fastDeps());
     expect(stub.requests).toHaveLength(2);
   });
 
   it("per-webhook events list narrows the verdicts", async () => {
     const stub = await startStub();
     const config = { notify: { webhooks: [{ url: stub.base, events: ["DENY"] }] } };
-    await notifyOnTrailEvent(baseEvent({ verdict: "REQUIRE_APPROVE" }), config, {}, fastDeps());
+    await notifyOnTrailEvent(baseEvent({ verdict: "REQUIRE_APPROVE" }), config, tenv(), fastDeps());
     expect(stub.requests).toHaveLength(0);
-    await notifyOnTrailEvent(baseEvent({ verdict: "DENY" }), config, {}, fastDeps());
+    await notifyOnTrailEvent(baseEvent({ verdict: "DENY" }), config, tenv(), fastDeps());
     expect(stub.requests).toHaveLength(1);
   });
 
   it("env override alone fires a generic payload", async () => {
     const stub = await startStub();
-    await notifyOnTrailEvent(baseEvent(), undefined, { KYA_NOTIFY_WEBHOOK: stub.base }, fastDeps());
+    await notifyOnTrailEvent(baseEvent(), undefined, { KYA_HOME: mkdtempSync(join(tmpdir(), "kya-notify-home-")), KYA_NOTIFY_WEBHOOK: stub.base }, fastDeps());
     expect(stub.requests).toHaveLength(1);
     expect(stub.requests[0]?.body["kind"]).toBe(NOTIFY_KIND);
   });
@@ -223,7 +234,7 @@ describe("verdict filtering", () => {
   it("webhook headers reach the receiver", async () => {
     const stub = await startStub();
     const config = { notify: { webhooks: [{ url: stub.base, headers: { "x-hook-token": "abc123" } }] } };
-    await notifyOnTrailEvent(baseEvent(), config, {}, fastDeps());
+    await notifyOnTrailEvent(baseEvent(), config, tenv(), fastDeps());
     expect(stub.requests[0]?.headers["x-hook-token"]).toBe("abc123");
   });
 });
@@ -233,7 +244,7 @@ describe("retry and backoff", () => {
     const stub = await startStub({ failuresBeforeOk: 2 });
     const delays: number[] = [];
     const deps = fastDeps({ sleep: async (ms) => { delays.push(ms); } });
-    await notifyOnTrailEvent(baseEvent(), { notify: { webhooks: [{ url: stub.base }] } }, {}, deps);
+    await notifyOnTrailEvent(baseEvent(), { notify: { webhooks: [{ url: stub.base }] } }, tenv(), deps);
     expect(stub.requests).toHaveLength(3);
     expect(delays).toEqual([RETRY_DELAYS_MS[0], RETRY_DELAYS_MS[1]]);
   });
@@ -242,14 +253,14 @@ describe("retry and backoff", () => {
     const stub = await startStub({ failuresBeforeOk: 1 });
     const delays: number[] = [];
     const deps = fastDeps({ sleep: async (ms) => { delays.push(ms); }, random: () => 0.999 });
-    await notifyOnTrailEvent(baseEvent(), { notify: { webhooks: [{ url: stub.base }] } }, {}, deps);
+    await notifyOnTrailEvent(baseEvent(), { notify: { webhooks: [{ url: stub.base }] } }, tenv(), deps);
     expect(delays[0]).toBeGreaterThanOrEqual(RETRY_DELAYS_MS[0] ?? 0);
     expect(delays[0]).toBeLessThanOrEqual(Math.floor((RETRY_DELAYS_MS[0] ?? 0) * 1.25));
   });
 
   it("gives up after the initial attempt plus 3 retries", async () => {
     const stub = await startStub({ failuresBeforeOk: 99 });
-    await notifyOnTrailEvent(baseEvent(), { notify: { webhooks: [{ url: stub.base }] } }, {}, fastDeps());
+    await notifyOnTrailEvent(baseEvent(), { notify: { webhooks: [{ url: stub.base }] } }, tenv(), fastDeps());
     expect(stub.requests).toHaveLength(1 + RETRY_DELAYS_MS.length);
   });
 });
@@ -261,7 +272,7 @@ describe("timeout", () => {
     await notifyOnTrailEvent(
       baseEvent(),
       { notify: { webhooks: [{ url: stub.base, timeoutMs: 50 }] } },
-      {},
+      tenv(),
       fastDeps(),
     );
     expect(Date.now() - started).toBeLessThan(300 * (1 + RETRY_DELAYS_MS.length));
@@ -276,12 +287,12 @@ describe("circuit breaker", () => {
     const deps = fastDeps({ nowMs: () => now });
     const config = { notify: { webhooks: [{ url: stub.base }] } };
     for (let i = 0; i < 5; i++) {
-      await notifyOnTrailEvent(baseEvent(), config, {}, deps);
+      await notifyOnTrailEvent(baseEvent(), config, tenv(), deps);
       now += 61_000; // keep the rate-limit window out of this test
     }
     const requestsAfterFive = stub.requests.length;
     expect(notifyStats().droppedByCircuitOpen).toBe(0);
-    await notifyOnTrailEvent(baseEvent(), config, {}, deps);
+    await notifyOnTrailEvent(baseEvent(), config, tenv(), deps);
     expect(stub.requests).toHaveLength(requestsAfterFive);
     expect(notifyStats().droppedByCircuitOpen).toBe(1);
   });
@@ -292,16 +303,16 @@ describe("circuit breaker", () => {
     const deps = fastDeps({ nowMs: () => now });
     const config = { notify: { webhooks: [{ url: failing.base }] } };
     for (let i = 0; i < 5; i++) {
-      await notifyOnTrailEvent(baseEvent(), config, {}, deps);
+      await notifyOnTrailEvent(baseEvent(), config, tenv(), deps);
       now += 61_000;
     }
     now += 5 * 60_000 + 1_000; // past CIRCUIT_OPEN_MS
     failing.failuresBeforeOk = 0; // receiver healthy again
-    await notifyOnTrailEvent(baseEvent(), config, {}, deps);
+    await notifyOnTrailEvent(baseEvent(), config, tenv(), deps);
     expect(stubRequests(failing)).toBe(5 * (1 + RETRY_DELAYS_MS.length) + 1);
     // And the circuit is closed again: the next event flows without a drop.
     now += 61_000;
-    await notifyOnTrailEvent(baseEvent(), config, {}, deps);
+    await notifyOnTrailEvent(baseEvent(), config, tenv(), deps);
     expect(notifyStats().droppedByCircuitOpen).toBe(0);
     expect(stubRequests(failing)).toBe(5 * (1 + RETRY_DELAYS_MS.length) + 2);
   });
@@ -319,7 +330,7 @@ describe("rate limit", () => {
     const config = { notify: { webhooks: [{ url: stub.base }] } };
     const total = RATE_LIMIT_MAX_SENDS + 5;
     for (let i = 0; i < total; i++) {
-      await notifyOnTrailEvent(baseEvent(), config, {}, deps);
+      await notifyOnTrailEvent(baseEvent(), config, tenv(), deps);
     }
     expect(stub.requests).toHaveLength(RATE_LIMIT_MAX_SENDS);
     expect(notifyStats().droppedByRateLimit).toBe(5);
@@ -330,7 +341,7 @@ describe("secrets hygiene", () => {
   it("falls back to the minimized payload when the serialized body trips assertNoSecrets", async () => {
     const stub = await startStub();
     const event = baseEvent({ summary: "token=sk_live_abcdef1234567890" });
-    await notifyOnTrailEvent(event, { notify: { webhooks: [{ url: stub.base }] } }, {}, fastDeps());
+    await notifyOnTrailEvent(event, { notify: { webhooks: [{ url: stub.base }] } }, tenv(), fastDeps());
     expect(stub.requests).toHaveLength(1);
     expect(stub.requests[0]?.body).toEqual({
       toolId: "shell.exec",
@@ -342,7 +353,7 @@ describe("secrets hygiene", () => {
 
   it("clean redacted fields ship in full", async () => {
     const stub = await startStub();
-    await notifyOnTrailEvent(baseEvent(), { notify: { webhooks: [{ url: stub.base }] } }, {}, fastDeps());
+    await notifyOnTrailEvent(baseEvent(), { notify: { webhooks: [{ url: stub.base }] } }, tenv(), fastDeps());
     const event = stub.requests[0]?.body["event"] as Record<string, unknown>;
     expect(event["summary"]).toBe("rm -rf build/");
     expect(event["targetPath"]).toBe("src/index.ts");
@@ -352,13 +363,13 @@ describe("secrets hygiene", () => {
 describe("never throws", () => {
   it("dead receiver, malformed event fields and bad config all resolve", async () => {
     await expect(
-      notifyOnTrailEvent(baseEvent(), { notify: { webhooks: [{ url: "http://127.0.0.1:1/hook" }] } }, {}, fastDeps()),
+      notifyOnTrailEvent(baseEvent(), { notify: { webhooks: [{ url: "http://127.0.0.1:1/hook" }] } }, tenv(), fastDeps()),
     ).resolves.toBeUndefined();
     await expect(
       notifyOnTrailEvent(
         baseEvent({ summary: undefined }),
         { notify: { webhooks: [{ url: 42 }, null] } },
-        {},
+        tenv(),
         fastDeps(),
       ),
     ).resolves.toBeUndefined();
