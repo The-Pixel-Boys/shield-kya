@@ -204,7 +204,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.23.1", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.23.2", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -244,7 +244,7 @@ Offline evaluate by default (no network, no hosted plane); an explicit config ho
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.23.1 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.23.2 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -255,7 +255,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.23.1 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.23.2 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -333,11 +333,11 @@ kya import --from langfuse ./observations.jsonl
 kya import --from otel ./otraces.json
 ```
 
-Imports land as observe-mode events (`host: import`, `reasonCode: IMPORTED`, error runs become `DENY`/`IMPORTED_ERROR`), with latency and token counts mapped when the source carries them. Files over 50MB are refused; malformed records are skipped, never fatal.
+Imports land as observe-mode events (`host: import`, `reasonCode: IMPORTED`, error runs become `DENY`/`IMPORTED_ERROR`), with latency and token counts mapped when the source carries them. Files over 50MB are refused; malformed records are skipped, never fatal. The report (`kya start` / `kya receipt`) shows an **Import** card with per-format counts, error count, and the latest imported event once any import has landed.
 
 ## Investigate (detections + fix briefs)
 
-`kya investigate` runs deterministic local detectors over the trail - no LLM calls: PII leaks in summaries, DENY spikes, approval retry loops, repeated never-event attempts, unknown tools under hold, slow tools. Findings group into incidents, and each incident renders a markdown fix brief shaped to paste into Claude Code / Cursor / Codex.
+`kya investigate` runs deterministic local detectors over the trail - no LLM calls: PII leaks in summaries, DENY spikes, approval retry loops, repeated never-event attempts, unknown tools under hold, slow tools. Findings group into incidents, and each incident renders a markdown fix brief shaped to paste into Claude Code / Cursor / Codex. Every run also persists a compact summary to `~/.kya/investigate-last.json`, which the report renders as an **Investigations** card (findings by severity with detector ids, plus the top fix brief).
 
 ```bash
 kya investigate           # summary: counts by severity + top incidents
@@ -359,7 +359,7 @@ Route DENY / REQUIRE_APPROVE events to Slack, Linear, Jira, or any webhook. Conf
 }
 ```
 
-`KYA_NOTIFY_WEBHOOK=<url>` is the zero-config variant (generic payload). Delivery retries with exponential backoff (250ms/1s/4s + jitter), per-attempt timeouts, a per-URL circuit breaker, and a send rate limiter; payloads are built only from redacted trail fields, with an automatic minimized fallback if the secret scan trips. From short-lived hook/wrap spawns delivery rides a detached helper (`kya notify-flush`), so the gate path never waits on the network.
+`KYA_NOTIFY_WEBHOOK=<url>` is the zero-config variant (generic payload). Delivery retries with exponential backoff (250ms/1s/4s + jitter), per-attempt timeouts, a per-URL circuit breaker, and a send rate limiter; payloads are built only from redacted trail fields, with an automatic minimized fallback if the secret scan trips. From short-lived hook/wrap spawns delivery rides a detached helper (`kya notify-flush`), so the gate path never waits on the network. Every delivery attempt is appended to `~/.kya/notify-log.jsonl` (target host only, never the full URL; capped at the last 500 entries), and the report's System tab shows an **Alerts** panel with per-target delivered/failed counts and the last attempt.
 
 ## Optional sandbox wrap (Firecracker)
 
@@ -423,7 +423,7 @@ Opt-in. Default off.
 
 **OSS CLI:** set `KYA_OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_ENDPOINT`) to export thin evaluate latency (`kya.client.evaluate.latency`) with tags `verdict` and `host` only. No tool args or API keys.
 
-**Verdict span export:** set `KYA_OTLP_EXPORT_ENDPOINT` (or `"otlpExport": { "endpoint": ... }` in `.kya/config.json`) to emit every verdict as an OTLP/JSON GenAI span (`gen_ai.tool.name`, `kya.verdict`, `kya.reason_code`, token attributes when known) to any OTLP/HTTP backend. Long-lived processes (MCP gate, gateway) export every verdict; hook/wrap spawns export DENY / REQUIRE_APPROVE via the detached `notify-flush` helper. Plaintext http is accepted for loopback only unless `"insecure": true`.
+**Verdict span export:** set `KYA_OTLP_EXPORT_ENDPOINT` (or `"otlpExport": { "endpoint": ... }` in `.kya/config.json`) to emit every verdict as an OTLP/JSON GenAI span (`gen_ai.tool.name`, `kya.verdict`, `kya.reason_code`, token attributes when known) to any OTLP/HTTP backend. Long-lived processes (MCP gate, gateway) export every verdict; hook/wrap spawns export DENY / REQUIRE_APPROVE via the detached `notify-flush` helper. Plaintext http is accepted for loopback only unless `"insecure": true`. Flush outcomes accumulate in `~/.kya/otel-stats.json` (endpoint host label, spans sent/failed, last export time), rendered as the **OTel export** panel on the report's System tab.
 
 **Hosted plane:** richer Micrometer gauges and timers when `KYA_OTLP_ENABLED=true`.
 

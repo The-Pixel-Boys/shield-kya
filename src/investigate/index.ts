@@ -10,7 +10,17 @@ import { renderFixBrief } from "./fix-brief.js";
 
 export type { DetectorId, Finding, Severity } from "./detectors.js";
 export type { Incident } from "./incidents.js";
+export { detectorTitle } from "./incidents.js";
 export { renderFixBrief } from "./fix-brief.js";
+export {
+  buildInvestigateLastRun,
+  INVESTIGATE_LAST_FILE,
+  investigateLastRunPath,
+  loadInvestigateLastRun,
+  writeInvestigateLastRun,
+  type InvestigateLastRun,
+  type InvestigateLastRunFinding,
+} from "./last-run.js";
 
 export interface InvestigateOptions {
   /** Cap the number of incidents listed in the plain-text report. */

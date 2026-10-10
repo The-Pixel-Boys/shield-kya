@@ -108,6 +108,10 @@ describe("node version gate", () => {
     const { io } = fakeIo({ isTty: true });
     const deps = { version: "v22.0.0" };
     expect(await ensureSupportedNode(io, {}, ["serve-mcp"], "serve-mcp", deps)).toBeUndefined();
+    // hook runs on every tool call: never re-exec or warn (measured +180 ms per call).
+    const quiet = fakeIo({ isTty: false });
+    expect(await ensureSupportedNode(quiet.io, {}, ["hook"], "hook", deps)).toBeUndefined();
+    expect(quiet.errors).toEqual([]);
     expect(
       await ensureSupportedNode(io, {}, ["receipt-serve"], "receipt-serve", deps),
     ).toBeUndefined();

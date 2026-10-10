@@ -63,7 +63,7 @@ EU sites use the matching Datadog host (`datadoghq.eu`, etc.).
 
 ## Exporting KYA verdicts as spans
 
-The OSS CLI can also **export** each gate verdict as one OTLP/JSON span (POST to `{endpoint}/v1/traces`), so verdicts show up in Langfuse, Datadog, Honeycomb, or any OTel Collector next to your agent's own GenAI traces. Default is **off**: no endpoint configured means a pure no-op. Export is fire-and-forget: it never blocks, delays, or changes a verdict, and every failure is swallowed (counted in-memory for a future status command).
+The OSS CLI can also **export** each gate verdict as one OTLP/JSON span (POST to `{endpoint}/v1/traces`), so verdicts show up in Langfuse, Datadog, Honeycomb, or any OTel Collector next to your agent's own GenAI traces. Default is **off**: no endpoint configured means a pure no-op. Export is fire-and-forget: it never blocks, delays, or changes a verdict, and every failure is swallowed (counted in-memory via `otlpExportStats` and persisted to `~/.kya/otel-stats.json`, which powers the report's OTel export panel).
 
 Configure in `.kya/config.json` under the `otlpExport` key:
 

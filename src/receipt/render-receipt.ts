@@ -8,9 +8,19 @@ import type {
   CertifyRequirementResult,
   RequirementStatus,
 } from "../certify/evaluate.js";
-import { productLabel, readTrail, readTrailSince, type TrailEvent, type TrailProduct } from "../trail.js";
+import { productLabel, readTrail, readTrailSince, type TrailEvent, type TrailImportFormat, type TrailProduct } from "../trail.js";
 import { mcpServerLabel, parseMcpToolId } from "../mcp-servers.js";
 import type { KyaFileConfig } from "../config.js";
+import {
+  loadInvestigateLastRun,
+  type InvestigateLastRun,
+} from "../investigate/last-run.js";
+import {
+  readNotifyLog,
+  summarizeNotifyLog,
+  type NotifyLogSummary,
+} from "../notify/log.js";
+import { readOtelStats, type OtelStats } from "../otel/stats.js";
 import {
   loadCertifyCard,
   loadIdentity,
@@ -81,6 +91,14 @@ export interface ReceiptModel {
   readonly certify?: CertifyCard;
   /** Observe-only showback from .kya/usage.json. */
   readonly showback?: ShowbackReport;
+  /** Trace imports (host "import" events), aggregated over the full trail. */
+  readonly imports?: ImportCard;
+  /** Last `kya investigate` run summary from .kya/investigate-last.json. */
+  readonly investigate?: InvestigateLastRun;
+  /** Per-target alert delivery rollup from .kya/notify-log.jsonl. */
+  readonly alerts?: NotifyLogSummary;
+  /** Persisted OTLP export counters from .kya/otel-stats.json. */
+  readonly otel?: OtelStats;
 }
 
 function esc(s: string): string {
@@ -298,6 +316,59 @@ export function aggregateEvents(events: readonly TrailEvent[]): EventAggregates 
   return { modes, planes, sessions, reasons, products, projects, servers };
 }
 
+export interface ImportFormatRow {
+  readonly format: string;
+  readonly imported: number;
+  readonly errors: number;
+}
+
+/** Rollup of imported trace events for the Import hero card. */
+export interface ImportCard {
+  readonly total: number;
+  readonly errors: number;
+  readonly formats: readonly ImportFormatRow[];
+  /** ts of the newest imported event ("" when none parse). */
+  readonly lastTs: string;
+}
+
+const IMPORT_REASONS = new Set<string>(["IMPORTED", "IMPORTED_ERROR"]);
+const IMPORT_FORMAT_RE = /^import-(langsmith|langfuse|phoenix|otel)-/;
+
+/** Legacy fallback: pre-importFormat trails carry the format in the fallback session id. */
+function legacyImportFormat(sessionId: string): TrailImportFormat | undefined {
+  const m = IMPORT_FORMAT_RE.exec(sessionId);
+  return m ? (m[1] as TrailImportFormat) : undefined;
+}
+
+/**
+ * Aggregate host "import" trail events (written by kya import; reasonCode
+ * IMPORTED / IMPORTED_ERROR) per source format. Undefined when the trail has
+ * no imported events - the report section stays hidden on fresh installs.
+ */
+export function aggregateImports(events: readonly TrailEvent[]): ImportCard | undefined {
+  const byFormat = new Map<string, { imported: number; errors: number }>();
+  let total = 0;
+  let errors = 0;
+  let lastTs = "";
+  for (const e of events) {
+    if (e.host !== "import" || !IMPORT_REASONS.has(e.reasonCode)) continue;
+    const isError = e.reasonCode === "IMPORTED_ERROR";
+    total++;
+    if (isError) errors++;
+    if (e.ts > lastTs) lastTs = e.ts;
+    const format = e.importFormat ?? legacyImportFormat(e.sessionId) ?? "other";
+    const row = byFormat.get(format) ?? { imported: 0, errors: 0 };
+    if (isError) row.errors++;
+    else row.imported++;
+    byFormat.set(format, row);
+  }
+  if (total === 0) return undefined;
+  const formats: ImportFormatRow[] = [...byFormat.entries()]
+    .map(([format, r]) => ({ format, imported: r.imported, errors: r.errors }))
+    .sort((a, b) => b.imported + b.errors - (a.imported + a.errors) || a.format.localeCompare(b.format));
+  return { total, errors, formats, lastTs };
+}
+
 export function buildReceiptModel(
   sessionId: string,
   events: readonly TrailEvent[],
@@ -322,6 +393,10 @@ export function buildReceiptModel(
     orr: extras?.orr,
     certify: extras?.certify,
     showback: extras?.showback,
+    imports: extras?.imports,
+    investigate: extras?.investigate,
+    alerts: extras?.alerts,
+    otel: extras?.otel,
   };
 }
 
@@ -349,6 +424,10 @@ export function buildWindowReceiptModel(
     orr: extras?.orr,
     certify: extras?.certify,
     showback: extras?.showback,
+    imports: extras?.imports,
+    investigate: extras?.investigate,
+    alerts: extras?.alerts,
+    otel: extras?.otel,
   };
 }
 
@@ -361,12 +440,17 @@ export function loadReceiptModel(input: {
   readonly liveToken?: string;
   readonly page?: number;
   readonly searchQuery?: string;
+  readonly env?: NodeJS.ProcessEnv;
 }): ReceiptModel {
   const days = input.days > 0 ? Math.floor(input.days) : 3;
+  const env = input.env ?? process.env;
   const showback = loadShowbackCard(input.cwd);
   const events = input.sessionId
-    ? readTrail(input.cwd)
-    : readTrailSince(input.cwd, new Date(Date.now() - days * 24 * 60 * 60 * 1000));
+    ? readTrail(input.cwd, env)
+    : readTrailSince(input.cwd, new Date(Date.now() - days * 24 * 60 * 60 * 1000), env);
+  // The Import card aggregates the full trail, not just the window: imported
+  // spans keep their foreign timestamps and would fall out of a short window.
+  const importEvents = input.sessionId ? events : readTrail(input.cwd, env);
   const extras = {
     page: input.page ?? 1,
     live: input.live,
@@ -379,6 +463,10 @@ export function loadReceiptModel(input: {
     orr: loadOrrCard(input.cwd),
     certify: loadCertifyCard(input.cwd),
     showback,
+    imports: aggregateImports(importEvents),
+    investigate: loadInvestigateLastRun(env),
+    alerts: summarizeNotifyLog(readNotifyLog(env)),
+    otel: readOtelStats(env),
     spend: showback
       ? {
           tokens: showback.totalTokensIn + showback.totalTokensOut,
@@ -1575,6 +1663,126 @@ export function gatewayHeroCard(page: GatePage | undefined, _nowMs: number): str
 }
 
 /**
+ * Hero Import card: per-format rollup of imported trace events. Hidden when
+ * the trail has no host "import" events (fresh installs render unchanged).
+ */
+function importHeroCard(card: ImportCard | undefined, nowMs: number): string {
+  if (!card) return "";
+  const chips = card.formats
+    .map(
+      (f) =>
+        `<span class="chip"><code>${esc(f.format)}</code> × ${f.imported}${f.errors > 0 ? ` · ${f.errors} err` : ""}</span>`,
+    )
+    .join("\n    ");
+  const last = card.lastTs ? `latest imported event ${esc(relativeTime(card.lastTs, nowMs))} · ` : "";
+  return `<section class="panel" aria-label="Import">
+  <h2>Import</h2>
+  <div class="kpi-row">
+    ${kpiTile("Imported", card.total)}
+    ${kpiTile("Errors", card.errors, "bad")}
+  </div>
+  <div class="chiprow">
+    ${chips}
+  </div>
+  <p class="mute small">${last}add more with <code>kya import --from langsmith|langfuse|phoenix|otel FILE</code></p>
+</section>`;
+}
+
+/** Severity pill tone for investigate findings, reusing the pill palette. */
+function severityPill(severity: string): string {
+  const cls = severity === "critical" ? " orr-red" : severity === "high" ? " orr-amber" : "";
+  return `<span class="pill${cls}">${esc(severity)}</span>`;
+}
+
+/**
+ * Hero Investigations card: the persisted summary of the last kya investigate
+ * run. Hidden when no summary file exists; a clean run (zero findings) still
+ * renders, since the run itself is the data.
+ */
+function investigateHeroCard(card: InvestigateLastRun | undefined, nowMs: number): string {
+  if (!card) return "";
+  const findingCount = card.findings.reduce((n, f) => n + f.count, 0);
+  const rows =
+    card.findings.length === 0
+      ? `<p class="line">No findings - the trail looks clean for all detectors.</p>`
+      : `<ul class="rows">
+${card.findings
+  .map(
+    (f) =>
+      `    <li>${severityPill(f.severity)} <code>${esc(f.detectorId)}</code> - ${esc(f.title)} <span class="cnt">× ${f.count}</span></li>`,
+  )
+  .join("\n")}
+  </ul>`;
+  const brief = card.briefSnippet
+    ? `<details class="diff"><summary>Top fix brief</summary><pre>${esc(card.briefSnippet)}</pre></details>`
+    : "";
+  return `<section class="panel" aria-label="Investigations">
+  <h2>Investigations</h2>
+  <div class="kpi-row">
+    ${kpiTile("Findings", findingCount, findingCount > 0 ? "warn" : "")}
+    ${kpiTile("Incidents", card.incidents, card.incidents > 0 ? "warn" : "")}
+  </div>
+  ${rows}
+  ${brief}
+  <p class="mute small">ran ${esc(relativeTime(card.ranAt, nowMs))} · window ${card.windowDays}d · <code>kya investigate</code> for the full report</p>
+</section>`;
+}
+
+/**
+ * System-tab Alerts panel: per-target delivery rollup from the notify ledger.
+ * Hidden when no delivery has been attempted yet.
+ */
+function alertsPanel(card: NotifyLogSummary | undefined, nowMs: number): string {
+  if (!card) return "";
+  const rows = card.targets
+    .map((t) => {
+      const status = t.lastOk
+        ? `<span class="pill ok">delivered</span>`
+        : `<span class="pill orr-red">failed</span>`;
+      const detail = t.lastDetail ? ` <span class="mute">${esc(t.lastDetail)}</span>` : "";
+      return `      <tr>
+        <td><code>${esc(t.target)}</code></td>
+        <td>${t.delivered}</td>
+        <td>${t.failed}</td>
+        <td><time datetime="${esc(t.lastTs)}" title="${esc(t.lastTs)}">${esc(relativeTime(t.lastTs, nowMs))}</time></td>
+        <td>${status}${detail}</td>
+      </tr>`;
+    })
+    .join("\n");
+  return `<section class="panel" aria-label="Alerts">
+  <h2>Alerts</h2>
+  <table class="tbl">
+    <thead><tr><th>Target</th><th>Delivered</th><th>Failed</th><th>Last attempt</th><th>Status</th></tr></thead>
+    <tbody>
+${rows}
+    </tbody>
+  </table>
+  <p class="mute small">webhook deliveries for DENY / REQUIRE_APPROVE verdicts · configure <code>notify.webhooks</code> in .kya/config.json</p>
+</section>`;
+}
+
+/**
+ * System-tab OTel panel: persisted OTLP export counters. Hidden until the
+ * first export attempt lands in .kya/otel-stats.json.
+ */
+function otelPanel(stats: OtelStats | undefined, nowMs: number): string {
+  if (!stats) return "";
+  const endpoint = stats.endpoint ? `<code>${esc(stats.endpoint)}</code>` : '<span class="mute">unknown endpoint</span>';
+  const last = stats.lastExportAt
+    ? `last export ${esc(relativeTime(stats.lastExportAt, nowMs))} · `
+    : "";
+  return `<section class="panel" aria-label="OTel export">
+  <h2>OTel export</h2>
+  <div class="orrline">${endpoint}</div>
+  <div class="kpi-row">
+    ${kpiTile("Spans sent", stats.spansSent)}
+    ${kpiTile("Spans failed", stats.spansFailed, "bad")}
+  </div>
+  <p class="mute small">${last}configure <code>otlpExport.endpoint</code> in .kya/config.json or KYA_OTLP_EXPORT_ENDPOINT</p>
+</section>`;
+}
+
+/**
  * Defensive normalization for untrusted trail fields before rendering.
  * clip() flattens newlines (single-line contexts: code spans, headers);
  * diffPreview keeps them via clipMultiline so <pre>/fenced diffs survive.
@@ -2237,6 +2445,8 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       wiredHostsPanel(model.wiredHosts),
       sandboxesPanel(model.sandboxes, nowMs),
       orrPanel(model.orr, nowMs),
+      alertsPanel(model.alerts, nowMs),
+      otelPanel(model.otel, nowMs),
       toolsHtml,
     ],
     "No system state yet - wire a host, configure a sandbox, or run an ORR.",
@@ -2295,6 +2505,8 @@ ${model.liveToken ? '<main data-live-token="1">' : '<main>'}
         ${verdictsHeroCard(c, events.length)}
         ${activityHeroCard(agg, dashboard, events.length)}
         ${gatewayHeroCard(model.gate, nowMs)}
+        ${importHeroCard(model.imports, nowMs)}
+        ${investigateHeroCard(model.investigate, nowMs)}
         ${showbackHeroCard(model.showback, model.events)}
       </div>
     </div>
@@ -2622,6 +2834,58 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
       lines.push(`- \`${mdInline(r.runId)}\` - ${r.steps} step${r.steps === 1 ? "" : "s"} · ${usdText(r.estimatedUsd)}`);
     }
     lines.push(SHOWBACK_DISCLAIMER, "");
+  }
+
+  if (model.imports) {
+    const im = model.imports;
+    lines.push(
+      "## Import",
+      `${im.total} imported · ${im.errors} error${im.errors === 1 ? "" : "s"}${im.lastTs ? ` · latest event ${relativeTime(im.lastTs, nowMs)}` : ""}`,
+      ...im.formats.map(
+        (f) => `- ${mdText(f.format)} × ${f.imported}${f.errors > 0 ? ` (${f.errors} errors)` : ""}`,
+      ),
+      "",
+    );
+  }
+
+  if (model.investigate) {
+    const iv = model.investigate;
+    const findingCount = iv.findings.reduce((n, f) => n + f.count, 0);
+    lines.push(
+      "## Investigations",
+      `last run ${relativeTime(iv.ranAt, nowMs)} · window ${iv.windowDays}d · ${findingCount} finding${findingCount === 1 ? "" : "s"} · ${iv.incidents} incident${iv.incidents === 1 ? "" : "s"}`,
+    );
+    for (const f of iv.findings) {
+      lines.push(`- [${mdText(f.severity)}] \`${mdInline(f.detectorId)}\` - ${mdText(f.title)} × ${f.count}`);
+    }
+    if (iv.briefSnippet) {
+      const snippet = stripEscapes(iv.briefSnippet);
+      const fence = mdFence(snippet);
+      lines.push("", "Top fix brief:", "", fence, snippet, fence);
+    }
+    lines.push("");
+  }
+
+  if (model.alerts) {
+    const al = model.alerts;
+    lines.push(
+      "## Alerts",
+      `${al.delivered} delivered · ${al.failed} failed · last attempt ${relativeTime(al.lastTs, nowMs)}`,
+      ...al.targets.map(
+        (t) =>
+          `- \`${mdInline(t.target)}\` - ${t.delivered} delivered · ${t.failed} failed · last ${t.lastOk ? "delivered" : "failed"}${t.lastDetail ? ` (${mdText(t.lastDetail)})` : ""} ${relativeTime(t.lastTs, nowMs)}`,
+      ),
+      "",
+    );
+  }
+
+  if (model.otel) {
+    const ot = model.otel;
+    lines.push(
+      "## OTel export",
+      `${ot.endpoint ? `\`${mdInline(ot.endpoint)}\` · ` : ""}${ot.spansSent} sent · ${ot.spansFailed} failed${ot.lastExportAt ? ` · last export ${relativeTime(ot.lastExportAt, nowMs)}` : ""}`,
+      "",
+    );
   }
 
   const md = `${lines.join("\n")}\n`;

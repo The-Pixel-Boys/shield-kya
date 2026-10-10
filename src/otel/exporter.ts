@@ -3,7 +3,8 @@
  * disabled unless an endpoint is configured (env KYA_OTLP_EXPORT_ENDPOINT or
  * "otlpExport" in .kya/config.json). Fire-and-forget: export NEVER blocks,
  * delays, or changes a verdict. Every failure is swallowed and counted
- * in-memory for a future status surface.
+ * in-memory (otlpExportStats) plus persisted to .kya/otel-stats.json
+ * (stats.ts) so the report can show export health across processes.
  *
  * Privacy: only verdict metadata ships (tool id, verdict, reason code, mode,
  * host, session id, token counts when known). Tool args, prompts, approval
@@ -14,6 +15,7 @@
 
 import { randomBytes } from "node:crypto";
 import { CLI_VERSION } from "../version.js";
+import { recordOtlpExport } from "./stats.js";
 
 const EXPORT_TIMEOUT_MS = 2_000;
 const SERVICE_NAME = "shield-kya-cli";
@@ -201,10 +203,13 @@ export function buildVerdictTracePayload(event: VerdictEvent): unknown {
  * Export one verdict span. Never throws, never blocks the caller beyond the
  * 2s timeout budget, and never touches the verdict itself. No-op when the
  * config is undefined (unconfigured) or the endpoint fails the scheme check.
+ * Flush outcomes are accumulated in .kya/otel-stats.json (see stats.ts) so the
+ * report can show sent/failed counts across processes.
  */
 export async function exportVerdictSpan(
   event: VerdictEvent,
   config: OtlpExportConfig | undefined,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
   if (!config || !endpointAllowed(config)) return;
   stats.attempted += 1;
@@ -224,8 +229,10 @@ export async function exportVerdictSpan(
     await res.arrayBuffer().catch(() => new ArrayBuffer(0));
     if (res.ok) stats.exported += 1;
     else stats.failed += 1;
+    recordOtlpExport(env, config.endpoint, res.ok);
   } catch {
     stats.failed += 1;
+    recordOtlpExport(env, config.endpoint, false);
   } finally {
     clearTimeout(timer);
   }
