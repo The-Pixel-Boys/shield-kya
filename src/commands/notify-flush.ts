@@ -46,6 +46,7 @@ export async function runNotifyFlush(
         ...(event.tokensOut !== undefined ? { tokensOut: event.tokensOut } : {}),
       },
       otlp,
+      env,
     ).catch(() => undefined);
   }
   return 0;

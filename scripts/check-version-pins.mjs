@@ -3,7 +3,8 @@
 //
 // package.json is the single source of truth. `pnpm sync:version` rewrites every pin it
 // finds, and this check scans the same way (see lib/version-pins.mjs), so neither depends
-// on a hand-kept file list. server.json / manifest.json version fields are compared too.
+// on a hand-kept file list. server.json / manifest.json version fields are compared too, as are the `version` fields
+// of plugin / marketplace / extension manifests (MANIFESTS in lib/version-pins.mjs).
 //
 //   node scripts/check-version-pins.mjs        # exit 1 and list offenders on drift
 //
@@ -11,17 +12,23 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PIN_RE, readText, walkTextFiles } from "./lib/version-pins.mjs";
+import { PIN_RE, manifestVersions, readText, relPosix, walkPinFiles } from "./lib/version-pins.mjs";
 
 /** Returns a list of human-readable problems; empty means no drift. */
 export function findVersionDrift(root) {
   const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   const problems = [];
 
-  for (const file of walkTextFiles(root)) {
-    for (const m of readText(file).matchAll(PIN_RE)) {
+  for (const file of walkPinFiles(root)) {
+    const text = readText(file);
+    for (const m of text.matchAll(PIN_RE)) {
       if (m[1] !== version) {
         problems.push(`${relative(root, file)}: pins @shield-agent/kya@${m[1]} (package.json is ${version})`);
+      }
+    }
+    for (const { label, leaf } of manifestVersions(relPosix(root, file), text)) {
+      if (leaf.value !== version) {
+        problems.push(`${relative(root, file)}: ${label} ${leaf.value} (package.json is ${version})`);
       }
     }
   }

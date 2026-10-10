@@ -2,14 +2,15 @@
  * Foreign trace format mappers for the trace importer.
  * Sources: LangSmith runs, Langfuse observations, Phoenix spans, OTLP/JSON spans.
  * Each mapper converts one foreign record into a TrailEvent (mode "observe",
- * host "import", no packId) or returns a per-record error - it never throws.
+ * host "import", importFormat set to the source, no packId) or returns a
+ * per-record error - it never throws.
  * Raw input/output values are never copied into the event; summaries render
  * input key names only, redacted via redactTrailText.
  */
-import type { TrailEvent } from "../trail.js";
+import type { TrailEvent, TrailImportFormat } from "../trail.js";
 import { redactTrailText } from "../trail-summary.js";
 
-export type ImportSource = "langsmith" | "langfuse" | "phoenix" | "otel";
+export type ImportSource = TrailImportFormat;
 
 /** Caps match the lengths the trail uses elsewhere (trail-summary MAX_LEN = 80). */
 const MAX_SUMMARY_LEN = 80;
@@ -254,18 +255,29 @@ export function mapRecord(
   fallbackSession: string,
 ): MapResult {
   try {
-    switch (source) {
-      case "langsmith":
-        return mapLangSmith(rec, fallbackSession);
-      case "langfuse":
-        return mapLangfuse(rec, fallbackSession);
-      case "phoenix":
-        return mapPhoenix(rec, fallbackSession);
-      case "otel":
-        return mapOtel(rec, fallbackSession);
-    }
+    const mapped = mapRecordBySource(source, rec, fallbackSession);
+    // Stamp the source format so the report can break imports down per format
+    // even when the foreign record carried its own session id.
+    return mapped.ok ? { ok: true, event: { ...mapped.event, importFormat: source } } : mapped;
   } catch (e) {
     return err(e instanceof Error ? e.message : String(e));
+  }
+}
+
+function mapRecordBySource(
+  source: ImportSource,
+  rec: unknown,
+  fallbackSession: string,
+): MapResult {
+  switch (source) {
+    case "langsmith":
+      return mapLangSmith(rec, fallbackSession);
+    case "langfuse":
+      return mapLangfuse(rec, fallbackSession);
+    case "phoenix":
+      return mapPhoenix(rec, fallbackSession);
+    case "otel":
+      return mapOtel(rec, fallbackSession);
   }
 }
 

@@ -10,6 +10,8 @@
  *  - nothing in this module throws.
  */
 
+import { appendNotifyLog, notifyTargetLabel } from "./log.js";
+
 export type NotifyFetchLike = (
   input: string,
   init?: RequestInit,
@@ -25,6 +27,12 @@ export interface NotifyDeps {
   readonly nowMs?: () => number;
 }
 
+/** When set on SendOptions, every delivery attempt is appended to notify-log.jsonl. */
+export interface SendLedgerContext {
+  readonly env: NodeJS.ProcessEnv;
+  readonly verdict: string;
+}
+
 export interface SendOptions {
   readonly url: string;
   readonly body: string;
@@ -32,6 +40,8 @@ export interface SendOptions {
   readonly timeoutMs?: number;
   /** Test seam: replaces RETRY_DELAYS_MS. */
   readonly retryDelaysMs?: readonly number[];
+  /** Ledger sink for per-attempt delivery records (see notify/log.ts). */
+  readonly ledger?: SendLedgerContext;
 }
 
 export const DEFAULT_TIMEOUT_MS = 3_000;
@@ -113,13 +123,21 @@ function backoffWithJitter(baseMs: number, random: () => number): number {
   return baseMs + Math.floor(baseMs * JITTER_RATIO * random());
 }
 
-/** Single attempt. ok only on a 2xx; timeout, abort, redirect and network errors are all false. */
-export async function postWebhook(
+/** Outcome detail of one POST, for the delivery ledger. */
+export interface AttemptResult {
+  readonly ok: boolean;
+  readonly httpStatus?: number;
+  /** Error class when no usable response arrived: timeout / network. */
+  readonly error?: string;
+}
+
+/** Single attempt with outcome detail; same contract as postWebhook. */
+async function postWebhookDetailed(
   url: string,
   body: string,
   opts: { headers?: Record<string, string>; timeoutMs?: number } = {},
   fetchImpl: NotifyFetchLike = fetch,
-): Promise<boolean> {
+): Promise<AttemptResult> {
   const controller = new AbortController();
   const timeoutMs =
     opts.timeoutMs !== undefined && Number.isFinite(opts.timeoutMs) && opts.timeoutMs > 0
@@ -138,12 +156,25 @@ export async function postWebhook(
       redirect: "error",
       signal: controller.signal,
     });
-    return res.ok;
-  } catch {
-    return false;
+    return { ok: res.ok, httpStatus: res.status };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error && e.name === "AbortError" ? "timeout" : "network",
+    };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Single attempt. ok only on a 2xx; timeout, abort, redirect and network errors are all false. */
+export async function postWebhook(
+  url: string,
+  body: string,
+  opts: { headers?: Record<string, string>; timeoutMs?: number } = {},
+  fetchImpl: NotifyFetchLike = fetch,
+): Promise<boolean> {
+  return (await postWebhookDetailed(url, body, opts, fetchImpl)).ok;
 }
 
 /**
@@ -159,8 +190,23 @@ export async function sendWithRetry(opts: SendOptions, deps: NotifyDeps = {}): P
     const fetchImpl = deps.fetchImpl ?? fetch;
     const delays = opts.retryDelaysMs ?? RETRY_DELAYS_MS;
 
+    // Ledger append is best-effort and never influences the delivery outcome.
+    const ledger = opts.ledger;
+    const logAttempt = (
+      rec: { ok: boolean; httpStatus?: number; error?: string; attempt: number },
+    ): void => {
+      if (!ledger) return;
+      appendNotifyLog(ledger.env, {
+        ts: new Date().toISOString(),
+        target: notifyTargetLabel(opts.url),
+        verdict: ledger.verdict,
+        ...rec,
+      });
+    };
+
     if (circuitOpen(opts.url, nowMs())) {
       droppedByCircuitOpen += 1;
+      logAttempt({ ok: false, error: "circuit-open", attempt: 0 });
       return false;
     }
 
@@ -168,14 +214,18 @@ export async function sendWithRetry(opts: SendOptions, deps: NotifyDeps = {}): P
       if (attempt > 0) {
         await sleep(backoffWithJitter(delays[attempt - 1] ?? 0, random));
       }
-      if (!consumeSendQuota(nowMs())) return false;
-      const ok = await postWebhook(
+      if (!consumeSendQuota(nowMs())) {
+        logAttempt({ ok: false, error: "rate-limit", attempt: attempt + 1 });
+        return false;
+      }
+      const res = await postWebhookDetailed(
         opts.url,
         opts.body,
         { headers: opts.headers, timeoutMs: opts.timeoutMs },
         fetchImpl,
       );
-      if (ok) {
+      logAttempt({ ok: res.ok, ...(res.httpStatus !== undefined ? { httpStatus: res.httpStatus } : {}), ...(res.error !== undefined ? { error: res.error } : {}), attempt: attempt + 1 });
+      if (res.ok) {
         recordDeliverySuccess(opts.url);
         return true;
       }

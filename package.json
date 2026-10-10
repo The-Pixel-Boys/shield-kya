@@ -1,7 +1,7 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.23.1",
-  "description": "AI agents audit trail & traceability - gate every tool call (Allow / Review / Deny), live activity dashboard, and continuous trust-baseline certification.",
+  "version": "0.23.2",
+  "description": "Audit trail and traceability for AI agents. See what every coding agent did, with opt-in human approval and signed certify.",
   "license": "MIT",
   "type": "module",
   "mcpName": "io.github.The-Pixel-Boys/shield-kya",

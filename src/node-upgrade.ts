@@ -264,7 +264,7 @@ export interface NodeGateIo {
   readonly confirm?: (question: string) => Promise<boolean>;
 }
 
-const SKIP_COMMANDS = new Set(["help", "serve-mcp", "receipt-serve"]);
+const SKIP_COMMANDS = new Set(["help", "hook", "serve-mcp", "receipt-serve"]);
 
 /**
  * Returns an exit code when the upgrade ran and the original command was

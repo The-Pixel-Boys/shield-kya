@@ -33,6 +33,11 @@ const TITLES: Record<DetectorId, string> = {
   "slow-calls": "Slow gate evaluations",
 };
 
+/** Short human title for a detector, shared by incidents and the last-run summary. */
+export function detectorTitle(id: DetectorId): string {
+  return TITLES[id];
+}
+
 function findingKey(f: Finding): string {
   const toolId = f.evidence.toolId;
   if (typeof toolId === "string" && toolId) return `tool:${toolId}`;

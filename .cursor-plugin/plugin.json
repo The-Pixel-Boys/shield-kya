@@ -1,6 +1,6 @@
 {
   "name": "shield-kya",
-  "version": "0.1.3",
+  "version": "0.23.2",
   "description": "Know Your Agent: fail-closed eval (ALLOW | DENY | REQUIRE_APPROVE), dual-plane host=ide|runtime, human approval. This plugin is a thin MCP gate — the control plane is the sole PEP.",
   "author": {
     "name": "Shield Agent",
@@ -9,7 +9,14 @@
   "homepage": "https://shield-agent.com",
   "repository": "https://github.com/The-Pixel-Boys/shield-kya",
   "license": "MIT",
-  "keywords": ["kya", "know-your-agent", "policy", "mcp", "approval", "dual-plane"],
+  "keywords": [
+    "kya",
+    "know-your-agent",
+    "policy",
+    "mcp",
+    "approval",
+    "dual-plane"
+  ],
   "logo": "assets/logo.svg",
   "variables": {
     "type": "object",
@@ -28,7 +35,10 @@
         "type": "string",
         "title": "Host plane",
         "description": "ide = authoring / dry-run. runtime = production work.",
-        "enum": ["ide", "runtime"],
+        "enum": [
+          "ide",
+          "runtime"
+        ],
         "default": "ide"
       },
       "KYA_AGENT_ID": {
@@ -37,6 +47,9 @@
         "description": "Registered agent principal id on the control plane."
       }
     },
-    "required": ["KYA_BASE_URL", "KYA_API_KEY"]
+    "required": [
+      "KYA_BASE_URL",
+      "KYA_API_KEY"
+    ]
   }
 }

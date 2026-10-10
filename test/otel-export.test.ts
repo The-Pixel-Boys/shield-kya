@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   buildVerdictTracePayload,
   exportVerdictSpan,
@@ -10,6 +13,14 @@ import {
   type OtlpExportConfig,
   type VerdictEvent,
 } from "../src/otel/exporter.js";
+
+/**
+ * Test env rooted at a fresh KYA_HOME: flush outcomes are persisted to
+ * .kya/otel-stats.json, which must never land in the developer's real home.
+ */
+const tenv = (): NodeJS.ProcessEnv => ({
+  KYA_HOME: mkdtempSync(join(tmpdir(), "kya-otel-home-")),
+});
 
 const EVENT: VerdictEvent = {
   ts: "2026-10-09T12:00:00.000Z",
@@ -190,7 +201,7 @@ describe("exportVerdictSpan", () => {
       endpoint: s.url,
       headers: { "x-test-token": "abc" },
     };
-    await exportVerdictSpan(EVENT, cfg);
+    await exportVerdictSpan(EVENT, cfg, tenv());
     const reqs = s.requests();
     expect(reqs).toHaveLength(1);
     expect(reqs[0].headers["content-type"]).toBe("application/json");
@@ -205,7 +216,7 @@ describe("exportVerdictSpan", () => {
   it("never throws against a dead endpoint and counts the failure", async () => {
     const before = otlpExportStats();
     const dead: OtlpExportConfig = { endpoint: "http://127.0.0.1:1" };
-    await expect(exportVerdictSpan(EVENT, dead)).resolves.toBeUndefined();
+    await expect(exportVerdictSpan(EVENT, dead, tenv())).resolves.toBeUndefined();
     const after = otlpExportStats();
     expect(after.failed).toBe(before.failed + 1);
     expect(after.exported).toBe(before.exported);
@@ -216,7 +227,7 @@ describe("exportVerdictSpan", () => {
     const before = otlpExportStats();
     const t0 = Date.now();
     await expect(
-      exportVerdictSpan(EVENT, { endpoint: s.url }),
+      exportVerdictSpan(EVENT, { endpoint: s.url }, tenv()),
     ).resolves.toBeUndefined();
     const elapsed = Date.now() - t0;
     expect(elapsed).toBeLessThan(4_000);
