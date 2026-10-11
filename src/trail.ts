@@ -56,6 +56,12 @@ export interface TrailEvent {
   readonly tokensIn?: number;
   /** Real output tokens reported by the host. Observe-only showback. */
   readonly tokensOut?: number;
+  /** Provenance of an imported row (`kya import --from <source>`); absent for live rows. */
+  readonly importedFrom?: string;
+  /** Source-record hash used to dedupe re-imports (agt: the AGT audit entry hash). */
+  readonly sourceHash?: string;
+  /** agt import: false when the source log's hash chain did not verify. */
+  readonly chainVerified?: boolean;
 }
 
 export function globalTrailPath(env: NodeJS.ProcessEnv = process.env): string {
@@ -212,6 +218,9 @@ function parseTrailEvent(raw: unknown): TrailEvent | undefined {
     ...(nonNegNumber(e.tokensOut) !== undefined
       ? { tokensOut: nonNegNumber(e.tokensOut) }
       : {}),
+    ...(typeof e.importedFrom === "string" ? { importedFrom: e.importedFrom } : {}),
+    ...(typeof e.sourceHash === "string" ? { sourceHash: e.sourceHash } : {}),
+    ...(typeof e.chainVerified === "boolean" ? { chainVerified: e.chainVerified } : {}),
   };
 }
 

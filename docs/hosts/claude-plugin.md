@@ -1,0 +1,109 @@
+# Claude Code plugin (also GitHub Copilot CLI)
+
+Audit trail and traceability for AI agents. See what every coding agent did.
+
+This repo is also a Claude Code plugin marketplace named `shield-kya`. It ships one plugin, `kya`.
+
+## What the plugin does, and does not do
+
+- It records every tool call on the local trail (`~/.kya/trail.jsonl`).
+- It blocks only the small never-list (for example `mcp__postgres__drop_table`). Everything else is allowed and recorded.
+- It is advisory and fails open: if kya is missing, crashes or times out, the tool call proceeds and nothing is recorded.
+- The hook evaluates locally. It makes no hosted-plane calls, so it has no Hold tickets and no human sign-off.
+- Hosted-plane enforcement today is the MCP/gateway path (`kya.policy_evaluate`, see [claude.md](claude.md)). A hook that evaluates against the hosted plane and denies when it cannot is planned and is not part of this plugin yet.
+
+## Install (one user)
+
+```text
+/plugin marketplace add The-Pixel-Boys/shield-kya
+/plugin install kya@shield-kya
+```
+
+Or from a shell: `claude plugin marketplace add The-Pixel-Boys/shield-kya`, then `claude plugin install kya@shield-kya`.
+
+The plugin ships three things:
+
+1. **SessionStart** runs `scripts/bootstrap.mjs`. It installs the pinned `@shield-agent/kya` once into `${CLAUDE_PLUGIN_DATA}` (about 6 s) and checks it on later sessions (files, version, and a load check). It never edits your settings or permissions.
+2. **PreToolUse** (every tool) runs `node ${CLAUDE_PLUGIN_DATA}/node_modules/@shield-agent/kya/dist/cli.js hook --host claude`. No npx and no npm or registry traffic at hook time. The hook costs about 0.2 s per tool call.
+3. **MCP server** `shield-kya`, started from the same installed copy (`serve-mcp --stdio`).
+
+The MCP server in this plugin sets `KYA_OFFLINE=1`, `KYA_BASE_URL=http://127.0.0.1:1` and an empty `KYA_API_KEY`. What that guarantees: neither the hook nor the server makes hosted-plane calls, because the only control-plane URL they know is an unroutable loopback port and they have no credential. `kya.session_ingest` and the Hold-request tool still try that URL and fail locally; they do not stay offline by themselves (making `--offline` refuse them in `serve-mcp` is a CLI follow-up). What it does not guarantee: no network at all. A notify webhook in the user config or in a project's `.kya/config.json` receives trail fields (tool id, verdict, reason, session) when a call is denied, from both the hook and the MCP server; OTLP export and opt-in telemetry can also send. Review `.kya/config.json` in repositories you open, and see [telemetry.md](../telemetry.md) and [otlp.md](../otlp.md). For the hosted plane, connect it yourself (see [claude.md](claude.md)).
+
+Every pin and manifest `version` follows `package.json`; `pnpm sync:version` rewrites them and `node scripts/check-version-pins.mjs` checks them.
+
+### Install hardening and limits
+
+The bootstrap runs `npm install` into a staging directory inside the plugin data directory with an exact version pin (strict semver, no ranges), `--registry=https://registry.npmjs.org/`, empty `--userconfig` and `--globalconfig` files (fresh, mode 0600), every `npm_config_*` variable and `NODE_OPTIONS` removed from the npm process, and `--ignore-scripts --omit=optional`. It checks the staged copy (version, `dist/cli.js`, and a `--help` load check) and only then swaps it into place. The swap is a pair of renames, so a hook that starts in that instant fails open once; hooks never see a half-written tree, and a failed upgrade leaves the working copy in place (you get an `update failed, keeping the previous version` notice instead of `NOT recording`). A lock keeps concurrent sessions from installing twice; it is released on exit and on SIGTERM/SIGINT, and a lock older than 150 s is treated as stale.
+
+Known limits: there is no sha512 integrity pin and no `npm-shrinkwrap.json` inside the kya package yet (planned follow-up), so transitive dependency ranges resolve fresh on each machine. `HTTPS_PROXY`, `HTTP_PROXY` and `NODE_EXTRA_CA_CERTS` are honored, because corporate hosts need them, and until the integrity pin lands they are part of the trust you place in the host environment. A corporate registry mirror is not honored (the install goes to the public registry).
+
+### Requirements and what you see when something is wrong
+
+Node.js 24+ and `npm` on the PATH of the machine that runs Claude Code. On Node below 24 the plugin still installs and the hook still runs, with a notice at session start.
+
+- npm missing, install failing, a partial install, or another session installing at that moment: SessionStart prints `Shield KYA is NOT recording: <reason>` and the session continues. A partial install is replaced by a fresh, verified one.
+- `node` itself cannot start (for example a GUI launch without Node on PATH): no script can run, so no KYA message can print. SessionStart is marked `onFailure: "block"`, so Claude Code shows its own hook-failure error for that hook (Claude Code 2.1.295 or later), and PreToolUse tool calls proceed unrecorded.
+
+Host trust assumption: the hook and bootstrap run under whatever `node` and environment Claude Code gives them. `NODE_OPTIONS` or a PATH shim in that environment acts on node itself, before any plugin script runs, so no command hook can defend against it. Keep the process environment under your control.
+
+## Roll out to a team (project settings)
+
+Commit this to the repository's `.claude/settings.json`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "shield-kya": {
+      "source": { "source": "github", "repo": "The-Pixel-Boys/shield-kya" }
+    }
+  },
+  "enabledPlugins": { "kya@shield-kya": true }
+}
+```
+
+What a teammate sees:
+
+- **Interactive:** after they accept the workspace trust dialog for the folder, Claude Code registers the marketplace and installs and enables the plugin at the next session start.
+- **Untrusted folder:** the `extraKnownMarketplaces` entry is ignored silently. No marketplace, no plugin, no message.
+- **`claude -p` and CI:** the entry applies only in a folder whose trust was already accepted interactively (or `hasTrustDialogAccepted` is set in `~/.claude.json`). Installs run in the background, so the first turn can miss the plugin; set `CLAUDE_CODE_SYNC_PLUGIN_INSTALL=1` to wait for it.
+
+## Roll out to an organization (managed settings)
+
+Admins can force the plugin on every machine with `managed-settings.json` (macOS `/Library/Application Support/ClaudeCode/`, Linux and WSL `/etc/claude-code/`, Windows `C:\Program Files\ClaudeCode\`), MDM, or server-managed settings. Users cannot disable a managed plugin.
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "shield-kya": {
+      "source": { "source": "github", "repo": "The-Pixel-Boys/shield-kya" },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": { "kya@shield-kya": true }
+}
+```
+
+To restrict users to your marketplace, pair this with `strictKnownMarketplaces`; see the [organization guide](https://code.claude.com/docs/en/plugins/org). This rollout is advisory like the plugin itself.
+
+## Already ran `kya start`?
+
+`kya start` writes a user-level hook. With the plugin enabled too, Claude Code runs both copies for each tool call. kya 0.23.2 and later write one trail row per `tool_use_id` (a marker under `~/.kya/hook-seen/`), so you get one row. Known limit: a global kya at 0.23.1 or older never creates the marker, so you get two trail rows per call until you update it (`npm i -g @shield-agent/kya`). Verdicts are identical, so a deny is never lost.
+
+## GitHub Copilot CLI
+
+Copilot CLI looks for `.claude-plugin/marketplace.json` too, so `copilot plugin marketplace add The-Pixel-Boys/shield-kya` finds this marketplace. Whether Copilot CLI runs the Claude-format hooks and `${CLAUDE_PLUGIN_DATA}` substitution is not verified; its documented MCP expansion uses `${PLUGIN_ROOT}` and `${PLUGIN_DATA}`. For a verified Copilot setup, use [`kya connect copilot`](copilot.md).
+
+## Uninstall
+
+```text
+/plugin uninstall kya@shield-kya
+/plugin marketplace remove shield-kya
+```
+
+Uninstalling from the last scope deletes `${CLAUDE_PLUGIN_DATA}` (the installed kya copy). Your local trail under `~/.kya/` stays; delete it if you want it gone. A repository that lists the plugin in `.claude/settings.json` re-enables it for teammates until the entry is removed there.
+
+## Troubleshooting
+
+- `/plugin` shows the plugin enabled but nothing is recorded: look for the `Shield KYA is NOT recording` message at session start; check `node --version` (24+) and that `npm` is on PATH, then restart the session.
+- First session after install: bootstrap runs at session start. If the MCP server shows as failed in that very first session, run `/reload-plugins` or start a new session.
+- Check the trail: `kya receipt --q Read --json`, or open `~/.kya/trail.jsonl`.

@@ -1,6 +1,6 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.23.2",
+  "version": "0.24.0",
   "description": "Audit trail and traceability for AI agents. See what every coding agent did, with opt-in human approval and signed certify.",
   "license": "MIT",
   "type": "module",
