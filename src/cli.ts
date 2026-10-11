@@ -175,7 +175,8 @@ Commands:
                     --sign also writes an ed25519-signed evidence-bundle.json
                     (self-signed: integrity + key continuity, NOT identity)
   import            Import foreign traces into the local trail so the receipt
-                    and certify see them (--from langsmith|langfuse|phoenix|otel <file>)
+                    and certify see them (--from langsmith|langfuse|phoenix|otel <file>, or
+                    --from agt [--file <path>] for the AGT audit log)
   investigate       Deterministic trail analysis: detectors, grouped incidents,
                     markdown fix briefs for coding agents (--json)
 
@@ -196,7 +197,8 @@ Options (shared):
   --window <n>      certify: report window in days (default 30)
   --fail-on <m>     certify: gap (default, exit 1 on gaps) | never
   --pane <name>     dash pane (home|policy|agents|approvals|sessions|orr|mcp|dashboard|…)
-  --from <source>   import: trace format (langsmith|langfuse|phoenix|otel)
+  --from <source>   import: trace format (langsmith|langfuse|phoenix|otel|agt)
+  --file <path>     import: input file (agt defaults to ~/.claude/agt/audit-log.json)
   --json            Machine-readable output
   --help, -h        Show help
 

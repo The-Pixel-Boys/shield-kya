@@ -8,8 +8,9 @@
  * of reading. Bad records never throw: they are skipped and collected in
  * `errors`, and the import continues.
  */
-import { readFileSync, statSync } from "node:fs";
+import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { appendTrail } from "../trail.js";
+import { importAgt } from "./agt.js";
 import {
   extractRecords,
   mapRecord,
@@ -17,6 +18,7 @@ import {
 } from "./formats.js";
 
 export type { ImportSource } from "./formats.js";
+export { defaultAgtAuditPath, verifyAgtChain } from "./agt.js";
 
 export interface ImportOptions {
   readonly from: ImportSource;
@@ -29,6 +31,10 @@ export interface ImportResult {
   readonly imported: number;
   readonly skipped: number;
   readonly errors: string[];
+  /** Non-fatal findings (agt: broken hash chain). Absent for the trace importers. */
+  readonly warnings?: string[];
+  /** Records skipped because the trail already holds them (agt re-import). Included in `skipped`. */
+  readonly duplicates?: number;
 }
 
 /** Import files larger than 50MB are refused before reading. */
@@ -38,6 +44,57 @@ export const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
 export function checkImportSize(sizeBytes: number): string | undefined {
   if (sizeBytes <= MAX_IMPORT_BYTES) return undefined;
   return `file is ${sizeBytes} bytes, over the ${MAX_IMPORT_BYTES} byte (50MB) import cap`;
+}
+
+/** The documented stdin spellings: pipes are allowed there, read with the size cap enforced on bytes read. */
+const STDIN_PATHS = new Set(["/dev/stdin", "/proc/self/fd/0"]);
+
+/**
+ * Read an import file as text. Explicit paths must be regular files (a FIFO or
+ * device reports size 0 and could block or stream forever); stdin spellings are
+ * the exception and are read in chunks, failing as soon as the cap is exceeded.
+ */
+export function readImportText(
+  file: string,
+): { readonly ok: true; readonly text: string } | { readonly ok: false; readonly error: string } {
+  try {
+    if (STDIN_PATHS.has(file)) {
+      const fd = openSync(file, "r");
+      try {
+        const chunks: Buffer[] = [];
+        let total = 0;
+        const buf = Buffer.alloc(64 * 1024);
+        for (;;) {
+          let n: number;
+          try {
+            n = readSync(fd, buf, 0, buf.length, null);
+          } catch (e) {
+            const code = (e as NodeJS.ErrnoException).code;
+            if (code === "EOF") break;
+            if (code !== "EAGAIN") throw e;
+            // Non-blocking stdin with no data yet: wait 10ms and retry.
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+            continue;
+          }
+          if (n === 0) break;
+          total += n;
+          const over = checkImportSize(total);
+          if (over) return { ok: false, error: over };
+          chunks.push(Buffer.from(buf.subarray(0, n)));
+        }
+        return { ok: true, text: Buffer.concat(chunks).toString("utf8") };
+      } finally {
+        closeSync(fd);
+      }
+    }
+    const st = statSync(file);
+    if (!st.isFile()) return { ok: false, error: `${file} is not a regular file` };
+    const over = checkImportSize(st.size);
+    if (over) return { ok: false, error: over };
+    return { ok: true, text: readFileSync(file, "utf8") };
+  } catch (e) {
+    return { ok: false, error: `cannot read ${file} - ${errMsg(e)}` };
+  }
 }
 
 function errMsg(e: unknown): string {
@@ -77,21 +134,10 @@ export async function importTraces(opts: ImportOptions): Promise<ImportResult> {
   let imported = 0;
   let skipped = 0;
 
-  let size: number;
-  try {
-    size = statSync(file).size;
-  } catch (e) {
-    return { imported, skipped, errors: [`cannot read ${file} - ${errMsg(e)}`] };
-  }
-  const sizeError = checkImportSize(size);
-  if (sizeError) return { imported, skipped, errors: [sizeError] };
-
-  let text: string;
-  try {
-    text = readFileSync(file, "utf8");
-  } catch (e) {
-    return { imported, skipped, errors: [`cannot read ${file} - ${errMsg(e)}`] };
-  }
+  const read = readImportText(file);
+  if (!read.ok) return { imported, skipped, errors: [read.error] };
+  const text = read.text;
+  if (from === "agt") return importAgt({ file, text, cwd, env });
 
   let records: unknown[];
   const trimmed = text.trim();
@@ -137,6 +183,7 @@ export function renderImportSummary(result: ImportResult): string {
     `imported ${result.imported} trace record(s) into the KYA trail`,
     `skipped ${result.skipped} record(s)`,
   ];
+  if (result.duplicates) lines.push(`already imported: ${result.duplicates} record(s)`);
   if (result.errors.length > 0) {
     const first = result.errors[0]!;
     const clipped = first.length > 120 ? `${first.slice(0, 119)}…` : first;

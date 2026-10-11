@@ -114,6 +114,32 @@ function* slots(node, segs, label) {
   }
 }
 
+// Package-manager channel files (packaging/). They pin the version of the PUBLISHED npm tarball
+// plus its sha256, which only exists after `npm publish`, so they may LAG package.json until the
+// post-release bump (scripts/packaging/bump-*.mjs) but must never lead it, disagree with each
+// other, or carry a malformed hash. They are never rewritten by sync-version.
+const TGZ_RE = /kya-(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\.tgz/;
+export const PACKAGING_FILES = {
+  "packaging/homebrew/shield-kya.rb": (text) => {
+    const url = /^\s*url\s+"([^"]+)"/m.exec(text)?.[1];
+    const sha = /^\s*sha256\s+"([^"]*)"/m.exec(text)?.[1];
+    return [{ label: "url", version: url && TGZ_RE.exec(url)?.[1], sha }];
+  },
+  "packaging/scoop/shield-kya.json": (text) => {
+    const m = JSON.parse(text);
+    return [
+      { label: "version", version: m.version, sha: String(m.hash ?? "").replace(/^sha256:/, "") },
+      { label: "url", version: TGZ_RE.exec(m.url ?? "")?.[1] },
+    ];
+  },
+};
+
+/** [{ file, label, version, sha? }] pinned by a packaging channel file (`rel` matched by suffix); [] otherwise. */
+export function packagingVersions(rel, text) {
+  const file = Object.keys(PACKAGING_FILES).find((f) => rel === f || rel.endsWith(`/${f}`));
+  return file ? PACKAGING_FILES[file](text).map((v) => ({ file, ...v })) : [];
+}
+
 /** Version fields of a manifest file (matched by `rel` path suffix); [] when `rel` is not one. */
 export function manifestVersions(rel, text) {
   const spec = MANIFESTS.find((s) => rel === s.file || rel.endsWith(`/${s.file}`));

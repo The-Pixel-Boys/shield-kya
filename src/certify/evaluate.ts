@@ -151,6 +151,18 @@ export function matchEvent(e: TrailEvent, m: TrailMatch): boolean {
   return true;
 }
 
+/**
+ * trail_min only (a control that PASSES on presence): AGT review/ask is the
+ * host's permission prompt, not a KYA human approval, so imported AGT rows never
+ * prove an approval path is exercised. trail_zero/trail_ratio keep counting them
+ * (excluding them there would false-pass); unverified AGT rows are already dropped
+ * for every check by certifyEvidenceEvents.
+ */
+function countsAsPresence(e: TrailEvent, m: TrailMatch): boolean {
+  if (e.importedFrom === "agt" && m.verdict?.toUpperCase() === "REQUIRE_APPROVE") return false;
+  return matchEvent(e, m);
+}
+
 /** Events with parseable ts within [now - windowDays, now]. */
 export function trailWindow(
   events: readonly TrailEvent[],
@@ -228,7 +240,7 @@ export function evaluateRequirement(
           `no trail events in the last ${check.windowDays}d`,
         );
       }
-      const matches = window.filter((e) => matchEvent(e, check.match)).length;
+      const matches = window.filter((e) => countsAsPresence(e, check.match)).length;
       if (matches >= check.min) {
         return result(
           "pass",

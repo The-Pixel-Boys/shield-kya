@@ -13,7 +13,7 @@ import {
   loadShowbackCard,
   loadWiredHosts,
 } from "../receipt/enrich.js";
-import { readTrail, receiptsDir } from "../trail.js";
+import { readTrail, receiptsDir, type TrailEvent } from "../trail.js";
 import { loadAttestations } from "./attest.js";
 import type { EvidenceContext } from "./evaluate.js";
 
@@ -29,6 +29,15 @@ export function countReceipts(cwd: string): number {
 }
 
 /**
+ * Trail rows that may count as certify evidence. AGT-imported rows whose hash
+ * chain did not verify are unauthenticated and never count; verified AGT rows
+ * stay (SEC-03 separately refuses them, see matchEvent).
+ */
+export function certifyEvidenceEvents(events: readonly TrailEvent[]): TrailEvent[] {
+  return events.filter((e) => !(e.importedFrom === "agt" && e.chainVerified !== true));
+}
+
+/**
  * Assemble the EvidenceContext every certify evaluation runs against.
  * The trail is read once and passed through unfiltered (0.6.0 parity):
  * each check windows it per its own windowDays via trailWindow. Callers
@@ -39,7 +48,7 @@ export function assembleEvidenceContext(
   env: NodeJS.ProcessEnv,
   now: Date = new Date(),
 ): EvidenceContext {
-  const events = readTrail(cwd, env);
+  const events = certifyEvidenceEvents(readTrail(cwd, env));
   const wiredHosts = loadWiredHosts(cwd, kyaHome(env));
   const sandboxes = loadSandboxes(cwd, env);
   return {
