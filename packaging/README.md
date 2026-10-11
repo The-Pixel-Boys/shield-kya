@@ -49,7 +49,9 @@ Tests: `test/packaging-bump.test.ts`, `test/version-pins-packaging.test.ts` (`pn
 ## Homebrew
 
 `depends_on "node"` (kya needs Node >= 24; `node` is the current line). The install pulls the optional
-`fastembed` / `onnxruntime-node` dependency, about 260MB on disk, so offline semantic search works.
+`fastembed` / `onnxruntime-node` dependency, about 260MB on disk, so offline semantic search works. Both
+resolve to the script-free forks `@shield-agent/fastembed` / `@shield-agent/onnxruntime-node` (installed
+under the upstream names via npm: aliases), so no install scripts run.
 This size was accepted by the owner on 2026-10-10; `--omit=optional` would drop semantic search.
 
 The formula test asserts the usage output, because `kya --version` does not exist yet (kya prints usage

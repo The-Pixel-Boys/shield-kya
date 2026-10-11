@@ -243,6 +243,45 @@ function normalizeId(s: string): string {
   return s.trim().toLowerCase().replace(/-/g, "_");
 }
 
+function isMcpStartChar(c: string): boolean {
+  return (c >= "a" && c <= "z") || (c >= "0" && c <= "9");
+}
+
+function isMcpIdChar(c: string): boolean {
+  return isMcpStartChar(c) || c === "_" || c === "-";
+}
+
+/**
+ * Linear scan replacing the old lazy-regex split (CodeQL js/polynomial-redos:
+ * the lazy server group overlapped the `__` separator via `_`). Reproduces the
+ * original pattern `^(?:mcp__)?([a-z0-9][a-z0-9_-]*?)(?:__|\.|\/)([a-z0-9][a-z0-9_-]*)$`
+ * exactly, capture groups included (differential-fuzzed against it): the first
+ * separator whose left side is a valid server and whose right side is a valid
+ * tool wins. `.`/`/` end the server candidate range, so the scan stops there.
+ */
+function splitMcpBody(body: string): readonly [string, string] | undefined {
+  const n = body.length;
+  if (n === 0 || !isMcpStartChar(body[0]!)) return undefined;
+  // suffixOk[j]: every char from j to the end is an id char (one backward pass).
+  const suffixOk = new Uint8Array(n + 1);
+  suffixOk[n] = 1;
+  for (let j = n - 1; j >= 0; j--) {
+    suffixOk[j] = suffixOk[j + 1] === 1 && isMcpIdChar(body[j]!) ? 1 : 0;
+  }
+  for (let i = 0; i < n; i++) {
+    const c = body[i]!;
+    const sepLen = c === "_" && body[i + 1] === "_" ? 2 : c === "." || c === "/" ? 1 : 0;
+    if (sepLen > 0) {
+      const t = i + sepLen;
+      if (t < n && isMcpStartChar(body[t]!) && suffixOk[t] === 1) {
+        return [body.slice(0, i), body.slice(t)];
+      }
+    }
+    if (!isMcpIdChar(c)) break;
+  }
+  return undefined;
+}
+
 /**
  * Recognize a tool id as an MCP-server call. Handles `mcp__<server>__<tool>`,
  * `<server>__<tool>`, `<server>.<tool>`, and `<server>/<tool>`; ids are
@@ -253,11 +292,15 @@ function normalizeId(s: string): string {
 export function parseMcpToolId(toolId: string): McpToolRef | undefined {
   const raw = toolId.trim().toLowerCase();
   if (!raw) return undefined;
-  const m = /^(?:mcp__)?([a-z0-9][a-z0-9_-]*?)(?:__|\.|\/)([a-z0-9][a-z0-9_-]*)$/.exec(raw);
-  if (!m) return undefined;
-  const entry = LOOKUP.get(normalizeId(m[1]!));
+  // The optional `mcp__` group was greedy: try the body after the prefix
+  // first, then the whole string.
+  const split = raw.startsWith("mcp__")
+    ? (splitMcpBody(raw.slice(5)) ?? splitMcpBody(raw))
+    : splitMcpBody(raw);
+  if (!split) return undefined;
+  const entry = LOOKUP.get(normalizeId(split[0]));
   if (!entry) return undefined;
-  return { server: entry.id, tool: m[2]! };
+  return { server: entry.id, tool: split[1] };
 }
 
 export function mcpServerLabel(serverId: string): string {
@@ -292,4 +335,9 @@ export function mcpServerAdminPatterns(serverId: string): readonly string[] | un
 /** Fallback tier for tools no rule matches; undefined for unknown servers. */
 export function mcpServerDefaultTier(serverId: string): McpToolTier | undefined {
   return LOOKUP.get(normalizeId(serverId))?.defaultTier;
+}
+
+/** Normalized server ids and aliases the never-list recognizes (shared with the Python shim's test vectors). */
+export function mcpServerKeys(): string[] {
+  return [...LOOKUP.keys()].sort();
 }

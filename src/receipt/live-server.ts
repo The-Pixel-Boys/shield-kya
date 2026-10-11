@@ -3,7 +3,7 @@
  * Requires a minted token (?t=) - same pattern as HTTP MCP shared secret.
  */
 import { randomBytes } from "node:crypto";
-import { mkdirSync, watch, type FSWatcher } from "node:fs";
+import { mkdirSync, statSync, watch, type FSWatcher } from "node:fs";
 import {
   createServer,
   type IncomingHttpHeaders,
@@ -11,9 +11,22 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
-import { dirname } from "node:path";
-import type { ResolvedConfig } from "../config.js";
+import { dirname, isAbsolute } from "node:path";
+import { kyaHome, readFileConfig, type ResolvedConfig } from "../config.js";
 import { runGateDoctor, runGateRun, runGateStop } from "../commands/gate.js";
+import { runInvestigate } from "../commands/investigate.js";
+import { loadInvestigateLastRun } from "../investigate/last-run.js";
+import {
+  defaultAgtAuditPath,
+  importTraces,
+  type ImportSource,
+} from "../importers/index.js";
+import {
+  notifyOnTrailEvent,
+  resolveWebhooks,
+  type NotifyFileConfig,
+} from "../notify/index.js";
+import { otlpExportSelfTest, resolveOtlpExportConfig } from "../otel/exporter.js";
 import { CLI_VERSION } from "../version.js";
 import { evaluateGatewayTool } from "./gate-page.js";
 import {
@@ -22,7 +35,7 @@ import {
   renderFeedPage,
   type FeedFilters,
 } from "./render-receipt.js";
-import { trailPath } from "../trail.js";
+import { trailPath, type TrailEvent } from "../trail.js";
 import { buildEventEmbeddings, EventEmbeddingCache, LocalMiniLmProvider } from "./embeddings.js";
 import type { EmbeddingProvider } from "./embeddings.js";
 
@@ -80,6 +93,117 @@ export function isLoopbackClient(req: {
   }
   const addr = req.socket?.remoteAddress ?? "";
   return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1";
+}
+
+/** Outcome of one report action, mapped onto jsonOk/badRequest by the server. */
+export interface ReportActionResult {
+  readonly status: number;
+  readonly body: Record<string, unknown>;
+}
+
+const IMPORT_SOURCES: readonly ImportSource[] = ["langsmith", "langfuse", "phoenix", "otel", "agt"];
+
+const OTEL_CONFIG_HINT =
+  "configure otlpExport.endpoint in .kya/config.json or KYA_OTLP_EXPORT_ENDPOINT";
+
+/** Merged global + project .kya/config.json, project wins (same as notify dispatch). */
+function mergedFileConfig(cwd: string, env: NodeJS.ProcessEnv): Record<string, unknown> {
+  return { ...readFileConfig(kyaHome(env)), ...readFileConfig(cwd) } as Record<string, unknown>;
+}
+
+/**
+ * POST /action/import: validate the empty-state form body and run one import.
+ * `file` must be an absolute path to an existing regular file; agt may omit it
+ * and falls back to the default AGT audit log path.
+ */
+export async function runReportImportAction(
+  body: unknown,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<ReportActionResult> {
+  const raw = (body ?? {}) as Record<string, unknown>;
+  const from = (typeof raw["from"] === "string" ? raw["from"].trim().toLowerCase() : "") as ImportSource;
+  if (!IMPORT_SOURCES.includes(from)) {
+    return {
+      status: 400,
+      body: { ok: false, error: "invalid source - expected one of langsmith|langfuse|phoenix|otel|agt" },
+    };
+  }
+  let file = typeof raw["file"] === "string" ? raw["file"].trim() : "";
+  if (!file && from === "agt") file = defaultAgtAuditPath(env);
+  if (!file) {
+    return { status: 400, body: { ok: false, error: "file path required" } };
+  }
+  if (!isAbsolute(file)) {
+    return { status: 400, body: { ok: false, error: "file must be an absolute path" } };
+  }
+  try {
+    if (!statSync(file).isFile()) {
+      return { status: 400, body: { ok: false, error: "not a regular file" } };
+    }
+  } catch {
+    return { status: 400, body: { ok: false, error: `file not found: ${file}` } };
+  }
+  const result = await importTraces({ from, file, cwd, env });
+  return { status: 200, body: { ok: true, imported: result.imported, errors: result.errors } };
+}
+
+/** POST /action/investigate: run the detectors and persist investigate-last.json. */
+export async function runReportInvestigateAction(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<ReportActionResult> {
+  await runInvestigate({ json: false }, { log: () => {} }, cwd, env);
+  const summary = loadInvestigateLastRun(env);
+  const findings = summary?.findings.reduce((n, f) => n + f.count, 0) ?? 0;
+  return { status: 200, body: { ok: true, findings, incidents: summary?.incidents ?? 0 } };
+}
+
+/** POST /action/notify-test: fire a synthetic DENY event at the configured webhooks. */
+export async function runReportNotifyTestAction(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<ReportActionResult> {
+  const config = mergedFileConfig(cwd, env) as NotifyFileConfig;
+  const targets = resolveWebhooks(config, env);
+  if (targets.length === 0) {
+    return {
+      status: 200,
+      body: {
+        ok: false,
+        error: "no webhooks configured - set notify.webhooks in .kya/config.json or KYA_NOTIFY_WEBHOOK",
+      },
+    };
+  }
+  const event: TrailEvent = {
+    ts: new Date().toISOString(),
+    sessionId: "kya-report-test",
+    toolId: "kya.test",
+    verdict: "DENY",
+    reasonCode: "TEST_ALERT",
+    mode: "observe",
+    summary: "test alert from the kya report",
+  };
+  await notifyOnTrailEvent(event, config, env);
+  return { status: 200, body: { ok: true, targets: targets.length } };
+}
+
+/** POST /action/otel-test: run the OTLP self-test against the configured endpoint. */
+export async function runReportOtelTestAction(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<ReportActionResult> {
+  const config = resolveOtlpExportConfig(env, mergedFileConfig(cwd, env));
+  try {
+    const result = await otlpExportSelfTest(config);
+    return {
+      status: 200,
+      body: { ok: result.ok, detail: result.detail, ...(result.ok ? {} : { error: result.detail }) },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { status: 200, body: { ok: false, error: `${message} - ${OTEL_CONFIG_HINT}` } };
+  }
 }
 
 export function startLiveReceiptServer(
@@ -189,7 +313,11 @@ export function startLiveReceiptServer(
         (url.pathname === "/gate/playground" ||
           url.pathname === "/gate/action" ||
           url.pathname === "/stop" ||
-          url.pathname === "/feed");
+          url.pathname === "/feed" ||
+          url.pathname === "/action/investigate" ||
+          url.pathname === "/action/import" ||
+          url.pathname === "/action/notify-test" ||
+          url.pathname === "/action/otel-test");
       if (isPostAction && !isLoopbackClient(req)) {
         return forbidden(res, { ok: false, error: "loopback only" });
       }
@@ -276,6 +404,74 @@ export function startLiveReceiptServer(
         res.on("finish", () => {
           void closeAll();
         });
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/action/investigate") {
+        void (async () => {
+          try {
+            const result = await runReportInvestigateAction(cwd, process.env);
+            if (result.status === 200) scheduleBroadcast();
+            return jsonOk(res, result.body);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(`${JSON.stringify({ ok: false, error: message })}\n`);
+            return;
+          }
+        })();
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/action/import") {
+        void (async () => {
+          let body: unknown;
+          try {
+            body = await readJsonBody(req);
+          } catch {
+            return badRequest(res, { ok: false, error: "invalid JSON body" });
+          }
+          try {
+            const result = await runReportImportAction(body, cwd, process.env);
+            if (result.status === 200) scheduleBroadcast();
+            return result.status === 200 ? jsonOk(res, result.body) : badRequest(res, result.body);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(`${JSON.stringify({ ok: false, error: message })}\n`);
+            return;
+          }
+        })();
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/action/notify-test") {
+        void (async () => {
+          try {
+            const result = await runReportNotifyTestAction(cwd, process.env);
+            return jsonOk(res, result.body);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(`${JSON.stringify({ ok: false, error: message })}\n`);
+            return;
+          }
+        })();
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/action/otel-test") {
+        void (async () => {
+          try {
+            const result = await runReportOtelTestAction(cwd, process.env);
+            return jsonOk(res, result.body);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(`${JSON.stringify({ ok: false, error: message })}\n`);
+            return;
+          }
+        })();
         return;
       }
 

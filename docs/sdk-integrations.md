@@ -50,25 +50,12 @@ await run({ path: "out.txt", content: "hi" }); // throws KyaDeniedError on DENY
 
 Runnable scripts per adapter live in `examples/sdk/`.
 
-### Python (`shield-kya` package, `sdks/kya-python/`)
+### Python (in development)
 
-Stdlib-only shim that delegates to the local kya CLI
-(`kya wrap --offline --json`), so Python frameworks share the exact same
-offline verdict path:
-
-```python
-from shield_kya import governed, KyaDenied
-
-@governed("write_file", server="filesystem")
-def write_file(path: str, content: str) -> str: ...
-```
-
-The decorator works at the tool boundary of **LangGraph (Python)**, **CrewAI**,
-**Pydantic AI**, **Google ADK**, **AutoGen**, and **smolagents**: decorate the
-function each framework registers as a tool (a LangGraph `@tool` body, a
-CrewAI `BaseTool._run`, a Pydantic AI `@agent.tool` function, an ADK function
-tool, an AutoGen `function_tool`, a smolagents `@tool`). `evaluate(tool_id,
-args)` is also exported for manual checks.
+A fail-open Python shim with a LangChain / LangGraph middleware is in
+development and not yet released. It follows the same rules as `kya hook`:
+advisory, fails open on errors, and the never-list still blocks. This page
+will carry install and usage steps once it ships.
 
 ## Tier 2 — recipes (no shipped adapter)
 
