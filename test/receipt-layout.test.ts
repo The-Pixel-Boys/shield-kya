@@ -199,11 +199,14 @@ describe("receipt dashboard layout (hero grid + sidebar)", () => {
 
   it("fresh install reads as a guided get-started page, not broken boxes", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3));
-    // Each zone gets a hint instead of an empty frame (incl. the Certify tab).
-    expect(html.match(/class="mute small zone-empty"/g)).toHaveLength(4);
+    // Zones without any panels get a hint instead of an empty frame (incl. the
+    // Certify tab); the System zone now always carries the Alerts/OTel empty
+    // states, so it no longer needs the hint.
+    expect(html.match(/class="mute small zone-empty"/g)).toHaveLength(3);
     expect(html).toContain("No activity in this window yet");
     expect(html).toContain("No live evaluation yet");
-    expect(html).toContain("No system state yet");
+    expect(html).toContain('aria-label="Alerts"');
+    expect(html).toContain('aria-label="OTel export"');
     expect(html).toContain("Gateway details will appear here after setup.");
     // The feed tells the user how to make the first event appear.
     expect(html).toContain('class="empty"');

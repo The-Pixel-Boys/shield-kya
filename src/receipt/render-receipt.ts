@@ -343,7 +343,7 @@ function legacyImportFormat(sessionId: string): TrailImportFormat | undefined {
 /**
  * Aggregate host "import" trail events (written by kya import; reasonCode
  * IMPORTED / IMPORTED_ERROR) per source format. Undefined when the trail has
- * no imported events - the report section stays hidden on fresh installs.
+ * no imported events - the report section renders its empty state instead.
  */
 export function aggregateImports(events: readonly TrailEvent[]): ImportCard | undefined {
   const byFormat = new Map<string, { imported: number; errors: number }>();
@@ -1663,11 +1663,36 @@ export function gatewayHeroCard(page: GatePage | undefined, _nowMs: number): str
 }
 
 /**
- * Hero Import card: per-format rollup of imported trace events. Hidden when
- * the trail has no host "import" events (fresh installs render unchanged).
+ * Hero Import card: per-format rollup of imported trace events. With no
+ * imported events the card still renders as an empty state (CLI hint plus,
+ * on the live report, an inline import form) so the feature is discoverable.
  */
-function importHeroCard(card: ImportCard | undefined, nowMs: number): string {
-  if (!card) return "";
+function importHeroCard(card: ImportCard | undefined, nowMs: number, live: boolean): string {
+  if (!card) {
+    const form = live
+      ? `<form class="inline-form" id="import-form">
+    <label class="sr-only" for="import-from">Source</label>
+    <select id="import-from" name="from" required>
+      <option value="" disabled selected>Source</option>
+      <option value="langsmith">LangSmith</option>
+      <option value="langfuse">Langfuse</option>
+      <option value="phoenix">Phoenix</option>
+      <option value="otel">OTel JSON</option>
+      <option value="agt">AGT audit log</option>
+    </select>
+    <label class="sr-only" for="import-file">File path</label>
+    <input id="import-file" name="file" type="text" placeholder="/path/to/traces.json" />
+    <button type="submit" class="stat">Import</button>
+  </form>
+  <div id="import-result"></div>`
+      : "";
+    return `<section class="panel" aria-label="Import">
+  <h2>Import</h2>
+  <p class="line">Nothing imported yet. Bring existing LangSmith, Langfuse, Phoenix, OTel, or AGT traces into the trail so they show up in this report and feed Certify.</p>
+  <p class="mute small">CLI: <code>kya import --from langsmith|langfuse|phoenix|otel FILE</code> · <code>kya import --from agt</code> reads the AGT audit log</p>
+  ${form}
+</section>`;
+  }
   const chips = card.formats
     .map(
       (f) =>
@@ -1696,11 +1721,23 @@ function severityPill(severity: string): string {
 
 /**
  * Hero Investigations card: the persisted summary of the last kya investigate
- * run. Hidden when no summary file exists; a clean run (zero findings) still
+ * run. With no summary file the card still renders as an empty state (CLI hint
+ * plus, on the live report, a run button); a clean run (zero findings) also
  * renders, since the run itself is the data.
  */
-function investigateHeroCard(card: InvestigateLastRun | undefined, nowMs: number): string {
-  if (!card) return "";
+function investigateHeroCard(card: InvestigateLastRun | undefined, nowMs: number, live: boolean): string {
+  if (!card) {
+    const run = live
+      ? `<button type="button" class="stat" data-report-action="investigate">Run investigation now</button>
+  <div id="report-action-result-investigate"></div>`
+      : "";
+    return `<section class="panel" aria-label="Investigations">
+  <h2>Investigations</h2>
+  <p class="line">No investigation has run yet. Deterministic detectors scan the trail for deny spikes, incidents, and risky patterns, then write fix briefs for your coding agent.</p>
+  <p class="mute small">CLI: <code>kya investigate</code></p>
+  ${run}
+</section>`;
+  }
   const findingCount = card.findings.reduce((n, f) => n + f.count, 0);
   const rows =
     card.findings.length === 0
@@ -1730,10 +1767,22 @@ ${card.findings
 
 /**
  * System-tab Alerts panel: per-target delivery rollup from the notify ledger.
- * Hidden when no delivery has been attempted yet.
+ * With no deliveries yet the panel still renders as an empty state (config
+ * hint plus, on the live report, a test-alert button).
  */
-function alertsPanel(card: NotifyLogSummary | undefined, nowMs: number): string {
-  if (!card) return "";
+function alertsPanel(card: NotifyLogSummary | undefined, nowMs: number, live: boolean): string {
+  if (!card) {
+    const test = live
+      ? `<button type="button" class="stat" data-report-action="notify-test">Send test alert</button>
+  <div id="report-action-result-notify-test"></div>`
+      : "";
+    return `<section class="panel" aria-label="Alerts">
+  <h2>Alerts</h2>
+  <p class="line">No alert deliveries yet. kya fires webhooks for DENY and REQUIRE_APPROVE verdicts; every delivery attempt is logged here per target.</p>
+  <p class="mute small">configure <code>notify.webhooks</code> in .kya/config.json or set <code>KYA_NOTIFY_WEBHOOK</code>, then send a test alert</p>
+  ${test}
+</section>`;
+  }
   const rows = card.targets
     .map((t) => {
       const status = t.lastOk
@@ -1762,11 +1811,23 @@ ${rows}
 }
 
 /**
- * System-tab OTel panel: persisted OTLP export counters. Hidden until the
- * first export attempt lands in .kya/otel-stats.json.
+ * System-tab OTel panel: persisted OTLP export counters. With no stats file
+ * yet the panel still renders as an empty state (config hint plus, on the
+ * live report, a self-test button).
  */
-function otelPanel(stats: OtelStats | undefined, nowMs: number): string {
-  if (!stats) return "";
+function otelPanel(stats: OtelStats | undefined, nowMs: number, live: boolean): string {
+  if (!stats) {
+    const test = live
+      ? `<button type="button" class="stat" data-report-action="otel-test">Test export now</button>
+  <div id="report-action-result-otel-test"></div>`
+      : "";
+    return `<section class="panel" aria-label="OTel export">
+  <h2>OTel export</h2>
+  <p class="line">No spans exported yet. kya can mirror verdict events to any OTLP/HTTP collector; sent and failed counts are tracked here.</p>
+  <p class="mute small">configure <code>otlpExport.endpoint</code> in .kya/config.json or set <code>KYA_OTLP_EXPORT_ENDPOINT</code>, then test the export</p>
+  ${test}
+</section>`;
+  }
   const endpoint = stats.endpoint ? `<code>${esc(stats.endpoint)}</code>` : '<span class="mute">unknown endpoint</span>';
   const last = stats.lastExportAt
     ? `last export ${esc(relativeTime(stats.lastExportAt, nowMs))} · `
@@ -2398,6 +2459,68 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     });
   });
 
+  document.querySelectorAll('[data-report-action]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var action = btn.getAttribute('data-report-action');
+      var resultEl = document.getElementById('report-action-result-' + action);
+      btn.disabled = true;
+      setResult(resultEl, 'Working...', false);
+      post('/action/' + action, {})
+        .then(parseJson)
+        .then(function(data){
+          if (data && data.ok) {
+            var msg = action === 'investigate'
+              ? 'Done: ' + data.findings + ' findings, ' + data.incidents + ' incidents'
+              : action === 'notify-test'
+                ? 'Test alert sent to ' + data.targets + ' target(s)'
+                : String(data.detail || 'ok');
+            setResult(resultEl, '<p>' + esc(msg) + '</p>', false);
+            if (action === 'otel-test') {
+              btn.disabled = false;
+            } else {
+              setTimeout(function(){ location.reload(); }, 800);
+            }
+          } else {
+            setResult(resultEl, '<p>Error: ' + esc(data && (data.error || data.detail) ? (data.error || data.detail) : 'unknown') + '</p>', true);
+            btn.disabled = false;
+          }
+        })
+        .catch(function(err){
+          setResult(resultEl, '<p>Error: ' + esc(err.message) + '</p>', true);
+          btn.disabled = false;
+        });
+    });
+  });
+
+  var importForm = document.getElementById('import-form');
+  if (importForm) {
+    importForm.addEventListener('submit', function(e){
+      e.preventDefault();
+      var from = importForm.elements.from.value;
+      var file = importForm.elements.file.value.trim();
+      var resultEl = document.getElementById('import-result');
+      var btn = importForm.querySelector('button[type="submit"]');
+      if (btn) btn.disabled = true;
+      setResult(resultEl, 'Importing...', false);
+      post('/action/import', { from: from, file: file })
+        .then(parseJson)
+        .then(function(data){
+          if (data && data.ok) {
+            var errs = data.errors && data.errors.length ? ' · ' + data.errors.length + ' error(s)' : '';
+            setResult(resultEl, '<p>Imported ' + data.imported + ' event(s)' + errs + ' - reloading...</p>', false);
+            setTimeout(function(){ location.reload(); }, 800);
+          } else {
+            setResult(resultEl, '<p>Error: ' + esc(data && data.error ? data.error : 'unknown') + '</p>', true);
+            if (btn) btn.disabled = false;
+          }
+        })
+        .catch(function(err){
+          setResult(resultEl, '<p>Error: ' + esc(err.message) + '</p>', true);
+          if (btn) btn.disabled = false;
+        });
+    });
+  }
+
   var stopLink = document.getElementById('stop-report');
   if (stopLink) {
     stopLink.addEventListener('click', function(e){
@@ -2445,8 +2568,8 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       wiredHostsPanel(model.wiredHosts),
       sandboxesPanel(model.sandboxes, nowMs),
       orrPanel(model.orr, nowMs),
-      alertsPanel(model.alerts, nowMs),
-      otelPanel(model.otel, nowMs),
+      alertsPanel(model.alerts, nowMs, livePaged),
+      otelPanel(model.otel, nowMs, livePaged),
       toolsHtml,
     ],
     "No system state yet - wire a host, configure a sandbox, or run an ORR.",
@@ -2505,8 +2628,8 @@ ${model.liveToken ? '<main data-live-token="1">' : '<main>'}
         ${verdictsHeroCard(c, events.length)}
         ${activityHeroCard(agg, dashboard, events.length)}
         ${gatewayHeroCard(model.gate, nowMs)}
-        ${importHeroCard(model.imports, nowMs)}
-        ${investigateHeroCard(model.investigate, nowMs)}
+        ${importHeroCard(model.imports, nowMs, livePaged)}
+        ${investigateHeroCard(model.investigate, nowMs, livePaged)}
         ${showbackHeroCard(model.showback, model.events)}
       </div>
     </div>

@@ -1,0 +1,256 @@
+{
+  "note": "Shared never-list vectors: asserted by test/never-list-vectors.test.ts and by kya-python tests/test_never_list.py. The MCP tool id parser is a linear string scan shared by TS (mcp-servers.ts splitMcpBody) and Python (_never_list.py _split_mcp_body), so the vectors below are the contract. Regenerate when the never-list, MCP servers or sample tools change.",
+  "denySampleIds": [
+    "org.sample.never.event"
+  ],
+  "neverListVerbs": [
+    "drop",
+    "truncate",
+    "purge",
+    "transfer"
+  ],
+  "mcpServerKeys": [
+    "atlassian",
+    "brave",
+    "brave_search",
+    "browser_use",
+    "browseruse",
+    "chrome_devtools",
+    "chromedevtools",
+    "confluence",
+    "context7",
+    "devtools",
+    "exa",
+    "fetch",
+    "figma",
+    "filesystem",
+    "firecrawl",
+    "fs",
+    "github",
+    "jira",
+    "linear",
+    "ms_playwright",
+    "n8n",
+    "notion",
+    "playwright",
+    "postgres",
+    "postgresql",
+    "sentry",
+    "sequential_thinking",
+    "sequentialthinking",
+    "serena",
+    "slack",
+    "supabase",
+    "zapier"
+  ],
+  "vectors": [
+    {
+      "toolId": "postgres__drop_table",
+      "never": true
+    },
+    {
+      "toolId": "mcp__postgres__drop_table",
+      "never": true
+    },
+    {
+      "toolId": "POSTGRES__DROP_TABLE",
+      "never": true
+    },
+    {
+      "toolId": "postgres.drop_table",
+      "never": true
+    },
+    {
+      "toolId": "postgres/drop_table",
+      "never": true
+    },
+    {
+      "toolId": "postgres__drop-table",
+      "never": true
+    },
+    {
+      "toolId": "postgresql__truncate_logs",
+      "never": true
+    },
+    {
+      "toolId": "supabase__purge_bucket",
+      "never": true
+    },
+    {
+      "toolId": "github__transfer_repository",
+      "never": true
+    },
+    {
+      "toolId": "mcp__github__transfer_repo",
+      "never": true
+    },
+    {
+      "toolId": "ms-playwright__drop_x",
+      "never": true
+    },
+    {
+      "toolId": "browser-use__purge",
+      "never": true
+    },
+    {
+      "toolId": "chrome_devtools__drop",
+      "never": true
+    },
+    {
+      "toolId": "jira__drop_issue",
+      "never": true
+    },
+    {
+      "toolId": "fs__truncate_file",
+      "never": true
+    },
+    {
+      "toolId": "brave-search__purge",
+      "never": true
+    },
+    {
+      "toolId": "  postgres__drop_table  ",
+      "never": true
+    },
+    {
+      "toolId": "postgres__query",
+      "never": false
+    },
+    {
+      "toolId": "postgres__select_rows",
+      "never": false
+    },
+    {
+      "toolId": "github__create_issue",
+      "never": false
+    },
+    {
+      "toolId": "unknownsrv__drop_table",
+      "never": false
+    },
+    {
+      "toolId": "drop_table",
+      "never": false
+    },
+    {
+      "toolId": "-postgres__drop_table",
+      "never": false
+    },
+    {
+      "toolId": "postgres__drop.table",
+      "never": false
+    },
+    {
+      "toolId": "postgres__",
+      "never": false
+    },
+    {
+      "toolId": "org.sample.never.event",
+      "never": true
+    },
+    {
+      "toolId": "ORG.SAMPLE.NEVER.EVENT",
+      "never": true
+    },
+    {
+      "toolId": "org.sample.safe.read",
+      "never": false
+    },
+    {
+      "toolId": "org.sample.data.write",
+      "never": false
+    },
+    {
+      "toolId": "kya.agent.register",
+      "never": false
+    },
+    {
+      "toolId": "org.sample.sandbox.spawn",
+      "never": false
+    },
+    {
+      "toolId": "org.sample.sandbox.exec",
+      "never": false
+    },
+    {
+      "toolId": "org.sample.sandbox.net_open",
+      "never": false
+    },
+    {
+      "toolId": "org.sample.sandbox.kill",
+      "never": false
+    },
+    {
+      "toolId": "web_search",
+      "never": false
+    },
+    {
+      "toolId": "",
+      "never": false
+    },
+    {
+      "toolId": "postgres___drop_table",
+      "never": false
+    },
+    {
+      "toolId": "mcp__mcp__postgres__drop_table",
+      "never": false
+    },
+    {
+      "toolId": "postgres__drop_table\ufeff",
+      "never": true
+    },
+    {
+      "toolId": "\ufeffpostgres__drop_table",
+      "never": true
+    },
+    {
+      "toolId": "\u00a0postgres__drop_table\u3000",
+      "never": true
+    },
+    {
+      "toolId": "postgres__drop_table\u2028",
+      "never": true
+    },
+    {
+      "toolId": "\u001cpostgres__drop_table",
+      "never": false
+    },
+    {
+      "toolId": "postgres__drop_table\u001f",
+      "never": false
+    },
+    {
+      "toolId": "postgres__drop_table\u0085",
+      "never": false
+    },
+    {
+      "toolId": "\u0085org.sample.never.event",
+      "never": false
+    },
+    {
+      "toolId": "org.sample.never.event\ufeff",
+      "never": true
+    },
+    {
+      "toolId": "postgres__delete_rows",
+      "never": false
+    },
+    {
+      "toolId": "postgres__remove_table",
+      "never": false
+    },
+    {
+      "toolId": "supabase__wipe_db",
+      "never": false
+    },
+    {
+      "toolId": "github__destroy_repo",
+      "never": false
+    },
+    {
+      "toolId": "postgres__truncate",
+      "never": true
+    }
+  ]
+}
