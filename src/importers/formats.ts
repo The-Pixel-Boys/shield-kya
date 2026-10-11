@@ -10,7 +10,9 @@
 import type { TrailEvent, TrailImportFormat } from "../trail.js";
 import { redactTrailText } from "../trail-summary.js";
 
-export type ImportSource = TrailImportFormat;
+/** Formats mapped record by record here; "agt" has its own importer (agt.ts). */
+export type TraceSource = TrailImportFormat;
+export type ImportSource = TraceSource | "agt";
 
 /** Caps match the lengths the trail uses elsewhere (trail-summary MAX_LEN = 80). */
 const MAX_SUMMARY_LEN = 80;
@@ -250,7 +252,7 @@ function mapOtel(rec: unknown, fallbackSession: string): MapResult {
 
 /** Map one foreign record to a TrailEvent; returns an error string on bad records. */
 export function mapRecord(
-  source: ImportSource,
+  source: TraceSource,
   rec: unknown,
   fallbackSession: string,
 ): MapResult {
@@ -265,7 +267,7 @@ export function mapRecord(
 }
 
 function mapRecordBySource(
-  source: ImportSource,
+  source: TraceSource,
   rec: unknown,
   fallbackSession: string,
 ): MapResult {
@@ -308,7 +310,7 @@ function otlpSpans(json: Record<string, unknown>): unknown[] | undefined {
  * Bare arrays are accepted for every source; otherwise the known container
  * keys are tried. Returns [] when the shape is not recognized.
  */
-export function extractRecords(source: ImportSource, json: unknown): unknown[] {
+export function extractRecords(source: TraceSource, json: unknown): unknown[] {
   if (Array.isArray(json)) return json;
   if (!isObj(json)) return [];
   switch (source) {

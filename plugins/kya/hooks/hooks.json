@@ -1,0 +1,40 @@
+{
+  "description": "Shield KYA: install a pinned kya once per machine, then record every tool call (advisory, fails open).",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap.mjs",
+              "@shield-agent/kya@0.24.0"
+            ],
+            "timeout": 120,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_DATA}/node_modules/@shield-agent/kya/dist/cli.js",
+              "hook",
+              "--host",
+              "claude"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

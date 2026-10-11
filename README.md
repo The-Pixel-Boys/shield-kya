@@ -8,7 +8,7 @@
 [![X](https://img.shields.io/badge/X-%40coscosmico-000000?logo=x&logoColor=white)](https://x.com/coscosmico)
 
 
-**AI agents audit trail & traceability.** Every tool call your coding agents make - gated (Allow / Review / Deny), recorded on a live local dashboard, and certifiable against the Agent Trust Baseline. One command. Free forever under MIT.
+**Audit trail and traceability for AI agents.** See what every coding agent did, with opt-in human approval and signed certify. Every tool call is recorded on a live local dashboard and certifiable against the Agent Trust Baseline. Locally KYA is advisory and fails open, except for a small never-list that is denied; enforcement lives on the MCP gate path and the hosted plane. One command. Free forever under MIT.
 
 ```bash
 npm i -g @shield-agent/kya@latest && kya start
@@ -19,7 +19,7 @@ Requires **Node.js 24+**. Restart Cursor / Claude Code / Codex once so MCP loads
 
 CLI and local MCP gate for Shield’s Know Your Agent path.
 
-If an agent can change a real system, it has to ask Shield first. You register the agent, wrap the tool, and get Allow, Review, or Deny. Review waits for a person. This package does not scan your network. Agents that never call evaluate stay invisible on purpose.
+An agent that asks Shield first gets Allow, Review, or Deny: you register the agent, wrap the tool (or route it through the MCP gate or the hosted plane), and Review waits for a person. Local hooks only record and block the never-list (see [Hook interception](#hook-interception)); hosted is where enforcement lives. This package does not scan your network. Agents that never call evaluate stay invisible on purpose.
 
 Walkthrough: [how you use it](https://shield-agent.com/how-kya-works#using).
 
@@ -42,6 +42,20 @@ npm i -g @shield-agent/kya@latest && kya start
 ```
 
 Run it in your project directory. (From a clone of this repo, `./scripts/install-local.sh` replaces the npm install.)
+
+More ways to install (same package; npm stays the reference path):
+
+```bash
+# Homebrew. Homebrew 7 may ask you to trust a third-party tap: run `brew tap The-Pixel-Boys/tap` first.
+# The formula installs about 270MB because of the optional semantic-search runtime.
+brew install The-Pixel-Boys/tap/shield-kya
+
+# Scoop (not yet verified on Windows)
+scoop bucket add The-Pixel-Boys https://github.com/The-Pixel-Boys/scoop-bucket.git
+scoop install shield-kya
+```
+
+Claude Code and GitHub Copilot CLI users can also install the [plugin](#claude-code--github-copilot-cli-plugin).
 
 That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/mcp.json` → `kya serve-mcp --stdio`), also **wires user-level configs for every installed host it detects** (`~/.claude.json`, `~/.kimi-code/`, `~/.grok/`, `~/.cursor/`, …), and **opens** the live activity report. The report runs in the background - you get your terminal back; `kya stop` stops it, `kya receipt --open` reopens it. Cursor, Kiro, Qwen, Amp, Droid, Cline, and Grok pick the server up live with no restart (Kimi: just a new session); Claude Code, Codex, OpenCode, Gemini, Copilot CLI, and Kilo CLI load it on next launch - `claude --resume` keeps your conversation.
 
@@ -95,6 +109,19 @@ kya connect claude --hooks   # wire the PreToolUse hook by hand
 kya connect grok --hooks
 kya connect kimi --hooks
 ```
+
+## Claude Code / GitHub Copilot CLI plugin
+
+This repo is also a Claude Code plugin marketplace named `shield-kya` with one plugin, `kya`:
+
+```text
+/plugin marketplace add The-Pixel-Boys/shield-kya
+/plugin install kya@shield-kya
+```
+
+The plugin is **advisory and fails open**: it records every tool call on the local trail (`~/.kya/trail.jsonl`) and blocks only the small never-list. If kya is missing, crashes or times out, the tool call proceeds and nothing is recorded. It evaluates offline, so it has no Hold and no approval; hosted enforcement is the MCP gate path.
+
+Team rollout: commit `extraKnownMarketplaces` (the `shield-kya` GitHub source) and `enabledPlugins` (`"kya@shield-kya": true`) to the repository's `.claude/settings.json`, or force it org-wide with managed settings. Details, limits and Copilot CLI notes (hook support there is not verified; `kya connect copilot` is the verified path): [docs/hosts/claude-plugin.md](docs/hosts/claude-plugin.md).
 
 ## Gate (local MCP gateway)
 
@@ -204,7 +231,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.23.2", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.24.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -244,7 +271,7 @@ Offline evaluate by default (no network, no hosted plane); an explicit config ho
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.23.2 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.24.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -255,7 +282,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.23.2 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.24.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -323,7 +350,7 @@ Certify is **evidence-only**. It never ALLOWs, DENYs, or blocks anything - the s
 
 `kya certify` is local, free, and offline: no account, no network calls, no license check (it never sends usage stats). The catalog is MIT-licensed and PRs are welcome. An EU AI Act crosswalk (baseline requirements mapped to Articles 9-15, 26, 72) ships in [docs/certify-eu-ai-act.md](docs/certify-eu-ai-act.md) and `src/certify/eu-ai-act-map.json`.
 
-## Import traces (LangSmith, Langfuse, Phoenix, OTel)
+## Import traces (LangSmith, Langfuse, Phoenix, OTel, AGT)
 
 Bring existing observability exports into the trail so the receipt and certify see them:
 
@@ -331,7 +358,10 @@ Bring existing observability exports into the trail so the receipt and certify s
 kya import --from langsmith ./runs.json
 kya import --from langfuse ./observations.jsonl
 kya import --from otel ./otraces.json
+kya import --from agt   # Microsoft Agent Governance Toolkit audit log
 ```
+
+The AGT importer verifies AGT's hash chain, flags tampered logs with chainVerified=false, and never duplicates rows on re-import; see [docs/import-agt.md](docs/import-agt.md). AGT's hash chain is unkeyed, so "verified" means internally consistent, not authentic. The hosted console accepts the same format ([docs/import-agt-hosted.md](docs/import-agt-hosted.md)).
 
 Imports land as observe-mode events (`host: import`, `reasonCode: IMPORTED`, error runs become `DENY`/`IMPORTED_ERROR`), with latency and token counts mapped when the source carries them. Files over 50MB are refused; malformed records are skipped, never fatal. The report (`kya start` / `kya receipt`) shows an **Import** card with per-format counts, error count, and the latest imported event once any import has landed.
 
@@ -398,6 +428,8 @@ pnpm build
 - [OTLP metrics (OSS + hosted)](docs/otlp.md)
 - [Anonymous usage stats (opt-in): what is sent, controls, retention](docs/telemetry.md)
 - [OWASP MCP governance map](docs/owasp-mcp-governance.md)
+- [Claude Code / Copilot CLI plugin](docs/hosts/claude-plugin.md)
+- [Import the AGT audit log (CLI)](docs/import-agt.md) · [hosted](docs/import-agt-hosted.md)
 - [kya certify - Agent Trust Baseline gap reports](docs/certify.md)
 - [EU AI Act crosswalk for the Agent Trust Baseline](docs/certify-eu-ai-act.md)
 - [Works with your observability stack](docs/marketing/observability-stack.md)
