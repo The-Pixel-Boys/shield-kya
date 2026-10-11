@@ -903,8 +903,7 @@ describe("hook ping (hook-only installs have no long-lived process to heartbeat 
     const env = optIn();
     maybeSpawnHookPing(deps(env, spawnImpl));
     const stamp = hookPingStampPath(env);
-    const yesterday = new Date(Date.now() - HOOK_PING_INTERVAL_MS - 60_000);
-    utimesSync(stamp, yesterday, yesterday);
+    writeFileSync(stamp, String(Date.now() - HOOK_PING_INTERVAL_MS - 60_000));
 
     expect(maybeSpawnHookPing(deps(env, spawnImpl))).toBe(true);
     expect(spawnImpl).toHaveBeenCalledTimes(2);
@@ -959,12 +958,11 @@ describe("hook ping (hook-only installs have no long-lived process to heartbeat 
     expect(telemetryHostId(helperEnv)).toBe("claude");
 
     const stamp = hookPingStampPath(env);
-    const old = new Date(Date.now() - HOOK_PING_INTERVAL_MS - 60_000);
-    utimesSync(stamp, old, old);
+    writeFileSync(stamp, String(Date.now() - HOOK_PING_INTERVAL_MS - 60_000));
     maybeSpawnHookPing(deps({ ...env, KYA_SESSION_ID: "mcp:cursor" }, second.spawnImpl, { host: "claude" }));
     expect((second.spawnImpl.mock.calls[0] as unknown as [string, string[], { env: NodeJS.ProcessEnv }])[2].env["KYA_SESSION_ID"]).toBe("mcp:cursor");
 
-    utimesSync(stamp, old, old);
+    writeFileSync(stamp, String(Date.now() - HOOK_PING_INTERVAL_MS - 60_000));
     maybeSpawnHookPing(deps(env, third.spawnImpl, { host: "Not A Slug!" }));
     expect((third.spawnImpl.mock.calls[0] as unknown as [string, string[], { env: NodeJS.ProcessEnv }])[2].env["KYA_SESSION_ID"]).toBeUndefined();
   });
@@ -978,8 +976,14 @@ describe("hook ping (hook-only installs have no long-lived process to heartbeat 
     expect(claimHookPingSlot(env, t0 + HOOK_PING_INTERVAL_MS - 1)).toBe(false);
     expect(existsSync(hookPingStampPath(env))).toBe(true);
 
-    const old = new Date(t0 - HOOK_PING_INTERVAL_MS - 1000);
-    utimesSync(hookPingStampPath(env), old, old);
+    writeFileSync(hookPingStampPath(env), String(t0 - HOOK_PING_INTERVAL_MS - 1000));
+    expect(claimHookPingSlot(env, t0)).toBe(true);
+    expect(claimHookPingSlot(env, t0)).toBe(false);
+
+    // Legacy empty stamp: falls back to mtime.
+    writeFileSync(hookPingStampPath(env), "");
+    const oldMtime = new Date(t0 - HOOK_PING_INTERVAL_MS - 1000);
+    utimesSync(hookPingStampPath(env), oldMtime, oldMtime);
     expect(claimHookPingSlot(env, t0)).toBe(true);
     expect(claimHookPingSlot(env, t0)).toBe(false);
   });

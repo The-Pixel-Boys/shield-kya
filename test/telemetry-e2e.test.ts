@@ -578,8 +578,7 @@ describe("kya hook (spawn-per-tool-call) reports through a once-a-day detached p
     await hookOnce(hookEnv());
     await waitFor(() => pings().length === 1, 10_000, "the first hook ping");
     const stamp = join(home, ".kya", "telemetry-ping");
-    const yesterday = new Date(Date.now() - 25 * 3_600_000);
-    utimesSync(stamp, yesterday, yesterday);
+    writeFileSync(stamp, String(Date.now() - 25 * 3_600_000));
 
     await hookOnce(hookEnv());
 

@@ -13,6 +13,10 @@ import { findSampleTool, type ActionClass, type PolicyVerdict } from "./sample-t
 
 export type SessionRisk = "LOW" | "MEDIUM" | "HIGH";
 
+/** Destructive verbs on a known MCP server's tool name (shared with the Python shim's vectors). */
+export const NEVER_LIST_VERBS = ["drop", "truncate", "purge", "transfer"] as const;
+const NEVER_LIST_VERB_RE = new RegExp(NEVER_LIST_VERBS.join("|"));
+
 /**
  * THE never-list rule, on the tool name ALONE: a known sample tool answers by its
  * policyTier; otherwise destructive admin names on a known MCP server match.
@@ -24,7 +28,7 @@ export function matchesNeverList(toolId: string): boolean {
   const known = findSampleTool(toolId);
   if (known?.policyTier) return known.policyTier === "DENY";
   const mcp = parseMcpToolId(toolId);
-  return Boolean(mcp && /drop|truncate|purge|transfer/.test(mcp.tool));
+  return Boolean(mcp && NEVER_LIST_VERB_RE.test(mcp.tool));
 }
 
 function baseTier(

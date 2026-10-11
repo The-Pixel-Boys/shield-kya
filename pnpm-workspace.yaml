@@ -2,10 +2,16 @@
 packages:
   - "."
 
-# Allow esbuild native binary install (vitest/vite dependency).
+# Allow esbuild native binary install (vitest/vite dependency). onnxruntime-node
+# resolves to the script-free @shield-agent fork via fastembed; pnpm still keys
+# the ignored-builds check on the installed name, so pin it to false.
 allowBuilds:
   esbuild: true
-  onnxruntime-node: true
+  onnxruntime-node: false
+
+minimumReleaseAgeExclude:
+  - '@shield-agent/fastembed@3.0.0'
+  - '@shield-agent/onnxruntime-node@1.21.0'
 
 # GHSA-fx2h-pf6j-xcff / GHSA-4w7w-66w2-5vf9 / GHSA-v6wh-96g9-6wx3 (vite)
 # GHSA-67mh-4wv8-2f99 (esbuild)
