@@ -1,7 +1,8 @@
 /**
  * Report interop sections: Import (trail-derived), Investigations
  * (persisted last-run summary), plus the render-level contract that all four
- * interop sections are absent on a fresh install and present with data.
+ * interop sections render empty states on a fresh install and populated
+ * variants with data.
  */
 import { describe, expect, it } from "vitest";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -201,17 +202,39 @@ describe("investigate last-run summary", () => {
 });
 
 describe("render-level interop contract", () => {
-  it("fresh install renders none of the four interop sections", () => {
+  it("fresh install renders all four interop sections as empty states", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3));
-    expect(html).not.toContain('aria-label="Import"');
-    expect(html).not.toContain('aria-label="Investigations"');
-    expect(html).not.toContain('aria-label="Alerts"');
-    expect(html).not.toContain('aria-label="OTel export"');
+    expect(html).toContain('aria-label="Import"');
+    expect(html).toContain('aria-label="Investigations"');
+    expect(html).toContain('aria-label="Alerts"');
+    expect(html).toContain('aria-label="OTel export"');
+    // Empty states explain the section and point at the CLI.
+    expect(html).toContain("kya import --from langsmith|langfuse|phoenix|otel FILE");
+    expect(html).toContain("kya investigate");
+    expect(html).toContain("notify.webhooks");
+    expect(html).toContain("KYA_OTLP_EXPORT_ENDPOINT");
+    // Static renders carry no interactive controls - those need the live server.
+    expect(html).not.toContain('data-report-action=');
+    expect(html).not.toContain('id="import-form"');
+    // Markdown export keeps the data-gated behavior.
     const md = renderReceiptMarkdown(buildWindowReceiptModel([], 3));
     expect(md).not.toContain("## Import");
     expect(md).not.toContain("## Investigations");
     expect(md).not.toContain("## Alerts");
     expect(md).not.toContain("## OTel export");
+  });
+
+  it("live renders wire the empty-state actions", () => {
+    const html = renderReceiptHtml(buildWindowReceiptModel([], 3, { live: true, liveToken: "tok" }));
+    expect(html).toContain('aria-label="Import"');
+    expect(html).toContain('id="import-form"');
+    expect(html).toContain('placeholder="/path/to/traces.json"');
+    expect(html).toContain('data-report-action="investigate"');
+    expect(html).toContain('data-report-action="notify-test"');
+    expect(html).toContain('data-report-action="otel-test"');
+    // Buttons post to /action/<name> (built in JS); the import form posts literally.
+    expect(html).toContain("'/action/' +");
+    expect(html).toContain("/action/import");
   });
 
   it("renders all four sections when their data exists", () => {

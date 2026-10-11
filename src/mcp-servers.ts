@@ -243,6 +243,9 @@ function normalizeId(s: string): string {
   return s.trim().toLowerCase().replace(/-/g, "_");
 }
 
+/** `[mcp__]<server><__|.|/><tool>` (shared with the Python shim's vectors). */
+export const MCP_TOOL_ID_PATTERN = /^(?:mcp__)?([a-z0-9][a-z0-9_-]*?)(?:__|\.|\/)([a-z0-9][a-z0-9_-]*)$/;
+
 /**
  * Recognize a tool id as an MCP-server call. Handles `mcp__<server>__<tool>`,
  * `<server>__<tool>`, `<server>.<tool>`, and `<server>/<tool>`; ids are
@@ -253,7 +256,7 @@ function normalizeId(s: string): string {
 export function parseMcpToolId(toolId: string): McpToolRef | undefined {
   const raw = toolId.trim().toLowerCase();
   if (!raw) return undefined;
-  const m = /^(?:mcp__)?([a-z0-9][a-z0-9_-]*?)(?:__|\.|\/)([a-z0-9][a-z0-9_-]*)$/.exec(raw);
+  const m = MCP_TOOL_ID_PATTERN.exec(raw);
   if (!m) return undefined;
   const entry = LOOKUP.get(normalizeId(m[1]!));
   if (!entry) return undefined;
@@ -292,4 +295,9 @@ export function mcpServerAdminPatterns(serverId: string): readonly string[] | un
 /** Fallback tier for tools no rule matches; undefined for unknown servers. */
 export function mcpServerDefaultTier(serverId: string): McpToolTier | undefined {
   return LOOKUP.get(normalizeId(serverId))?.defaultTier;
+}
+
+/** Normalized server ids and aliases the never-list recognizes (shared with the Python shim's test vectors). */
+export function mcpServerKeys(): string[] {
+  return [...LOOKUP.keys()].sort();
 }

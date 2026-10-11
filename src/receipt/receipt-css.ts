@@ -884,6 +884,18 @@ export function receiptCss(): string {
   }
   .playground-form select { min-width: 8rem; }
   .playground-form input { flex: 1 1 10rem; min-width: 8rem; }
+  .inline-form {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: stretch;
+    margin: 0.5rem 0;
+  }
+  .inline-form select,
+  .inline-form input {
+    font-family: inherit; font-size: 0.8rem; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 0.35rem 0.55rem;
+    appearance: none; -webkit-appearance: none;
+  }
+  .inline-form select { min-width: 8rem; }
+  .inline-form input { flex: 1 1 10rem; min-width: 8rem; }
   .quick-actions {
     display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
     margin: 0.5rem 0;
