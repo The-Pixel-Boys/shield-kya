@@ -1,4 +1,4 @@
-# Top-20 MCP servers — recognition & gate recipes
+# Top-20 MCP servers - recognition & gate recipes
 
 kya ships a registry of the 20 most common third-party MCP servers
 (`src/mcp-servers.ts`). It does two things with them:
@@ -8,19 +8,19 @@ kya ships a registry of the 20 most common third-party MCP servers
    (aliases fold in: `postgres` → `postgresql`, `ms-playwright` →
    `playwright`, `brave`/`fetch` → `exa`). Recognized calls get the server's
    display label in the receipt report's Servers facet, and each tool gets an
-   advisory risk tier — **READ**, **WRITE**, or **ADMIN** — from per-server
+   advisory risk tier - **READ**, **WRITE**, or **ADMIN** - from per-server
    name-pattern families (evaluated ADMIN first; first match wins; unmatched
    tools fall back to the server's default tier). Unknown servers stay
    unknown: the registry never guesses.
 
 2. **Gateway policy.** `kya gate run` generates the local gateway's
-   authorization rules from the same registry — never hand-written:
+   authorization rules from the same registry - never hand-written:
    - tool names matching the destructive family
      (`drop`/`truncate`/`purge`/`transfer`, word-boundary anchored so
      `dropdown_select` is untouched) are **denied on every server**, registry
      or not, and filtered from `tools/list`;
    - the server's ADMIN-tier patterns join the deny set;
-   - everything else is allowed — READ and WRITE both run (observe mode:
+   - everything else is allowed - READ and WRITE both run (observe mode:
      allowed calls are audited into the trail/report, not blocked).
 
 Tiers are advisory. Production authorization stays with the control plane
@@ -36,9 +36,9 @@ host configs and imports them automatically. To enable a server manually,
 **move its recipe object into `servers`** and fill the `<…>` placeholders
 (your own install, tokens, connection strings). Two transports:
 
-- `stdio` — the gateway spawns the command (`cmd`, optional `env`);
-- `http` — the gateway proxies to a remote MCP URL (`url`, optional
-  `headers`; auth travels as headers — http targets have no `env`).
+- `stdio` - the gateway spawns the command (`cmd`, optional `env`);
+- `http` - the gateway proxies to a remote MCP URL (`url`, optional
+  `headers`; auth travels as headers - http targets have no `env`).
 
 Entries marked **recipe** need something only you have (a token, an OAuth
 login, a connection string, or a local install) before they work.
@@ -51,10 +51,10 @@ Browser automation. Aliases: `ms-playwright`.
 
 - **Recognition:** interaction tools tier **WRITE** (`click`, `navigate`,
   `type`, `fill_form`, `file_upload`, `drag`, `evaluate`, `run_code`,
-  `handle_dialog`, `install`, tab/resize/wait families — with or without the
+  `handle_dialog`, `install`, tab/resize/wait families - with or without the
   `browser_` prefix); inspection tools tier **READ** (`snapshot`,
   `take_screenshot`, `console_messages`, `network_requests`, `tabs`,
-  `pdf_save`, `generate_locator`). Default: WRITE. No ADMIN patterns —
+  `pdf_save`, `generate_locator`). Default: WRITE. No ADMIN patterns -
   the destructive-name deny only.
 - **Recipe (stdio):**
 
@@ -70,7 +70,7 @@ Browser automation. Aliases: `ms-playwright`.
   reopen/rename/enable/disable/`set_`/tag/label/star/follow/trigger/dispatch/
   `run_`/`cancel_`/rerun; **READ** for get/list/search/find/read/resolve/
   fetch/check/describe/diff/compare/show/`me`/notifications. Default: WRITE.
-- **Recipe (http)** — needs your own PAT:
+- **Recipe (http)** - needs your own PAT:
 
 ```json
 { "id": "github", "transport": "http", "url": "https://api.githubcopilot.com/mcp/",
@@ -82,7 +82,7 @@ Browser automation. Aliases: `ms-playwright`.
 Library docs lookup.
 
 - **Recognition:** every tool tiers **READ** (catch-all rule; default READ).
-  Read-only server — the destructive-name deny still applies.
+  Read-only server - the destructive-name deny still applies.
 - **Recipe (http):**
 
 ```json
@@ -97,7 +97,7 @@ Local file access. Aliases: `fs`.
   `create_directory`, `move_file`, `copy_file`; **READ** for `read_`/`list_`/
   `search_`/`get_`/`directory_tree`/`find_` prefixes. Default: WRITE. No
   ADMIN patterns.
-- **Recipe (stdio)** — scope is the path args:
+- **Recipe (stdio)** - scope is the path args:
 
 ```json
 { "id": "filesystem", "transport": "stdio",
@@ -122,7 +122,7 @@ Browser agent. Aliases: `browseruse`, `browser_use`.
 - **Recognition:** **READ** for `browser_state`, `browser_screenshot`,
   `browser_console`; everything else defaults to **WRITE** (the agent acts
   on the page). No ADMIN patterns.
-- **Recipe (stdio)** — needs Python/`uvx` on PATH:
+- **Recipe (stdio)** - needs Python/`uvx` on PATH:
 
 ```json
 { "id": "browser-use", "transport": "stdio", "cmd": ["uvx", "browser-use", "--mcp"] }
@@ -153,7 +153,7 @@ Jira + Confluence. Aliases: `jira`, `confluence`.
   generic `*_<verb>_` shapes); **READ** for `jira_get`/`jira_search`,
   `confluence_get`/`confluence_search`, `atlassian…`, and generic
   `*_get_`/`*_search_` shapes. Default: WRITE.
-- **Recipe (http)** — remote, OAuth sign-in on first use:
+- **Recipe (http)** - remote, OAuth sign-in on first use:
 
 ```json
 { "id": "atlassian", "transport": "http", "url": "https://mcp.atlassian.com/v1/sse" }
@@ -177,7 +177,7 @@ Jira + Confluence. Aliases: `jira`, `confluence`.
   `leave_`; **WRITE** for post/send/create/update/add/reply/react/pin/unpin/
   invite/upload/share/`set_`/rename/join; **READ** for get/list/search/read/
   fetch/history/find/lookup. Default: WRITE.
-- **Recipe (stdio)** — needs your own bot token + team id:
+- **Recipe (stdio)** - needs your own bot token + team id:
 
 ```json
 { "id": "slack", "transport": "stdio",
@@ -192,7 +192,7 @@ Jira + Confluence. Aliases: `jira`, `confluence`.
   apply/deploy/execute/run/grant/enable/alter/migrate/`set_`/invoke/call/
   upload/generate/branch/pause/restore; **READ** for get/list/search/read/
   fetch/describe/select/inspect/check. Default: WRITE.
-- **Recipe (stdio)** — needs your own access token:
+- **Recipe (stdio)** - needs your own access token:
 
 ```json
 { "id": "supabase", "transport": "stdio",
@@ -205,13 +205,13 @@ Jira + Confluence. Aliases: `jira`, `confluence`.
 Aliases: `postgres`.
 
 - **Recognition:** **ADMIN** for any tool name containing `drop`, `truncate`,
-  or `purge` (substring match, not just prefixes — `replicate_drop_slot`
+  or `purge` (substring match, not just prefixes - `replicate_drop_slot`
   counts); **WRITE** for execute/query/run/write/exec/apply/insert/update/
   delete/alter/create prefixes; **READ** for get/list/describe/read/select/
   inspect/schema/explain. Default: WRITE. Note the popular community
-  postgres servers expose a single catch-all `query` tool — it tiers WRITE,
+  postgres servers expose a single catch-all `query` tool - it tiers WRITE,
   so statement-level control stays with the control plane, not the gate.
-- **Recipe (stdio)** — pass your own connection string as the last arg:
+- **Recipe (stdio)** - pass your own connection string as the last arg:
 
 ```json
 { "id": "postgresql", "transport": "stdio",
@@ -224,9 +224,9 @@ Web scraping.
 
 - **Recognition:** **READ** for `scrape`, `crawl`, `map`, `search`,
   `extract`, `batch_scrape`, `deep_research`, `generate_llmstxt` (with or
-  without the `firecrawl_` prefix). Default: WRITE. No ADMIN patterns —
+  without the `firecrawl_` prefix). Default: WRITE. No ADMIN patterns -
   effectively a read-only fetch server under the gate.
-- **Recipe (stdio)** — needs your own API key:
+- **Recipe (stdio)** - needs your own API key:
 
 ```json
 { "id": "firecrawl", "transport": "stdio", "cmd": ["npx", "-y", "firecrawl-mcp"],
@@ -265,7 +265,7 @@ Workflow automation.
 - **Recognition:** **ADMIN** for `delete_`/`remove_`/`archive_`; **WRITE**
   for create/update/add/assign/comment/move/rename/`set_`/attach; **READ**
   for get/list/search/read/fetch/find/query. Default: WRITE.
-- **Recipe (http)** — remote, OAuth sign-in on first use:
+- **Recipe (http)** - remote, OAuth sign-in on first use:
 
 ```json
 { "id": "linear", "transport": "http", "url": "https://mcp.linear.app/sse" }
@@ -280,7 +280,7 @@ Code navigation/editing.
   onboarding/think/prepare/restart/`summarize_changes`; **READ** for read/
   get/list/search/find/check/initial/`think_about`/describe/overview.
   Default: WRITE.
-- **Recipe (stdio)** — needs Python/`uvx` on PATH:
+- **Recipe (stdio)** - needs Python/`uvx` on PATH:
 
 ```json
 { "id": "serena", "transport": "stdio",
@@ -293,7 +293,7 @@ Code navigation/editing.
   create/update/resolve/assign/ignore/mute/unmute/archive/merge/reprocess/
   `set_`/comment/add/trigger; **READ** for get/list/search/find/read/fetch/
   describe/whoami. Default: WRITE.
-- **Recipe (http)** — remote, OAuth sign-in on first use:
+- **Recipe (http)** - remote, OAuth sign-in on first use:
 
 ```json
 { "id": "sentry", "transport": "http", "url": "https://mcp.sentry.dev/mcp" }
@@ -305,7 +305,7 @@ Code navigation/editing.
   **WRITE** for trigger/run/execute/create/update/add/enable/turn_on/invoke/
   perform/send/`test_`; **READ** for get/list/search/read/fetch/describe/
   find. Default: WRITE.
-- **Recipe (http)** — use your own Zapier MCP URL:
+- **Recipe (http)** - use your own Zapier MCP URL:
 
 ```json
 { "id": "zapier", "transport": "http", "url": "https://mcp.zapier.com/api/mcp/mcp" }
@@ -318,7 +318,7 @@ Exa, Brave Search, and plain fetch fold into one canonical server. Aliases:
 
 - **Recognition:** **READ** for `web_search`, `brave_web_search`,
   `brave_local_search`, `fetch`, `search`, `crawl`, `scrape`, `extract`,
-  `map`, `get_content`. Default: WRITE. No ADMIN patterns — effectively
+  `map`, `get_content`. Default: WRITE. No ADMIN patterns - effectively
   read-only under the gate.
 - **Recipe (http):**
 
@@ -328,7 +328,7 @@ Exa, Brave Search, and plain fetch fold into one canonical server. Aliases:
 
 For Brave or fetch instead, add a stdio entry of your own (e.g.
 `["npx", "-y", "@modelcontextprotocol/server-brave-search"]` with
-`BRAVE_API_KEY`, or `["uvx", "mcp-server-fetch"]`) — the alias ids `brave`
+`BRAVE_API_KEY`, or `["uvx", "mcp-server-fetch"]`) - the alias ids `brave`
 and `fetch` resolve to the same recognition rules as long as the entry `id`
 matches one of the aliases.
 
@@ -338,6 +338,6 @@ matches one of the aliases.
 
 Any MCP server works through the gate without a registry entry: unknown
 servers get the destructive-name deny and observe-mode auditing, and their
-calls appear on the trail under their raw tool id — they just don't get the
+calls appear on the trail under their raw tool id - they just don't get the
 canonical label, the Servers facet rollup, or per-tool tiers. The taxonomy
-is advisory and open — PRs for new servers and sharper patterns are welcome.
+is advisory and open - PRs for new servers and sharper patterns are welcome.

@@ -11,7 +11,7 @@
       "modes": { "observe": 3, "hold": 0, "offline": 0 }
     },
     "requirements": [
-      { "id": "SEC-01", "domain": "security", "title": "Gate enforces, not observe-only — „Hold“ ✓", "severity": "high", "status": "gap", "evidence": "gate mode is observe — set KYA_HOLD=1 / KYA_OFFLINE=1 or \"gateMode\" in .kya/config.json" },
+      { "id": "SEC-01", "domain": "security", "title": "Gate enforces, not observe-only - „Hold“ ✓", "severity": "high", "status": "gap", "evidence": "gate mode is observe - set KYA_HOLD=1 / KYA_OFFLINE=1 or \"gateMode\" in .kya/config.json" },
       { "id": "REL-02", "domain": "reliability", "title": "Unknown-tool rate is bounded", "severity": "medium", "status": "pass", "evidence": "0/3 = 0.0% ≤ 5% for reason=UNKNOWN_TOOL" }
     ],
     "overall": { "pass": 1, "gap": 1, "insufficientEvidence": 0, "attested": 0, "result": "gap" }

@@ -209,7 +209,7 @@ describe("render-level interop contract", () => {
     expect(html).toContain('aria-label="Alerts"');
     expect(html).toContain('aria-label="OTel export"');
     // Empty states explain the section and point at the CLI.
-    expect(html).toContain("kya import --from langsmith|langfuse|phoenix|otel FILE");
+    expect(html).toContain("kya import --from langsmith|langfuse|phoenix|otel|adr-sensor FILE");
     expect(html).toContain("kya investigate");
     expect(html).toContain("notify.webhooks");
     expect(html).toContain("KYA_OTLP_EXPORT_ENDPOINT");

@@ -8,6 +8,7 @@ import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  runReportDiscoverAction,
   runReportImportAction,
   runReportInvestigateAction,
   runReportNotifyTestAction,
@@ -126,5 +127,16 @@ describe("runReportOtelTestAction", () => {
     expect(res.status).toBe(200);
     expect(res.body["ok"]).toBe(false);
     expect(String(res.body["detail"])).toContain("otlpExport not configured");
+  });
+});
+
+describe("runReportDiscoverAction", () => {
+  it("scans and persists a discovery snapshot", async () => {
+    const cwd = cwdOf();
+    const env = { KYA_HOME: home() };
+    const res = await runReportDiscoverAction(cwd, env);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true });
+    expect(typeof (res.body as { total: unknown }).total).toBe("number");
   });
 });

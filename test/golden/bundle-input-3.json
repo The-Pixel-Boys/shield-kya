@@ -41,7 +41,7 @@
         "title": "Trail coverage in window",
         "severity": "high",
         "status": "insufficient_evidence",
-        "evidence": "0 events in 30d window — cannot evaluate"
+        "evidence": "0 events in 30d window - cannot evaluate"
       }
     ],
     "overall": {

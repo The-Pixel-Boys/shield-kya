@@ -11,6 +11,7 @@
 import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { appendTrail } from "../trail.js";
 import { importAgt } from "./agt.js";
+import { importAdrSensor } from "./adr-sensor.js";
 import {
   extractRecords,
   mapRecord,
@@ -138,6 +139,7 @@ export async function importTraces(opts: ImportOptions): Promise<ImportResult> {
   if (!read.ok) return { imported, skipped, errors: [read.error] };
   const text = read.text;
   if (from === "agt") return importAgt({ file, text, cwd, env });
+  if (from === "adr-sensor") return importAdrSensor({ file, text, cwd, env });
 
   let records: unknown[];
   const trimmed = text.trim();

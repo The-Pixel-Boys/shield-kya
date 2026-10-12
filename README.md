@@ -231,7 +231,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.24.2", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.25.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -271,7 +271,7 @@ Offline evaluate by default (no network, no hosted plane); an explicit config ho
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.24.2 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.25.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -282,7 +282,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.24.2 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.25.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -350,7 +350,7 @@ Certify is **evidence-only**. It never ALLOWs, DENYs, or blocks anything - the s
 
 `kya certify` is local, free, and offline: no account, no network calls, no license check (it never sends usage stats). The catalog is MIT-licensed and PRs are welcome. An EU AI Act crosswalk (baseline requirements mapped to Articles 9-15, 26, 72) ships in [docs/certify-eu-ai-act.md](docs/certify-eu-ai-act.md) and `src/certify/eu-ai-act-map.json`.
 
-## Import traces (LangSmith, Langfuse, Phoenix, OTel, AGT)
+## Import traces (LangSmith, Langfuse, Phoenix, OTel, AGT, ADR Sensor)
 
 Bring existing observability exports into the trail so the receipt and certify see them:
 
@@ -359,9 +359,10 @@ kya import --from langsmith ./runs.json
 kya import --from langfuse ./observations.jsonl
 kya import --from otel ./otraces.json
 kya import --from agt   # Microsoft Agent Governance Toolkit audit log
+kya import --from adr-sensor ./adr-sensor-events.jsonl
 ```
 
-The AGT importer verifies AGT's hash chain, flags tampered logs with chainVerified=false, and never duplicates rows on re-import; see [docs/import-agt.md](docs/import-agt.md). AGT's hash chain is unkeyed, so "verified" means internally consistent, not authentic. The hosted console accepts the same format ([docs/import-agt-hosted.md](docs/import-agt-hosted.md)).
+The AGT importer verifies AGT's hash chain, flags tampered logs with chainVerified=false, and never duplicates rows on re-import; see [docs/import-agt.md](docs/import-agt.md). ADR Sensor events map one `AgentEvent` to one or more trail events, with stable `uuid` dedup on re-import; see [docs/import-adr-sensor.md](docs/import-adr-sensor.md). AGT's hash chain is unkeyed, so "verified" means internally consistent, not authentic. The hosted console accepts the same formats ([docs/import-agt-hosted.md](docs/import-agt-hosted.md)).
 
 Imports land as observe-mode events (`host: import`, `reasonCode: IMPORTED`, error runs become `DENY`/`IMPORTED_ERROR`), with latency and token counts mapped when the source carries them. Files over 50MB are refused; malformed records are skipped, never fatal. The report (`kya start` / `kya receipt`) shows an **Import** card with per-format counts, error count, and the latest imported event once any import has landed.
 
@@ -373,6 +374,27 @@ Imports land as observe-mode events (`host: import`, `reasonCode: IMPORTED`, err
 kya investigate           # summary: counts by severity + top incidents
 kya investigate --json    # findings + incidents + briefs, machine-readable
 ```
+
+## Endpoint discovery
+
+`kya discover` inventories AI agents, IDE extensions, desktop apps, model runtimes, and MCP servers on the current workstation. The scanner only inspects paths and config files; it never executes discovered binaries and never connects to runtime ports. Snapshots are written to `~/.kya/discovery/<iso-ts>.json` with a `latest.json` copy, and the live report shows a **Discovery** card with totals, sanctioned/review counts, and top categories.
+
+```bash
+kya discover                              # scan, save snapshot, print summary
+kya discover --json                       # print snapshot JSON to stdout
+kya discover --diff ~/.kya/discovery/latest.json  # compare current scan to saved snapshot
+kya discover --push                       # scan and push to hosted console
+```
+
+Push requires `KYA_BASE_URL` and `KYA_API_KEY`:
+
+```bash
+export KYA_BASE_URL=https://shield-agent.com
+export KYA_API_KEY=your-token
+kya discover --push
+```
+
+Home-directory prefixes are redacted from evidence paths (replaced with `~`). The snapshot includes a stable `endpointUid` derived from the OS, hostname hash, and user hash - no raw hostname or username leaves the machine. See [docs/discovery.md](docs/discovery.md) for the full scan list and privacy notes.
 
 ## Alert webhooks (verdict routing)
 

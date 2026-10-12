@@ -95,7 +95,7 @@ describe("buildEvidenceBundle", () => {
     expect(trail.verdictMix).toEqual({ ALLOW: 1, DENY: 0, REQUIRE_APPROVE: 0 });
     const reqs = bundle.requirements as Record<string, unknown>[];
     expect(reqs).toHaveLength(2);
-    // bundle requirement rows carry no title/severity — the contract's shape
+    // bundle requirement rows carry no title/severity - the contract's shape
     expect(reqs[0]).toEqual({
       id: "DP-02",
       domain: "data-privacy",
@@ -138,7 +138,7 @@ describe("buildEvidenceBundle", () => {
     const key = loadOrCreateEvidenceKey({ KYA_HOME: tmp() });
     const bundle = buildEvidenceBundle({ report: REPORT, windowEvents: EVENTS }, key);
     const trail = bundle.trail as Record<string, unknown>;
-    // sha256 hex of canonicalJson(EVENTS) — hardcoded so any canonicalJson drift breaks this test
+    // sha256 hex of canonicalJson(EVENTS) - hardcoded so any canonicalJson drift breaks this test
     expect(trail.digest).toBe(
       "fe211046d57d000869cdfbc00a428fd1fb5eb3905c7026165344d4fd19f02588",
     );
@@ -232,7 +232,7 @@ describe("runCertify --sign", () => {
     expect(bundle.format).toBe("shield-kya-evidence-bundle");
     expect(bundle.version).toBe(1);
     expect(verifyBundleSignature(bundle)).toBe(true);
-    // key auto-generated under KYA_HOME — lifecycle surfaced on the result
+    // key auto-generated under KYA_HOME - lifecycle surfaced on the result
     expect(result.keyCreated).toBe(true);
     expect(result.keyFingerprint).toMatch(/^[0-9a-f]{16}$/);
     const key = loadOrCreateEvidenceKey({ KYA_HOME: home });

@@ -1,5 +1,5 @@
 {
-  "comment": "OpenAI Responses API remote MCP — hosted Shield KYA. Put the machine key in env, not in git. ChatGPT Apps (chatgpt.com) are deferred until OAuth DCR. Leave OpenAI-side tool confirmation at the API default (do not auto-approve MCP calls).",
+  "comment": "OpenAI Responses API remote MCP - hosted Shield KYA. Put the machine key in env, not in git. ChatGPT Apps (chatgpt.com) are deferred until OAuth DCR. Leave OpenAI-side tool confirmation at the API default (do not auto-approve MCP calls).",
   "model": "gpt-5.6",
   "tools": [
     {

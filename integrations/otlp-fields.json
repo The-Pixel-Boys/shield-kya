@@ -1,0 +1,48 @@
+{
+  "_comment": "Single source of truth for every OTLP name the KYA dashboards may query. OSS entries are read from src/otel/exporter.ts and src/otel.ts and proven by test/fixtures/otlp-capture.json; hosted entries are read from the hosted Java plane (not part of this package) and are not in the fixture. scripts/validate-dashboards.mjs rejects any dashboard query that names something not listed here.",
+  "spans": {
+    "plane": "oss",
+    "source": "src/otel/exporter.ts",
+    "service": "shield-kya-cli",
+    "spanName": "kya.verdict <toolId>",
+    "notes": "One zero-duration span per verdict. Long-lived processes (MCP gate, gateway) export every verdict; hook and wrap spawns export DENY and REQUIRE_APPROVE only (NOTIFYABLE_VERDICTS in src/notify/index.ts). DENY carries OTLP status ERROR.",
+    "resourceAttributes": ["service.name", "service.version"],
+    "attributes": [
+      { "name": "gen_ai.tool.name", "notes": "gated tool id, <target>__<tool>" },
+      { "name": "kya.verdict", "values": ["ALLOW", "REQUIRE_APPROVE", "DENY"] },
+      { "name": "kya.reason_code", "values": ["ALLOW", "NEVER_EVENT", "PLANE_UNREACHABLE", "PLANE_AUTH_REJECTED", "FAIL_CLOSED"], "notes": "values is the subset dashboards may filter on, each a literal in src (test/dashboards.test.ts checks): NEVER_EVENT never-list hit (src/offline-evaluate.ts, src/commands/hook.ts), PLANE_UNREACHABLE and PLANE_AUTH_REJECTED MCP gate plane call failed (src/mcp/protocol.ts), FAIL_CLOSED opt-in fail-closed hook error (src/commands/hook.ts). The plane and offline evaluator emit other codes too." },
+      { "name": "kya.mode", "values": ["observe", "hold", "offline"] },
+      { "name": "kya.host", "values": ["ide", "runtime"], "notes": "gate host class, not the agent product" },
+      { "name": "kya.session_id" },
+      { "name": "gen_ai.usage.input_tokens", "optional": true },
+      { "name": "gen_ai.usage.output_tokens", "optional": true }
+    ]
+  },
+  "metrics": [
+    {
+      "name": "kya.client.evaluate.latency",
+      "plane": "oss",
+      "mode": "connected",
+      "source": "src/otel.ts",
+      "service": "shield-kya-cli",
+      "type": "histogram",
+      "unit": "ms",
+      "temporality": "cumulative",
+      "attributes": ["verdict", "host"],
+      "notes": "Recorded only when the CLI calls the hosted plane evaluate API (KYA_OTLP_ENDPOINT set) and the process lives past the 15 s export interval, in practice a connected MCP gate or gateway. Hooks evaluate offline and never emit it."
+    },
+    { "name": "kya.evaluate.latency", "plane": "hosted", "source": "hosted plane: KyaMeterSupport (Micrometer timer)", "service": "shield-agent", "type": "histogram", "unit": "milliseconds", "attributes": ["verdict", "host"], "notes": "Micrometer timer; no buckets unless percentile histograms are enabled" },
+    { "name": "kya.policy.deny", "plane": "hosted", "source": "hosted plane: KyaMicrometerBinder (Micrometer gauges)", "service": "shield-agent", "type": "gauge", "unit": "", "attributes": [], "notes": "cumulative count exposed as a gauge" },
+    { "name": "kya.policy.require_approve", "plane": "hosted", "source": "hosted plane: KyaMicrometerBinder (Micrometer gauges)", "service": "shield-agent", "type": "gauge", "unit": "", "attributes": [] },
+    { "name": "kya.policy.approve_granted", "plane": "hosted", "source": "hosted plane: KyaMicrometerBinder (Micrometer gauges)", "service": "shield-agent", "type": "gauge", "unit": "", "attributes": [] },
+    { "name": "kya.evaluate.count", "plane": "hosted", "source": "hosted plane: KyaMicrometerBinder (Micrometer gauges)", "service": "shield-agent", "type": "gauge", "unit": "", "attributes": [] },
+    { "name": "kya.evaluate.sum_ms", "plane": "hosted", "source": "hosted plane: KyaMicrometerBinder (Micrometer gauges)", "service": "shield-agent", "type": "gauge", "unit": "", "attributes": [] },
+    { "name": "kya.evaluate.max_ms", "plane": "hosted", "source": "hosted plane: KyaMicrometerBinder (Micrometer gauges)", "service": "shield-agent", "type": "gauge", "unit": "", "attributes": [] },
+    { "name": "kya.kill.count", "plane": "hosted", "source": "hosted plane: KyaMicrometerBinder (Micrometer gauges)", "service": "shield-agent", "type": "gauge", "unit": "", "attributes": [] },
+    { "name": "kya.kill.last_ms", "plane": "hosted", "source": "hosted plane: KyaMicrometerBinder (Micrometer gauges)", "service": "shield-agent", "type": "gauge", "unit": "", "attributes": [] },
+    { "name": "kya.kill.max_ms", "plane": "hosted", "source": "hosted plane: KyaMicrometerBinder (Micrometer gauges)", "service": "shield-agent", "type": "gauge", "unit": "", "attributes": [] },
+    { "name": "kya.kill.slo_ms", "plane": "hosted", "source": "hosted plane: KyaMicrometerBinder (Micrometer gauges)", "service": "shield-agent", "type": "gauge", "unit": "", "attributes": [] },
+    { "name": "kya.llm.latency", "plane": "hosted", "source": "hosted plane: LlmMeterSupport (Micrometer timer, dispute-agent LLM calls)", "service": "shield-agent", "type": "histogram", "unit": "milliseconds", "attributes": ["provider", "success"], "notes": "not a gate metric; no dashboard panel uses it" },
+    { "name": "kya.redaction.hits", "plane": "hosted", "source": "hosted plane: KyaMicrometerBinder (Micrometer gauges)", "service": "shield-agent", "type": "gauge", "unit": "", "attributes": [] }
+  ]
+}

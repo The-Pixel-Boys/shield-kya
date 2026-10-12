@@ -1,6 +1,6 @@
 {
   "name": "shield-kya",
-  "version": "0.24.2",
+  "version": "0.25.0",
   "description": "Know Your Agent: fail-closed eval (ALLOW | DENY | REQUIRE_APPROVE), dual-plane host=ide|runtime, human approval. This plugin is a thin MCP gate — the control plane is the sole PEP.",
   "author": {
     "name": "Shield Agent",

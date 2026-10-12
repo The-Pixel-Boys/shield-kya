@@ -238,7 +238,7 @@ describe("runCertify", () => {
 
   it("zero certifiable evidence is fail-closed: overall result gap, never a vacuous pass", () => {
     const cwd = tmp();
-    const home = tmp(); // no trail, no ORR — everything evaluates insufficient_evidence
+    const home = tmp(); // no trail, no ORR - everything evaluates insufficient_evidence
     const catalogPath = join(cwd, "catalog.json");
     writeFileSync(
       catalogPath,

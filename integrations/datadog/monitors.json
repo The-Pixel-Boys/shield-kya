@@ -1,0 +1,56 @@
+[
+  {
+    "name": "[KYA] DENY spike",
+    "type": "trace-analytics alert",
+    "query": "trace-analytics(\"service:shield-kya-cli @kya.verdict:DENY\").rollup(\"count\").last(\"5m\") > 20",
+    "message": "More than 20 KYA DENY verdicts in 5 minutes. Check the top deny reasons on the Shield KYA dashboard. Needs a custom APM retention filter on service:shield-kya-cli. Add your @-notification handle here.",
+    "tags": [
+      "source:shield-kya",
+      "community"
+    ],
+    "priority": 3,
+    "options": {
+      "thresholds": {
+        "critical": 20,
+        "warning": 10
+      },
+      "notify_no_data": false,
+      "include_tags": true
+    }
+  },
+  {
+    "name": "[KYA] Never-list hit (destructive tool blocked)",
+    "type": "trace-analytics alert",
+    "query": "trace-analytics(\"service:shield-kya-cli @kya.reason_code:NEVER_EVENT\").rollup(\"count\").last(\"5m\") > 0",
+    "message": "An agent called a never-list tool (for example a DROP TABLE style admin tool) and KYA denied it (reason NEVER_EVENT). Review the session on the KYA receipt. Add your @-notification handle here.",
+    "tags": [
+      "source:shield-kya",
+      "community"
+    ],
+    "priority": 2,
+    "options": {
+      "thresholds": {
+        "critical": 0
+      },
+      "notify_no_data": false,
+      "include_tags": true
+    }
+  },
+  {
+    "name": "[KYA] No verdict spans for 30 minutes",
+    "type": "trace-analytics alert",
+    "query": "trace-analytics(\"service:shield-kya-cli\").rollup(\"count\").last(\"30m\") < 1",
+    "message": "No KYA verdict spans arrived in 30 minutes. Either export broke or no agent ran. Only meaningful with the MCP gate or gateway: hook-only setups export DENY and REQUIRE_APPROVE spans only, so silence can be normal. Add your @-notification handle here.",
+    "tags": [
+      "source:shield-kya",
+      "community"
+    ],
+    "priority": 4,
+    "options": {
+      "thresholds": {
+        "critical": 1
+      },
+      "include_tags": true
+    }
+  }
+]

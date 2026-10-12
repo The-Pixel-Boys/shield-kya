@@ -25,7 +25,7 @@ export type TrailProduct =
   | "other";
 
 /** Foreign trace formats the importer accepts (host "import" events). */
-export type TrailImportFormat = "langsmith" | "langfuse" | "phoenix" | "otel";
+export type TrailImportFormat = "langsmith" | "langfuse" | "phoenix" | "otel" | "adr-sensor";
 
 export interface TrailEvent {
   readonly ts: string;
@@ -167,7 +167,7 @@ const TRAIL_PRODUCTS = new Set<string>([
   "runtime",
   "other",
 ]);
-const TRAIL_IMPORT_FORMATS = new Set<string>(["langsmith", "langfuse", "phoenix", "otel"]);
+const TRAIL_IMPORT_FORMATS = new Set<string>(["langsmith", "langfuse", "phoenix", "otel", "adr-sensor"]);
 
 /**
  * Validate one parsed JSONL line against the TrailEvent shape. Untrusted

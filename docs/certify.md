@@ -1,8 +1,8 @@
-# kya certify — Agent Trust Baseline gap reports
+# kya certify - Agent Trust Baseline gap reports
 
 `kya certify` answers one question with local data: **which requirements of the
 Agent Trust Baseline does this machine's agent setup currently meet, and which
-have gaps?** It is evidence-only — never a policy decision point, never a
+have gaps?** It is evidence-only - never a policy decision point, never a
 certificate. The sole PEP remains Shield KYA.
 
 ## Quick start
@@ -18,7 +18,7 @@ Exit codes: `0` no gaps · `1` gaps (default `--fail-on gap`, CI-friendly) ·
 `2` usage error. `--fail-on never` always exits 0. Fail-closed: with
 `--fail-on gap`, a run where every requirement is `insufficient_evidence`
 (zero certifiable evidence) also exits `1`, even though it has zero gap
-rows — see "Overall result" below.
+rows - see "Overall result" below.
 
 ## Flags
 
@@ -33,7 +33,7 @@ rows — see "Overall result" below.
 | `--quiet` | off | suppress the summary (files are still written) |
 | `--fail-on gap\|never` | gap | exit 1 when any requirement is a gap |
 | `--sign` | off | additionally write a signed `evidence-bundle.json` |
-| `--attest REQ-ID --text "…"` | — | record a local attestation, then re-run the report |
+| `--attest REQ-ID --text "…"` | - | record a local attestation, then re-run the report |
 
 ## Requirement statuses
 
@@ -41,7 +41,7 @@ rows — see "Overall result" below.
 |---|---|
 | `pass` | machine check found satisfying evidence |
 | `gap` | machine check found contradicting evidence, or an attest requirement has no attestation |
-| `insufficient_evidence` | the evidence source is absent (empty trail window, no ORR report) — never counted as pass |
+| `insufficient_evidence` | the evidence source is absent (empty trail window, no ORR report) - never counted as pass |
 | `attested` | an operator attestation is recorded (unverified statement) |
 
 ## The catalog
@@ -78,7 +78,7 @@ The gate mode for `config_mode` resolves through the **same resolver the
 gate itself uses** (`resolveGateMode` in `src/config.ts`), so a certify
 "pass" is never a paper claim: flags (`--offline` / `--hold`) > env
 (`KYA_OFFLINE=1` → offline, `KYA_HOLD=1` → hold) > `"gateMode"` in
-`.kya/config.json` (honored only when exactly `"hold"` or `"offline"` — any
+`.kya/config.json` (honored only when exactly `"hold"` or `"offline"` - any
 other value is ignored) > `observe` default. Setting
 `{"gateMode": "hold"}` in `.kya/config.json` genuinely puts wrap / hook /
 eval into hold mode, not just the report.
@@ -87,7 +87,7 @@ eval into hold mode, not just the report.
 
 `overall.result` is fail-closed: `gap` whenever any requirement is a gap;
 else `pass` when at least one requirement passed **or is attested**
-(attestations count toward the result); else `gap` — a run with zero
+(attestations count toward the result); else `gap` - a run with zero
 certifiable evidence (everything `insufficient_evidence`) never headlines
 as pass, so `--fail-on gap` exits `1` for it even with zero gap rows.
 
@@ -99,7 +99,7 @@ kya certify --attest SOC-01 --text "Acceptable-use policy: https://example.com/a
 
 Recorded in `.kya/attestations.json` (latest per requirement wins), attached
 to subsequent reports, and included in signed bundles. Attestations are
-**unverified operator statements** — they are labeled as such in every
+**unverified operator statements** - they are labeled as such in every
 artifact. Secret-shaped text is refused.
 
 ## Signed evidence bundles (`--sign`)
@@ -129,18 +129,18 @@ artifact. Secret-shaped text is refused.
 
 canonicalJson semantics: UTF-8, no insignificant whitespace, object keys
 sorted recursively in UTF-16 code-unit order (JavaScript's default string
-sort — not Unicode codepoint order), arrays in order, shortest round-trip
-numbers, minimal string escaping — exactly `canonicalJson` in `src/hash.ts`.
+sort - not Unicode codepoint order), arrays in order, shortest round-trip
+numbers, minimal string escaping - exactly `canonicalJson` in `src/hash.ts`.
 
 **Key management:** the signing key lives at
 `~/.kya/keys/evidence-ed25519.json` (mode 0600), auto-generated on first
 `--sign`. Fingerprint = first 16 hex chars of `sha256(SPKI DER)`. Rotate by
 deleting the file (old bundles stay verifiable only with the old pubkey).
 Every `--sign` run prints the signing key fingerprint; when the key was just
-created the CLI flags it (`new key created, continuity resets here`) —
+created the CLI flags it (`new key created, continuity resets here`) -
 previous bundles remain verifiable only under the old pubkey.
 
-**Trust model — read this before relying on a bundle:** the key is
+**Trust model - read this before relying on a bundle:** the key is
 self-signed and local. A valid signature proves the bundle was produced by
 someone holding this key and was not modified (integrity), and repeat
 bundles with the same `pubkey` prove continuity of a key across time. It
@@ -150,12 +150,12 @@ verification product; the format above is the open, documented seam for it.
 Third parties can verify integrity offline today with the embedded `pubkey`.
 
 **Privacy:** the bundle contains requirement results, counts, and a sha256
-digest of the window's trail events — never raw tool arguments, diffs, or
+digest of the window's trail events - never raw tool arguments, diffs, or
 secrets. `baseUrl` is never exported.
 
 ## Live report panel
 
-The receipt report (`kya receipt`, and the live daemon from `kya start`) carries a **Certify** panel that recomputes the baseline evaluation on every render — result pill, counts, top-5 gaps. The dashboard also has a dedicated **Certify** tab with the full live requirement table — all requirements, grouped by domain, recomputed per render. It is the same engine and the same honesty rules as `kya certify` (fail-closed on zero certifiable evidence), evaluated in memory with no files written. Static exports show a snapshot; the live daemon updates it as trail events stream in.
+The receipt report (`kya receipt`, and the live daemon from `kya start`) carries a **Certify** panel that recomputes the baseline evaluation on every render - result pill, counts, top-5 gaps. The dashboard also has a dedicated **Certify** tab with the full live requirement table - all requirements, grouped by domain, recomputed per render. It is the same engine and the same honesty rules as `kya certify` (fail-closed on zero certifiable evidence), evaluated in memory with no files written. Static exports show a snapshot; the live daemon updates it as trail events stream in.
 
 ## CI
 

@@ -8,11 +8,11 @@ Wire KYA into [Amp](https://ampcode.com) so every tool call the agent makes pass
 kya connect amp
 ```
 
-That writes a `shield-kya` entry into `~/.config/amp/settings.json` — under `amp.mcpServers`, not the usual bare `mcpServers`. Amp prefixes its MCP root key; connect knows that and won't create a second, ignored `mcpServers` block.
+That writes a `shield-kya` entry into `~/.config/amp/settings.json` - under `amp.mcpServers`, not the usual bare `mcpServers`. Amp prefixes its MCP root key; connect knows that and won't create a second, ignored `mcpServers` block.
 
 Amp has no project-scope config in the registry, so `kya connect amp --project` exits with a usage error. Global scope is the only option today.
 
-No restart — Amp applies `settings.json` changes live.
+No restart - Amp applies `settings.json` changes live.
 
 Prefer editing by hand? Copy [`amp/settings.example.json`](../../amp/settings.example.json) into place and merge the `amp.mcpServers` section yourself.
 
@@ -26,11 +26,11 @@ Every tool call Amp routes through MCP lands on the receipt: tool id, verdict (A
 |-------|------|
 | Global | `~/.config/amp/settings.json` |
 
-Connect merges. Your other Amp settings stay as they were. If the existing file doesn't parse as JSON, connect stops and tells you — it never overwrites a config it can't read.
+Connect merges. Your other Amp settings stay as they were. If the existing file doesn't parse as JSON, connect stops and tells you - it never overwrites a config it can't read.
 
 ## Verify
 
-1. Ask Amp to list its MCP tools — `shield-kya` shows up live, no restart.
+1. Ask Amp to list its MCP tools - `shield-kya` shows up live, no restart.
 2. Confirm `kya.policy_evaluate`, `kya.session_ingest`, `kya.request_approval` are listed.
 3. Offline smoke, no cloud needed:
 
@@ -42,18 +42,18 @@ Connect merges. Your other Amp settings stay as they were. If the existing file 
 
 ## Uninstall
 
-Edit `~/.config/amp/settings.json` and delete the `shield-kya` entry under `amp.mcpServers`. Nothing else is installed — no daemon, no background process. (`kya connect amp --force` rewires the entry if you only want to refresh it.)
+Edit `~/.config/amp/settings.json` and delete the `shield-kya` entry under `amp.mcpServers`. Nothing else is installed - no daemon, no background process. (`kya connect amp --force` rewires the entry if you only want to refresh it.)
 
 ## Troubleshooting
 
-- **Server not listed in Amp.** Check the entry landed under `amp.mcpServers` — a hand-added `mcpServers` block is ignored by Amp. Workspace-scoped entries need one approval: `amp mcp approve shield-kya`.
+- **Server not listed in Amp.** Check the entry landed under `amp.mcpServers` - a hand-added `mcpServers` block is ignored by Amp. Workspace-scoped entries need one approval: `amp mcp approve shield-kya`.
 - **`command not found` errors.** Connect wires `node …/cli.js serve-mcp --stdio` from the install you ran it from. If you connected via a temp `npx` cache and later cleared it, rerun `kya connect amp --force` from a real install (`npm i -g @shield-agent/kya`).
-- **`--project` fails.** Expected — Amp has no project-scope config wired. Use the global file.
+- **`--project` fails.** Expected - Amp has no project-scope config wired. Use the global file.
 - **Verdicts require a key.** The wired env sets `KYA_OFFLINE=1`, so the server starts keyless and sample-evaluates. Against an authenticated control plane, set `KYA_API_KEY` in the entry's `env` block.
 
 ## Honesty note
 
-Amp decides which tools go through MCP. KYA governs the ones that do. A tool Amp executes outside MCP is outside the gate — don't treat this setup as full coverage of the agent.
+Amp decides which tools go through MCP. KYA governs the ones that do. A tool Amp executes outside MCP is outside the gate - don't treat this setup as full coverage of the agent.
 
 ## Wrap fallback
 

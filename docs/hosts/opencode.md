@@ -14,7 +14,7 @@ That writes a `shield-kya` entry into `~/.config/opencode/opencode.json` under t
 kya connect opencode --project   # writes ./opencode.json
 ```
 
-Restart OpenCode after connecting — MCP servers load at startup.
+Restart OpenCode after connecting - MCP servers load at startup.
 
 Prefer editing by hand? Copy [`opencode/opencode.example.json`](../../opencode/opencode.example.json) into place and merge the `mcp` section yourself.
 
@@ -29,7 +29,7 @@ Every tool call OpenCode routes through MCP lands on the receipt: tool id, verdi
 | Global | `~/.config/opencode/opencode.json` |
 | Project | `./opencode.json` |
 
-Connect merges. Your other MCP servers and settings stay as they were. If the existing file doesn't parse as JSON, connect stops and tells you — it never overwrites a config it can't read.
+Connect merges. Your other MCP servers and settings stay as they were. If the existing file doesn't parse as JSON, connect stops and tells you - it never overwrites a config it can't read.
 
 ## Verify
 
@@ -45,18 +45,18 @@ Connect merges. Your other MCP servers and settings stay as they were. If the ex
 
 ## Uninstall
 
-Edit `~/.config/opencode/opencode.json` and delete the `shield-kya` entry under `mcp`. Nothing else is installed — no daemon, no background process. (`kya connect opencode --force` rewires the entry if you only want to refresh it.)
+Edit `~/.config/opencode/opencode.json` and delete the `shield-kya` entry under `mcp`. Nothing else is installed - no daemon, no background process. (`kya connect opencode --force` rewires the entry if you only want to refresh it.)
 
 ## Troubleshooting
 
 - **Server not listed in OpenCode.** Restart OpenCode. MCP servers load at startup, not hot.
 - **`command not found` / npx errors.** Connect wires `node …/cli.js serve-mcp --stdio` from the install you ran it from. If you connected via a temp `npx` cache and later cleared it, rerun `kya connect opencode --force` from a real install (`npm i -g @shield-agent/kya`).
-- **Tools silently bypass the gate.** KYA only sees calls that go through MCP. If OpenCode runs a tool natively without MCP, that call never reaches evaluate — see the honesty note below.
+- **Tools silently bypass the gate.** KYA only sees calls that go through MCP. If OpenCode runs a tool natively without MCP, that call never reaches evaluate - see the honesty note below.
 - **Verdicts require a key.** The wired env sets `KYA_OFFLINE=1`, so the server starts keyless and sample-evaluates. Against an authenticated control plane, set `KYA_API_KEY` in the entry's `environment` block.
 
 ## Honesty note
 
-OpenCode decides which tools go through MCP. KYA governs the ones that do. A tool OpenCode executes outside MCP is outside the gate — don't treat this setup as full coverage of the agent.
+OpenCode decides which tools go through MCP. KYA governs the ones that do. A tool OpenCode executes outside MCP is outside the gate - don't treat this setup as full coverage of the agent.
 
 ## Wrap fallback
 

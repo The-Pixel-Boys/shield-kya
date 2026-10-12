@@ -280,6 +280,8 @@ function mapRecordBySource(
       return mapPhoenix(rec, fallbackSession);
     case "otel":
       return mapOtel(rec, fallbackSession);
+    case "adr-sensor":
+      return err("adr-sensor is handled by the dedicated importer");
   }
 }
 
@@ -322,5 +324,7 @@ export function extractRecords(source: TraceSource, json: unknown): unknown[] {
       return arr(json.spans) ?? arr(json.data) ?? [];
     case "otel":
       return otlpSpans(json) ?? arr(json.spans) ?? arr(json.data) ?? [];
+    case "adr-sensor":
+      return [];
   }
 }
