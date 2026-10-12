@@ -106,6 +106,8 @@ service:
       exporters: [otlphttp/grafana, datadog]
 ```
 
+Ready-made community dashboards for these spans and metrics (Datadog dashboard and monitors, Grafana dashboard): [dashboards.md](./dashboards.md).
+
 ## Forbidden attributes
 
 Do not tag or export: tool args, prompts/completions, emails, phones, IPs, approval payload bodies, raw `merchant_id` / high-cardinality `tool_id` on metrics. The verdict exporter ships only the attributes in the table above.

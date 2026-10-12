@@ -2,7 +2,7 @@
 
 Wire KYA into Grok so calls to Shield's MCP pass evaluate first. Allow runs, Deny stops, Hold waits for a person.
 
-## Setup — Grok CLI (local)
+## Setup - Grok CLI (local)
 
 ```bash
 kya connect grok
@@ -10,14 +10,14 @@ kya connect grok
 
 That appends a `[mcp_servers.shield-kya]` table to `~/.grok/config.toml` (command: `kya serve-mcp --stdio` from the install you ran connect in; env: `KYA_HOST=ide`, `KYA_OFFLINE=1`, `KYA_SESSION_ID=mcp:grok`; `enabled = true`). Re-running skips an existing table; `--force` replaces just that table. In a running Grok session, press `r` in `/mcps` to refresh.
 
-## Setup — grok.com connectors
+## Setup - grok.com connectors
 
 1. Open [grok.com/connectors](https://grok.com/connectors).
 2. **New Connector** → **Custom**.
 3. Server URL: `https://shield-agent.com/mcp`.
-4. Auth: your machine API key as `Authorization: Bearer <KYA_API_KEY>` when the UI offers a request-header / API-key field. If the UI only offers OAuth or None, stop — don't turn auth off; use the xAI SDK path below instead.
+4. Auth: your machine API key as `Authorization: Bearer <KYA_API_KEY>` when the UI offers a request-header / API-key field. If the UI only offers OAuth or None, stop - don't turn auth off; use the xAI SDK path below instead.
 
-## Setup — xAI SDK
+## Setup - xAI SDK
 
 The Shield key must travel with every MCP request. Full snippet in [`grok/README.md`](../../grok/README.md):
 
@@ -35,27 +35,27 @@ chat = Client(api_key=os.environ["XAI_API_KEY"]).chat.create(
 )
 ```
 
-## Setup — local agent host (not Grok CLI, not grok.com)
+## Setup - local agent host (not Grok CLI, not grok.com)
 
 For a custom local Grok-driven agent, use the same stdio launch as Claude/Codex/Gemini: `npx --no-install @shield-agent/kya@… serve-mcp --stdio` with `KYA_BASE_URL`, `KYA_API_KEY`, `KYA_HOST` in env.
 
 ## What KYA reports
 
-Same three tools everywhere: `kya.policy_evaluate` (Allow / Deny / Hold), `kya.session_ingest`, `kya.request_approval`. Shield stays the only policy decision point — the tools never execute the write themselves. Calls land on the receipt: `kya receipt --open`.
+Same three tools everywhere: `kya.policy_evaluate` (Allow / Deny / Hold), `kya.session_ingest`, `kya.request_approval`. Shield stays the only policy decision point - the tools never execute the write themselves. Calls land on the receipt: `kya receipt --open`.
 
 ## Files written
 
 | Setup | Path |
 |-------|------|
-| Grok CLI | `~/.grok/config.toml` — one appended `[mcp_servers.shield-kya]` table |
-| grok.com | none locally — the connector lives in your grok.com account |
-| xAI SDK | none — the `mcp(...)` tool lives in your own code |
+| Grok CLI | `~/.grok/config.toml` - one appended `[mcp_servers.shield-kya]` table |
+| grok.com | none locally - the connector lives in your grok.com account |
+| xAI SDK | none - the `mcp(...)` tool lives in your own code |
 
-Connect appends and never rewrites unrelated TOML. An inline `shield-kya = …` definition under `[mcp_servers]` can't be merged as text — connect stops and tells you instead of guessing.
+Connect appends and never rewrites unrelated TOML. An inline `shield-kya = …` definition under `[mcp_servers]` can't be merged as text - connect stops and tells you instead of guessing.
 
 ## Verify
 
-1. Grok CLI: open a session, run `/mcps` — `shield-kya` should list with the three tools (press `r` to refresh if the session was already open). In grok.com, open a chat with the connector enabled and ask for the available tools.
+1. Grok CLI: open a session, run `/mcps` - `shield-kya` should list with the three tools (press `r` to refresh if the session was already open). In grok.com, open a chat with the connector enabled and ask for the available tools.
 2. Trigger a small evaluation and check the receipt for the row.
 3. Local smoke:
 
@@ -67,7 +67,7 @@ Connect appends and never rewrites unrelated TOML. An inline `shield-kya = …` 
 
 ## Uninstall
 
-Grok CLI: delete the `[mcp_servers.shield-kya]` table from `~/.grok/config.toml` (or rewire later with `kya connect grok --force`); if you wired the gateway with `kya connect grok --gate`, delete the `[mcp_servers.shield-kya-gate]` table too. grok.com: delete the connector in connector settings; xAI SDK: remove the `mcp(...)` tool from your code. Nothing else is installed — no daemon, no background process.
+Grok CLI: delete the `[mcp_servers.shield-kya]` table from `~/.grok/config.toml` (or rewire later with `kya connect grok --force`); if you wired the gateway with `kya connect grok --gate`, delete the `[mcp_servers.shield-kya-gate]` table too. grok.com: delete the connector in connector settings; xAI SDK: remove the `mcp(...)` tool from your code. Nothing else is installed - no daemon, no background process.
 
 ## Troubleshooting
 

@@ -2,7 +2,7 @@
  * Golden cross-test vectors for the evidence-bundle v1 contract.
  * KYA_WRITE_GOLDEN=1 regenerates the key + expected files (review the diff,
  * commit); otherwise the test asserts byte-stability. The Java verifier tests
- * consume copies of these files — the formats are a hard cross-repo contract.
+ * consume copies of these files - the formats are a hard cross-repo contract.
  */
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -25,7 +25,7 @@ const GOLDEN_DIR = fileURLToPath(new URL("./golden", import.meta.url));
 const KEY_PATH = join(GOLDEN_DIR, "evidence-key.test.json");
 const WRITE = process.env.KYA_WRITE_GOLDEN === "1";
 const WRITE_BANNER =
-  "*** KYA_WRITE_GOLDEN: WROTE golden files — review git diff before committing ***";
+  "*** KYA_WRITE_GOLDEN: WROTE golden files - review git diff before committing ***";
 // Pinned fingerprint of the committed test-only key: accidental key rotation
 // fails here, one assertion before any sig/digest mismatch.
 const EXPECTED_FINGERPRINT = "dec4d977dda4051b";
@@ -50,7 +50,7 @@ function loadOrGenerateKey(): EvidenceKey {
   }
   if (!existsSync(KEY_PATH)) {
     throw new Error(
-      "golden key missing — generate once: KYA_WRITE_GOLDEN=1 pnpm vitest run test/golden-vectors.test.ts",
+      "golden key missing - generate once: KYA_WRITE_GOLDEN=1 pnpm vitest run test/golden-vectors.test.ts",
     );
   }
   return evidenceKeyFromSerialized(JSON.parse(readFileSync(KEY_PATH, "utf8")));

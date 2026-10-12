@@ -6,7 +6,7 @@ Know Your Agent OSS (`@shield-agent/kya`) is the runtime gate (Allow / Deny / Ho
 
 Console roles on hosted: `OWNER` / `ADMIN` / `OPERATOR` / `READ_ONLY`. SSO manage is OWNER-only. Hold approve / kill needs operator capability (`OPERATOR` yes, `READ_ONLY` no).
 
-Humans are created via invite or SCIM on hosted. SSO login links existing accounts — it does not JIT-create operators.
+Humans are created via invite or SCIM on hosted. SSO login links existing accounts - it does not JIT-create operators.
 
 ## Where to read more (hosted product)
 

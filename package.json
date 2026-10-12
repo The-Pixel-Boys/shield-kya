@@ -1,7 +1,7 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.24.2",
-  "description": "Audit trail and traceability for AI agents. See what every coding agent did, with opt-in human approval and signed certify.",
+  "version": "0.25.0",
+  "description": "Shield KYA - Know Your AI Agent. Audit trail and traceability for AI agents. Gate, record, and certify every tool call.",
   "license": "MIT",
   "type": "module",
   "mcpName": "io.github.The-Pixel-Boys/shield-kya",

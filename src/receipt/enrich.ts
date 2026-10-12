@@ -29,6 +29,8 @@ import {
   MAX_USAGE_FILE_BYTES,
   parseUsageFilePayload,
 } from "../showback/usage-file.js";
+import { loadLatestDiscoverySnapshot } from "../discover/snapshot.js";
+import { lookupDiscoveryId } from "../discover/catalog.js";
 
 const MAX_ORR_REPORT_BYTES = 256 * 1024;
 const MAX_ORR_TEXT_CHARS = 500;
@@ -322,6 +324,43 @@ function hasWiredEntry(path: string, spec: HostSpec): boolean {
   } catch {
     return false;
   }
+}
+
+export interface DiscoveryCard {
+  readonly total: number;
+  readonly sanctioned: number;
+  readonly review: number;
+  readonly topCategories: readonly { category: string; count: number }[];
+  readonly capturedAt: string;
+  readonly os: string;
+}
+
+export function loadDiscoveryCard(
+  env: NodeJS.ProcessEnv = process.env,
+): DiscoveryCard | undefined {
+  const snapshot = loadLatestDiscoverySnapshot(env);
+  if (!snapshot) return undefined;
+  let sanctioned = 0;
+  let review = 0;
+  const categoryCounts = new Map<string, number>();
+  for (const f of snapshot.inventory) {
+    const entry = lookupDiscoveryId(f.id);
+    if (entry?.defaultSanction === "SANCTIONED") sanctioned++;
+    else review++;
+    categoryCounts.set(f.category, (categoryCounts.get(f.category) ?? 0) + 1);
+  }
+  const topCategories = [...categoryCounts.entries()]
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count || a.category.localeCompare(b.category))
+    .slice(0, 4);
+  return {
+    total: snapshot.inventory.length,
+    sanctioned,
+    review,
+    topCategories,
+    capturedAt: snapshot.capturedAt,
+    os: snapshot.os,
+  };
 }
 
 export function loadWiredHosts(

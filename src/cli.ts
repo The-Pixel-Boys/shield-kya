@@ -3,7 +3,7 @@
  * @shield-agent/kya - light install CLI
  * Commands: init | register-agent | eval-tool | wrap | hook | invoke | approve | reject
  *   | agents | agent | passport | kill | approvals | sessions | shrink
- *   | serve-mcp | orr run | dash | certify
+ *   | serve-mcp | orr run | dash | certify | discover
  * Fail-closed: empty KYA_API_KEY against auth plane → non-zero exit.
  * Offline sample: eval-tool --offline (demo only; not production PEP).
  */
@@ -86,6 +86,10 @@ import {
   investigateOptionsFromArgs,
   runInvestigate,
 } from "./commands/investigate.js";
+import {
+  discoverOptionsFromArgs,
+  runDiscover,
+} from "./commands/discover.js";
 import { runNotifyFlush } from "./commands/notify-flush.js";
 import { formatStopHuman, runStop } from "./commands/stop.js";
 import { runReceiptServe } from "./commands/receipt-serve.js";
@@ -175,10 +179,12 @@ Commands:
                     --sign also writes an ed25519-signed evidence-bundle.json
                     (self-signed: integrity + key continuity, NOT identity)
   import            Import foreign traces into the local trail so the receipt
-                    and certify see them (--from langsmith|langfuse|phoenix|otel <file>, or
+                    and certify see them (--from langsmith|langfuse|phoenix|otel|adr-sensor <file>, or
                     --from agt [--file <path>] for the AGT audit log)
   investigate       Deterministic trail analysis: detectors, grouped incidents,
                     markdown fix briefs for coding agents (--json)
+  discover          Scan this endpoint for AI agents, IDEs, runtimes, and MCP servers
+                    (--json, --diff <snapshot>, --push)
 
 Options (shared):
   --base-url <url>  Control plane origin (or KYA_BASE_URL)
@@ -197,7 +203,7 @@ Options (shared):
   --window <n>      certify: report window in days (default 30)
   --fail-on <m>     certify: gap (default, exit 1 on gaps) | never
   --pane <name>     dash pane (home|policy|agents|approvals|sessions|orr|mcp|dashboard|…)
-  --from <source>   import: trace format (langsmith|langfuse|phoenix|otel|agt)
+  --from <source>   import: trace format (langsmith|langfuse|phoenix|otel|agt|adr-sensor)
   --file <path>     import: input file (agt defaults to ~/.claude/agt/audit-log.json)
   --json            Machine-readable output
   --help, -h        Show help
@@ -227,7 +233,12 @@ Examples:
   npx @shield-agent/kya dash --once --offline
   npx @shield-agent/kya dash --once --pane policy
   npx @shield-agent/kya import --from langfuse ./langfuse-export.json
+  npx @shield-agent/kya import --from adr-sensor ./adr-sensor-events.jsonl
   npx @shield-agent/kya investigate
+  npx @shield-agent/kya discover
+  npx @shield-agent/kya discover --json
+  npx @shield-agent/kya discover --diff ~/.kya/discovery/latest.json
+  npx @shield-agent/kya discover --push
 
 Docs: https://shield-agent.com/install · docs/guides/kya-light-install.md
 Doctrine: sole PEP is Shield; DENY is hard; missing APPROVED ⇒ no irreversible side effect.
@@ -904,6 +915,10 @@ export async function runCli(
 
       case "investigate": {
         return await runInvestigate(investigateOptionsFromArgs(parsed), io, cwd, env);
+      }
+
+      case "discover": {
+        return await runDiscover(discoverOptionsFromArgs(parsed), io, cwd, env);
       }
 
       case "notify-flush": {

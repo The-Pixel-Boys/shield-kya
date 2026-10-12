@@ -6,9 +6,9 @@ KYA OSS should be a **medusa of integrations**, not an island. Each host recipe 
 
 Pick the highest tier the host supports:
 
-1. **`kya connect <host>`** — the CLI writes the host config itself (merge, never clobber). Add the host to the registry in `src/commands/connect.ts` plus an integration test in `test/connect-mcp.test.ts`. Requires a verified config path + format.
-2. **Config recipe** — the user copies an example file. Ship `<host>/` with the example + README, and a full page in `docs/hosts/<host>.md`. Use when the path or schema is known but not safe to write programmatically (IDE globalStorage, unverified schema).
-3. **Wrap recipe** — `kya wrap --offline -- <agent command>`. For hosts with no MCP support. Still a full page in `docs/hosts/<host>.md`; say plainly that only wrapped commands are gated.
+1. **`kya connect <host>`** - the CLI writes the host config itself (merge, never clobber). Add the host to the registry in `src/commands/connect.ts` plus an integration test in `test/connect-mcp.test.ts`. Requires a verified config path + format.
+2. **Config recipe** - the user copies an example file. Ship `<host>/` with the example + README, and a full page in `docs/hosts/<host>.md`. Use when the path or schema is known but not safe to write programmatically (IDE globalStorage, unverified schema).
+3. **Wrap recipe** - `kya wrap --offline -- <agent command>`. For hosts with no MCP support. Still a full page in `docs/hosts/<host>.md`; say plainly that only wrapped commands are gated.
 
 ## Checklist
 
@@ -42,7 +42,7 @@ Prefer `kya` on PATH (after `npm i -g @shield-agent/kya`) over `npx -y` in check
 ## Hosted template
 
 ```toml
-# example — adapt to the host’s config dialect
+# example - adapt to the host’s config dialect
 url = "https://shield-agent.com/mcp"
 bearer_token_env_var = "KYA_API_KEY"
 ```

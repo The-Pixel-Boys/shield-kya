@@ -1,0 +1,644 @@
+{
+  "title": "Shield KYA verdicts (community)",
+  "description": "Community dashboard over Shield KYA OTLP verdict spans and metrics. Not an official Datadog integration. Source: the integrations/ folder of the public shield-kya repo, from the first release that includes it",
+  "layout_type": "ordered",
+  "reflow_type": "fixed",
+  "template_variables": [
+    {
+      "name": "service",
+      "prefix": "service",
+      "available_values": [],
+      "defaults": [
+        "shield-kya-cli"
+      ]
+    },
+    {
+      "name": "env",
+      "prefix": "env",
+      "available_values": [],
+      "defaults": [
+        "*"
+      ]
+    },
+    {
+      "name": "hosted_service",
+      "prefix": "service",
+      "available_values": [],
+      "defaults": [
+        "shield-agent"
+      ]
+    }
+  ],
+  "widgets": [
+    {
+      "definition": {
+        "type": "note",
+        "content": "Community dashboard for Shield KYA, not an official Datadog integration. Verdict panels read the OSS verdict spans (service shield-kya-cli). Hook and wrap gates export only DENY and REQUIRE_APPROVE spans; only the long-lived MCP gate or gateway exports ALLOW, so the ALLOW share is undercounted for hook-only setups. Default hooks fail open without emitting anything; only opt-in fail-closed hooks emit FAIL_CLOSED. Span panels and span monitors need a custom APM retention filter on service:shield-kya-cli. Approval/hold latency and export failures are not emitted, so there are no panels for them. Panels marked (connected mode only) need a long-lived MCP gate or gateway connected to a hosted plane with KYA_OTLP_ENDPOINT set (hooks evaluate offline and short CLI runs exit before the 15 s metric export); panels marked (hosted only) need the hosted plane with KYA_OTLP_ENABLED=true.",
+        "background_color": "white",
+        "font_size": "14",
+        "text_align": "left",
+        "show_tick": false,
+        "has_padding": true
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 12,
+        "height": 2
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "DENY verdicts",
+        "autoscale": true,
+        "precision": 0,
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "spans",
+                "name": "q1",
+                "search": {
+                  "query": "$service $env @kya.verdict:DENY"
+                },
+                "compute": {
+                  "aggregation": "count"
+                }
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "q1"
+              }
+            ]
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 2,
+        "width": 3,
+        "height": 2
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "REQUIRE_APPROVE verdicts (review)",
+        "autoscale": true,
+        "precision": 0,
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "spans",
+                "name": "q1",
+                "search": {
+                  "query": "$service $env @kya.verdict:REQUIRE_APPROVE"
+                },
+                "compute": {
+                  "aggregation": "count"
+                }
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "q1"
+              }
+            ]
+          }
+        ]
+      },
+      "layout": {
+        "x": 3,
+        "y": 2,
+        "width": 3,
+        "height": 2
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Never-list hits (NEVER_EVENT)",
+        "autoscale": true,
+        "precision": 0,
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "spans",
+                "name": "q1",
+                "search": {
+                  "query": "$service $env @kya.reason_code:NEVER_EVENT"
+                },
+                "compute": {
+                  "aggregation": "count"
+                }
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "q1"
+              }
+            ]
+          }
+        ]
+      },
+      "layout": {
+        "x": 6,
+        "y": 2,
+        "width": 3,
+        "height": 2
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Gate failures (plane unreachable, auth rejected, fail-closed)",
+        "autoscale": true,
+        "precision": 0,
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "spans",
+                "name": "q1",
+                "search": {
+                  "query": "$service $env @kya.reason_code:(PLANE_UNREACHABLE OR PLANE_AUTH_REJECTED OR FAIL_CLOSED)"
+                },
+                "compute": {
+                  "aggregation": "count"
+                }
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "q1"
+              }
+            ]
+          }
+        ]
+      },
+      "layout": {
+        "x": 9,
+        "y": 2,
+        "width": 3,
+        "height": 2
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Verdicts over time (ALLOW / REQUIRE_APPROVE / DENY)",
+        "show_legend": true,
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "spans",
+                "name": "q1",
+                "search": {
+                  "query": "$service $env @kya.verdict:*"
+                },
+                "compute": {
+                  "aggregation": "count"
+                },
+                "group_by": [
+                  {
+                    "facet": "@kya.verdict",
+                    "limit": 10,
+                    "sort": {
+                      "aggregation": "count",
+                      "order": "desc"
+                    }
+                  }
+                ]
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "q1"
+              }
+            ],
+            "display_type": "bars"
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 4,
+        "width": 8,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "toplist",
+        "title": "Top deny reasons",
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "spans",
+                "name": "q1",
+                "search": {
+                  "query": "$service $env @kya.verdict:DENY"
+                },
+                "compute": {
+                  "aggregation": "count"
+                },
+                "group_by": [
+                  {
+                    "facet": "@kya.reason_code",
+                    "limit": 10,
+                    "sort": {
+                      "aggregation": "count",
+                      "order": "desc"
+                    }
+                  }
+                ]
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "q1",
+                "limit": {
+                  "count": 10,
+                  "order": "desc"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "layout": {
+        "x": 8,
+        "y": 4,
+        "width": 4,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "toplist",
+        "title": "Tool calls by tool (top 10)",
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "spans",
+                "name": "q1",
+                "search": {
+                  "query": "$service $env @kya.verdict:*"
+                },
+                "compute": {
+                  "aggregation": "count"
+                },
+                "group_by": [
+                  {
+                    "facet": "@gen_ai.tool.name",
+                    "limit": 10,
+                    "sort": {
+                      "aggregation": "count",
+                      "order": "desc"
+                    }
+                  }
+                ]
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "q1",
+                "limit": {
+                  "count": 10,
+                  "order": "desc"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 7,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "query_table",
+        "title": "Verdicts by gate host (ide/runtime) and mode",
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "spans",
+                "name": "q1",
+                "search": {
+                  "query": "$service $env @kya.verdict:*"
+                },
+                "compute": {
+                  "aggregation": "count"
+                },
+                "group_by": [
+                  {
+                    "facet": "@kya.host",
+                    "limit": 10,
+                    "sort": {
+                      "aggregation": "count",
+                      "order": "desc"
+                    }
+                  },
+                  {
+                    "facet": "@kya.mode",
+                    "limit": 10,
+                    "sort": {
+                      "aggregation": "count",
+                      "order": "desc"
+                    }
+                  },
+                  {
+                    "facet": "@kya.verdict",
+                    "limit": 10,
+                    "sort": {
+                      "aggregation": "count",
+                      "order": "desc"
+                    }
+                  }
+                ]
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "q1",
+                "alias": "verdicts"
+              }
+            ]
+          }
+        ]
+      },
+      "layout": {
+        "x": 6,
+        "y": 7,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Verdict mix from evaluate metric (connected mode only)",
+        "show_legend": true,
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "q1",
+                "query": "count:kya.client.evaluate.latency{$service,$env} by {verdict}.as_count()"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "q1"
+              }
+            ],
+            "display_type": "bars"
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 10,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Evaluate latency p50 / p95 ms (connected mode only)",
+        "show_legend": true,
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "q1",
+                "query": "p50:kya.client.evaluate.latency{$service,$env}"
+              },
+              {
+                "data_source": "metrics",
+                "name": "q2",
+                "query": "p95:kya.client.evaluate.latency{$service,$env}"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "q1",
+                "alias": "p50"
+              },
+              {
+                "formula": "q2",
+                "alias": "p95"
+              }
+            ],
+            "display_type": "line"
+          }
+        ]
+      },
+      "layout": {
+        "x": 6,
+        "y": 10,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Hosted verdict counters per interval (hosted only)",
+        "show_legend": true,
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "q1",
+                "query": "diff(max:kya.policy.deny{$hosted_service,$env})"
+              },
+              {
+                "data_source": "metrics",
+                "name": "q2",
+                "query": "diff(max:kya.policy.require_approve{$hosted_service,$env})"
+              },
+              {
+                "data_source": "metrics",
+                "name": "q3",
+                "query": "diff(max:kya.policy.approve_granted{$hosted_service,$env})"
+              },
+              {
+                "data_source": "metrics",
+                "name": "q4",
+                "query": "diff(max:kya.evaluate.count{$hosted_service,$env})"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "q1",
+                "alias": "deny"
+              },
+              {
+                "formula": "q2",
+                "alias": "require_approve"
+              },
+              {
+                "formula": "q3",
+                "alias": "approve_granted"
+              },
+              {
+                "formula": "q4",
+                "alias": "evaluate"
+              }
+            ],
+            "display_type": "bars"
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 13,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Hosted evaluate latency avg and max ms (hosted only)",
+        "show_legend": true,
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "q1",
+                "query": "avg:kya.evaluate.latency{$hosted_service,$env}"
+              },
+              {
+                "data_source": "metrics",
+                "name": "q2",
+                "query": "max:kya.evaluate.max_ms{$hosted_service,$env}"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "q1",
+                "alias": "avg"
+              },
+              {
+                "formula": "q2",
+                "alias": "max"
+              }
+            ],
+            "display_type": "line"
+          }
+        ]
+      },
+      "layout": {
+        "x": 6,
+        "y": 13,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Hosted kill latency vs SLO ms (hosted only)",
+        "show_legend": true,
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "q1",
+                "query": "max:kya.kill.last_ms{$hosted_service,$env}"
+              },
+              {
+                "data_source": "metrics",
+                "name": "q2",
+                "query": "max:kya.kill.slo_ms{$hosted_service,$env}"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "q1",
+                "alias": "last kill"
+              },
+              {
+                "formula": "q2",
+                "alias": "SLO"
+              }
+            ],
+            "display_type": "line"
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 16,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Hosted PII redaction hits, cumulative (hosted only)",
+        "autoscale": true,
+        "precision": 0,
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "q1",
+                "query": "max:kya.redaction.hits{$hosted_service,$env}",
+                "aggregator": "last"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "q1"
+              }
+            ]
+          }
+        ]
+      },
+      "layout": {
+        "x": 6,
+        "y": 16,
+        "width": 6,
+        "height": 3
+      }
+    }
+  ],
+  "notify_list": []
+}

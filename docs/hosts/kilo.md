@@ -14,7 +14,7 @@ That writes a `shield-kya` entry into `~/.config/kilo/kilo.json` under the `mcp`
 kya connect kilo --project   # writes ./kilo.json
 ```
 
-Restart Kilo after connecting — MCP servers load at startup.
+Restart Kilo after connecting - MCP servers load at startup.
 
 Prefer editing by hand? Copy [`kilo/kilo.example.json`](../../kilo/kilo.example.json) into place and merge the `mcp` section yourself.
 
@@ -29,12 +29,12 @@ Every tool call Kilo routes through MCP lands on the receipt: tool id, verdict (
 | Global | `~/.config/kilo/kilo.json` |
 | Project | `./kilo.json` |
 
-Connect merges. Your other MCP servers and settings stay as they were. If the existing file doesn't parse as JSON, connect stops and tells you — it never overwrites a config it can't read.
+Connect merges. Your other MCP servers and settings stay as they were. If the existing file doesn't parse as JSON, connect stops and tells you - it never overwrites a config it can't read.
 
 ## Verify
 
 1. Restart Kilo.
-2. Ask the agent to list its MCP tools — `kya.policy_evaluate`, `kya.session_ingest`, `kya.request_approval` should appear.
+2. Ask the agent to list its MCP tools - `kya.policy_evaluate`, `kya.session_ingest`, `kya.request_approval` should appear.
 3. Offline smoke, no cloud needed:
 
    ```bash
@@ -45,18 +45,18 @@ Connect merges. Your other MCP servers and settings stay as they were. If the ex
 
 ## Uninstall
 
-Edit `~/.config/kilo/kilo.json` and delete the `shield-kya` entry under `mcp`. Nothing else is installed — no daemon, no background process. (`kya connect kilo --force` rewires the entry if you only want to refresh it.)
+Edit `~/.config/kilo/kilo.json` and delete the `shield-kya` entry under `mcp`. Nothing else is installed - no daemon, no background process. (`kya connect kilo --force` rewires the entry if you only want to refresh it.)
 
 ## Troubleshooting
 
 - **Server not listed in Kilo.** Restart Kilo. MCP servers load at startup, not hot.
 - **`command not found` errors.** Connect wires `node …/cli.js serve-mcp --stdio` from the install you ran it from. If you connected via a temp `npx` cache and later cleared it, rerun `kya connect kilo --force` from a real install (`npm i -g @shield-agent/kya`).
-- **Tools silently bypass the gate.** KYA only sees calls that go through MCP. A tool Kilo runs natively without MCP never reaches evaluate — see the honesty note below.
+- **Tools silently bypass the gate.** KYA only sees calls that go through MCP. A tool Kilo runs natively without MCP never reaches evaluate - see the honesty note below.
 - **Verdicts require a key.** The wired env sets `KYA_OFFLINE=1`, so the server starts keyless and sample-evaluates. Against an authenticated control plane, set `KYA_API_KEY` in the entry's `environment` block.
 
 ## Honesty note
 
-Kilo decides which tools go through MCP. KYA governs the ones that do. A tool Kilo executes outside MCP is outside the gate — don't treat this setup as full coverage of the agent.
+Kilo decides which tools go through MCP. KYA governs the ones that do. A tool Kilo executes outside MCP is outside the gate - don't treat this setup as full coverage of the agent.
 
 ## Wrap fallback
 

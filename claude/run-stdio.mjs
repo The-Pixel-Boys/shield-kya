@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * MCPB entry stub. Runs the packaged CLI — never npx (no registry redirect / lifecycle).
+ * MCPB entry stub. Runs the packaged CLI - never npx (no registry redirect / lifecycle).
  */
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";

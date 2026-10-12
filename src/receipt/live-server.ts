@@ -28,6 +28,8 @@ import {
 } from "../notify/index.js";
 import { otlpExportSelfTest, resolveOtlpExportConfig } from "../otel/exporter.js";
 import { CLI_VERSION } from "../version.js";
+import { scanEndpoint } from "../discover/scan.js";
+import { writeDiscoverySnapshot } from "../discover/snapshot.js";
 import { evaluateGatewayTool } from "./gate-page.js";
 import {
   loadReceiptModel,
@@ -101,7 +103,7 @@ export interface ReportActionResult {
   readonly body: Record<string, unknown>;
 }
 
-const IMPORT_SOURCES: readonly ImportSource[] = ["langsmith", "langfuse", "phoenix", "otel", "agt"];
+const IMPORT_SOURCES: readonly ImportSource[] = ["langsmith", "langfuse", "phoenix", "otel", "agt", "adr-sensor"];
 
 const OTEL_CONFIG_HINT =
   "configure otlpExport.endpoint in .kya/config.json or KYA_OTLP_EXPORT_ENDPOINT";
@@ -126,7 +128,7 @@ export async function runReportImportAction(
   if (!IMPORT_SOURCES.includes(from)) {
     return {
       status: 400,
-      body: { ok: false, error: "invalid source - expected one of langsmith|langfuse|phoenix|otel|agt" },
+      body: { ok: false, error: "invalid source - expected one of langsmith|langfuse|phoenix|otel|agt|adr-sensor" },
     };
   }
   let file = typeof raw["file"] === "string" ? raw["file"].trim() : "";
@@ -157,6 +159,16 @@ export async function runReportInvestigateAction(
   const summary = loadInvestigateLastRun(env);
   const findings = summary?.findings.reduce((n, f) => n + f.count, 0) ?? 0;
   return { status: 200, body: { ok: true, findings, incidents: summary?.incidents ?? 0 } };
+}
+
+/** POST /action/discover: run an endpoint scan and persist latest.json. */
+export async function runReportDiscoverAction(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<ReportActionResult> {
+  const snapshot = scanEndpoint({ env, cwd });
+  writeDiscoverySnapshot(snapshot, env);
+  return { status: 200, body: { ok: true, total: snapshot.inventory.length } };
 }
 
 /** POST /action/notify-test: fire a synthetic DENY event at the configured webhooks. */
@@ -315,6 +327,7 @@ export function startLiveReceiptServer(
           url.pathname === "/stop" ||
           url.pathname === "/feed" ||
           url.pathname === "/action/investigate" ||
+          url.pathname === "/action/discover" ||
           url.pathname === "/action/import" ||
           url.pathname === "/action/notify-test" ||
           url.pathname === "/action/otel-test");
@@ -411,6 +424,22 @@ export function startLiveReceiptServer(
         void (async () => {
           try {
             const result = await runReportInvestigateAction(cwd, process.env);
+            if (result.status === 200) scheduleBroadcast();
+            return jsonOk(res, result.body);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(`${JSON.stringify({ ok: false, error: message })}\n`);
+            return;
+          }
+        })();
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/action/discover") {
+        void (async () => {
+          try {
+            const result = await runReportDiscoverAction(cwd, process.env);
             if (result.status === 200) scheduleBroadcast();
             return jsonOk(res, result.body);
           } catch (err) {

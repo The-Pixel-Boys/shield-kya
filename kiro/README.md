@@ -4,6 +4,6 @@ Auto-wire: `kya connect kiro` (global `~/.kiro/settings/mcp.json`) or `kya conne
 
 Manual: merge `mcp.example.json` into your mcp.json (classic `mcpServers` shape).
 
-Verify with `kiro-cli mcp list` — shield-kya should show three tools.
+Verify with `kiro-cli mcp list` - shield-kya should show three tools.
 
 Full recipe: [docs/hosts/kiro.md](../docs/hosts/kiro.md)

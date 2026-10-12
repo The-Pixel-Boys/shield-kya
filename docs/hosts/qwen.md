@@ -14,11 +14,11 @@ That writes a `shield-kya` entry into `~/.qwen/settings.json` under `mcpServers`
 kya connect qwen --project   # writes ./.qwen/settings.json
 ```
 
-No restart needed — Qwen Code watches `settings.json` and starts new MCP servers live.
+No restart needed - Qwen Code watches `settings.json` and starts new MCP servers live.
 
 Prefer editing by hand? Copy [`qwen/settings.example.json`](../../qwen/settings.example.json) (stdio) into place and merge the `mcpServers` section yourself.
 
-**Hosted variant.** Instead of a local stdio server, Qwen can call the hosted MCP endpoint directly — merge [`qwen/settings.hosted.example.json`](../../qwen/settings.hosted.example.json) (`httpUrl: "https://shield-agent.com/mcp"` + `Authorization: Bearer ${KYA_API_KEY}`). Pick one: don't enable the stdio and hosted entries at the same time, or every call gets evaluated twice under two server names.
+**Hosted variant.** Instead of a local stdio server, Qwen can call the hosted MCP endpoint directly - merge [`qwen/settings.hosted.example.json`](../../qwen/settings.hosted.example.json) (`httpUrl: "https://shield-agent.com/mcp"` + `Authorization: Bearer ${KYA_API_KEY}`). Pick one: don't enable the stdio and hosted entries at the same time, or every call gets evaluated twice under two server names.
 
 ## What KYA reports
 
@@ -31,11 +31,11 @@ Every tool call Qwen routes through MCP lands on the receipt: tool id, verdict (
 | Global | `~/.qwen/settings.json` |
 | Project | `./.qwen/settings.json` |
 
-Connect merges. Your other MCP servers and settings stay as they were. If the existing file doesn't parse as JSON, connect stops and tells you — it never overwrites a config it can't read.
+Connect merges. Your other MCP servers and settings stay as they were. If the existing file doesn't parse as JSON, connect stops and tells you - it never overwrites a config it can't read.
 
 ## Verify
 
-1. Ask the running session to list its MCP tools — `shield-kya` appears without a restart.
+1. Ask the running session to list its MCP tools - `shield-kya` appears without a restart.
 2. Confirm `kya.policy_evaluate`, `kya.session_ingest`, `kya.request_approval` are listed.
 3. Offline smoke, no cloud needed:
 
@@ -47,18 +47,18 @@ Connect merges. Your other MCP servers and settings stay as they were. If the ex
 
 ## Uninstall
 
-Edit `~/.qwen/settings.json` and delete the `shield-kya` entry under `mcpServers`. Nothing else is installed — no daemon, no background process. (`kya connect qwen --force` rewires the entry if you only want to refresh it.)
+Edit `~/.qwen/settings.json` and delete the `shield-kya` entry under `mcpServers`. Nothing else is installed - no daemon, no background process. (`kya connect qwen --force` rewires the entry if you only want to refresh it.)
 
 ## Troubleshooting
 
-- **Server not listed in Qwen.** Live reload landed mid-2026 — on older builds, restart the CLI. Confirm the entry is under `mcpServers` in `~/.qwen/settings.json`.
+- **Server not listed in Qwen.** Live reload landed mid-2026 - on older builds, restart the CLI. Confirm the entry is under `mcpServers` in `~/.qwen/settings.json`.
 - **`command not found` errors.** Connect wires `node …/cli.js serve-mcp --stdio` from the install you ran it from. If you connected via a temp `npx` cache and later cleared it, rerun `kya connect qwen --force` from a real install (`npm i -g @shield-agent/kya`).
 - **Double verdicts on one action.** You enabled both the stdio and hosted entries. Remove one.
 - **Verdicts require a key.** The wired env sets `KYA_OFFLINE=1`, so the server starts keyless and sample-evaluates. Against an authenticated control plane, set `KYA_API_KEY` in the entry's `env` block (stdio) or use the hosted variant's Bearer header.
 
 ## Honesty note
 
-Qwen decides which tools go through MCP. KYA governs the ones that do. A tool Qwen executes outside MCP is outside the gate — don't treat this setup as full coverage of the agent.
+Qwen decides which tools go through MCP. KYA governs the ones that do. A tool Qwen executes outside MCP is outside the gate - don't treat this setup as full coverage of the agent.
 
 ## Wrap fallback
 

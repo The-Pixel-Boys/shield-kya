@@ -23,12 +23,14 @@ import {
 import { readOtelStats, type OtelStats } from "../otel/stats.js";
 import {
   loadCertifyCard,
+  loadDiscoveryCard,
   loadIdentity,
   loadOrrCard,
   loadSandboxes,
   loadShowbackCard,
   loadWiredHosts,
   type CertifyCard,
+  type DiscoveryCard,
   type OrrCard,
   type SandboxCard,
   type WiredHostRow,
@@ -93,6 +95,8 @@ export interface ReceiptModel {
   readonly showback?: ShowbackReport;
   /** Trace imports (host "import" events), aggregated over the full trail. */
   readonly imports?: ImportCard;
+  /** Last endpoint discovery snapshot from ~/.kya/discovery/latest.json. */
+  readonly discovery?: DiscoveryCard;
   /** Last `kya investigate` run summary from .kya/investigate-last.json. */
   readonly investigate?: InvestigateLastRun;
   /** Per-target alert delivery rollup from .kya/notify-log.jsonl. */
@@ -394,6 +398,7 @@ export function buildReceiptModel(
     certify: extras?.certify,
     showback: extras?.showback,
     imports: extras?.imports,
+    discovery: extras?.discovery,
     investigate: extras?.investigate,
     alerts: extras?.alerts,
     otel: extras?.otel,
@@ -425,6 +430,7 @@ export function buildWindowReceiptModel(
     certify: extras?.certify,
     showback: extras?.showback,
     imports: extras?.imports,
+    discovery: extras?.discovery,
     investigate: extras?.investigate,
     alerts: extras?.alerts,
     otel: extras?.otel,
@@ -464,6 +470,7 @@ export function loadReceiptModel(input: {
     certify: loadCertifyCard(input.cwd),
     showback,
     imports: aggregateImports(importEvents),
+    discovery: loadDiscoveryCard(env),
     investigate: loadInvestigateLastRun(env),
     alerts: summarizeNotifyLog(readNotifyLog(env)),
     otel: readOtelStats(env),
@@ -1679,6 +1686,7 @@ function importHeroCard(card: ImportCard | undefined, nowMs: number, live: boole
       <option value="phoenix">Phoenix</option>
       <option value="otel">OTel JSON</option>
       <option value="agt">AGT audit log</option>
+      <option value="adr-sensor">ADR Sensor</option>
     </select>
     <label class="sr-only" for="import-file">File path</label>
     <input id="import-file" name="file" type="text" placeholder="/path/to/traces.json" />
@@ -1688,8 +1696,8 @@ function importHeroCard(card: ImportCard | undefined, nowMs: number, live: boole
       : "";
     return `<section class="panel" aria-label="Import">
   <h2>Import</h2>
-  <p class="line">Nothing imported yet. Bring existing LangSmith, Langfuse, Phoenix, OTel, or AGT traces into the trail so they show up in this report and feed Certify.</p>
-  <p class="mute small">CLI: <code>kya import --from langsmith|langfuse|phoenix|otel FILE</code> · <code>kya import --from agt</code> reads the AGT audit log</p>
+  <p class="line">Nothing imported yet. Bring existing LangSmith, Langfuse, Phoenix, OTel, AGT, or ADR Sensor traces into the trail so they show up in this report and feed Certify.</p>
+  <p class="mute small">CLI: <code>kya import --from langsmith|langfuse|phoenix|otel|adr-sensor FILE</code> · <code>kya import --from agt</code> reads the AGT audit log</p>
   ${form}
 </section>`;
   }
@@ -1709,7 +1717,42 @@ function importHeroCard(card: ImportCard | undefined, nowMs: number, live: boole
   <div class="chiprow">
     ${chips}
   </div>
-  <p class="mute small">${last}add more with <code>kya import --from langsmith|langfuse|phoenix|otel FILE</code></p>
+  <p class="mute small">${last}add more with <code>kya import --from langsmith|langfuse|phoenix|otel|adr-sensor FILE</code></p>
+</section>`;
+}
+
+/**
+ * Hero Discovery card: last endpoint inventory scan. Empty state explains what
+ * is scanned and how to trigger a scan; populated state shows counts by
+ * sanction and top categories.
+ */
+function discoveryHeroCard(card: DiscoveryCard | undefined, nowMs: number, live: boolean): string {
+  if (!card) {
+    const scan = live
+      ? `<button type="button" class="stat" data-report-action="discover">Scan endpoint now</button>
+  <div id="report-action-result-discover"></div>`
+      : "";
+    return `<section class="panel" aria-label="Discovery">
+  <h2>Discovery</h2>
+  <p class="line">No endpoint scan yet. Discovery inventories AI agents, IDE extensions, desktop apps, model runtimes, and MCP servers on this workstation. Home-directory paths are redacted.</p>
+  <p class="mute small">CLI: <code>kya discover</code></p>
+  ${scan}
+</section>`;
+  }
+  const chips = card.topCategories
+    .map((c) => `<span class="chip"><code>${esc(c.category)}</code> × ${c.count}</span>`)
+    .join("\n    ");
+  return `<section class="panel" aria-label="Discovery">
+  <h2>Discovery</h2>
+  <div class="kpi-row">
+    ${kpiTile("Total", card.total)}
+    ${kpiTile("Sanctioned", card.sanctioned)}
+    ${kpiTile("Review", card.review, card.review > 0 ? "warn" : "")}
+  </div>
+  <div class="chiprow">
+    ${chips}
+  </div>
+  <p class="mute small">last scan ${esc(relativeTime(card.capturedAt, nowMs))} on ${esc(card.os)} · run <code>kya discover --push</code> to sync to the hosted console</p>
 </section>`;
 }
 
@@ -2471,9 +2514,11 @@ export function renderReceiptHtml(model: ReceiptModel): string {
           if (data && data.ok) {
             var msg = action === 'investigate'
               ? 'Done: ' + data.findings + ' findings, ' + data.incidents + ' incidents'
-              : action === 'notify-test'
-                ? 'Test alert sent to ' + data.targets + ' target(s)'
-                : String(data.detail || 'ok');
+              : action === 'discover'
+                ? 'Done: ' + data.total + ' item(s) discovered'
+                : action === 'notify-test'
+                  ? 'Test alert sent to ' + data.targets + ' target(s)'
+                  : String(data.detail || 'ok');
             setResult(resultEl, '<p>' + esc(msg) + '</p>', false);
             if (action === 'otel-test') {
               btn.disabled = false;
@@ -2629,6 +2674,7 @@ ${model.liveToken ? '<main data-live-token="1">' : '<main>'}
         ${activityHeroCard(agg, dashboard, events.length)}
         ${gatewayHeroCard(model.gate, nowMs)}
         ${importHeroCard(model.imports, nowMs, livePaged)}
+        ${discoveryHeroCard(model.discovery, nowMs, livePaged)}
         ${investigateHeroCard(model.investigate, nowMs, livePaged)}
         ${showbackHeroCard(model.showback, model.events)}
       </div>

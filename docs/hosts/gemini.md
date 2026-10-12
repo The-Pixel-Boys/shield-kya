@@ -6,10 +6,10 @@ Wire KYA into [Gemini CLI](https://github.com/google-gemini/gemini-cli) so tool 
 
 Merge one of the examples into `~/.gemini/settings.json` (global) or `.gemini/settings.json` (project):
 
-- **Stdio (local):** [`gemini/settings.example.json`](../../gemini/settings.example.json) — `npx --no-install … serve-mcp --stdio`, `trust: false`.
-- **Hosted:** [`gemini/settings.hosted.example.json`](../../gemini/settings.hosted.example.json) — `httpUrl: "https://shield-agent.com/mcp"` + `Authorization: Bearer ${KYA_API_KEY}`.
+- **Stdio (local):** [`gemini/settings.example.json`](../../gemini/settings.example.json) - `npx --no-install … serve-mcp --stdio`, `trust: false`.
+- **Hosted:** [`gemini/settings.hosted.example.json`](../../gemini/settings.hosted.example.json) - `httpUrl: "https://shield-agent.com/mcp"` + `Authorization: Bearer ${KYA_API_KEY}`.
 
-Do not enable both at once. Keep `"trust": false` — setting it true tells Gemini to skip its own confirmations for this server, which defeats the checkpoint. Restart Gemini CLI after editing.
+Do not enable both at once. Keep `"trust": false` - setting it true tells Gemini to skip its own confirmations for this server, which defeats the checkpoint. Restart Gemini CLI after editing.
 
 ## What KYA reports
 
@@ -25,7 +25,7 @@ Verified in CI: the e2e suite installs Gemini CLI headless, wires this config, a
 
 By hand:
 
-1. `gemini mcp list` — `shield-kya` connected.
+1. `gemini mcp list` - `shield-kya` connected.
 2. Ask Gemini for a small change; watch the trail.
 3. Offline smoke:
 
@@ -41,9 +41,9 @@ Delete the `shield-kya` block from the settings file you merged into and restart
 
 ## Troubleshooting
 
-- **`gemini mcp list` shows it disconnected.** The stdio example needs the package installed (`npm i -g @shield-agent/kya`) — `--no-install` refuses to fetch at startup. Or switch to the hosted example.
+- **`gemini mcp list` shows it disconnected.** The stdio example needs the package installed (`npm i -g @shield-agent/kya`) - `--no-install` refuses to fetch at startup. Or switch to the hosted example.
 - **Both examples merged.** Two servers, duplicate verdicts. Remove one.
-- **`${KYA_API_KEY}` literally in requests.** Gemini expands env placeholders at load — export the variable in the shell that starts Gemini, then restart.
+- **`${KYA_API_KEY}` literally in requests.** Gemini expands env placeholders at load - export the variable in the shell that starts Gemini, then restart.
 - **Trust prompt keeps appearing.** Expected with `trust: false`. Don't silence it by flipping trust to true; that turns off confirmations for the gate itself.
 
 ## Honesty note

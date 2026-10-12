@@ -4,6 +4,6 @@ No safe auto-wire: Cline's config lives in VS Code globalStorage (`~/Library/App
 
 Recommended: open Cline → MCP Servers icon → Configure, and paste the `shield-kya` block from `cline_mcp_settings.example.json`. Cline hot-reloads on save.
 
-Leave `autoApprove` empty — approvals are KYA's job.
+Leave `autoApprove` empty - approvals are KYA's job.
 
 Full recipe: [docs/hosts/cline.md](../docs/hosts/cline.md)

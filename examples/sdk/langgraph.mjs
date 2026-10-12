@@ -23,7 +23,7 @@ try {
   await adminDelete.func({});
 } catch (err) {
   if (err instanceof KyaDeniedError) {
-    console.log(`blocked: ${err.toolId} (${err.reasonCode}) — func never ran`);
+    console.log(`blocked: ${err.toolId} (${err.reasonCode}) - func never ran`);
   } else {
     throw err;
   }

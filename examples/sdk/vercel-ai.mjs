@@ -16,5 +16,5 @@ const weather = governVercelAiTool(
   { name: "org.sample.safe.read" },
 );
 
-// const tools = { weather }; — pass to generateText/streamText as usual.
+// const tools = { weather }; - pass to generateText/streamText as usual.
 console.log(await weather.execute({ city: "Berlin" }));
