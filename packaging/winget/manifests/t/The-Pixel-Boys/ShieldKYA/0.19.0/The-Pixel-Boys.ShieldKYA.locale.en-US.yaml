@@ -13,9 +13,7 @@ LicenseUrl: https://github.com/The-Pixel-Boys/shield-kya/blob/main/LICENSE
 Copyright: Copyright (c) The Pixel Boys
 ShortDescription: Audit trail and traceability for AI agents
 Description: |
-  Shield KYA is a local MCP gate that gives every tool call your coding agents
-  make an Allow, Review, or Deny verdict, records them on a live local dashboard,
-  and certifies them against the Agent Trust Baseline.
+  Audit trail and traceability for AI agents. See what every coding agent did, with opt-in human approval and signed certify.
 Moniker: shield-kya
 Tags:
   - kya

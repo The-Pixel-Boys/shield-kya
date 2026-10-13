@@ -1,6 +1,6 @@
 {
   "name": "shield-kya",
-  "description": "Audit trail and traceability for AI agents. See what every coding agent did.",
+  "description": "Audit trail and traceability for AI agents. See what every coding agent did. Advisory: records every tool call, blocks only the never-list, fails open.",
   "owner": {
     "name": "MFR Limited (Shield KYA)",
     "email": "it@shield-agent.com",
@@ -10,7 +10,7 @@
     {
       "name": "kya",
       "source": "./plugins/kya",
-      "description": "Audit trail and traceability for AI agents. See what every coding agent did. Advisory: records every tool call and blocks only the never-list; fails open."
+      "description": "Audit trail and traceability for AI agents. See what every coding agent did. Advisory: records every tool call, blocks only the never-list, fails open."
     }
   ]
 }

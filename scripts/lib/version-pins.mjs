@@ -59,7 +59,7 @@ class Leaf {
 
 // JSON parser that remembers where each scalar sits in the text, so sync can edit a version in
 // place and leave indent, inline arrays, key order and the trailing newline untouched.
-function parseSpans(text) {
+export function parseSpans(text) {
   let i = 0;
   const ws = () => {
     while (/\s/.test(text[i])) i++;
@@ -100,7 +100,7 @@ function parseSpans(text) {
   return value();
 }
 
-function* slots(node, segs, label) {
+export function* slots(node, segs, label) {
   const m = /^(.+)\[\*\]$/.exec(segs[0]);
   const key = m ? m[1] : segs[0];
   if (node === null || typeof node !== "object" || node instanceof Leaf || !(key in node)) return;

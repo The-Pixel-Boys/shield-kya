@@ -1,7 +1,7 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.26.1",
-  "description": "Shield KYA - Know Your AI Agent. Audit trail and traceability for AI agents. Gate, record, and certify every tool call.",
+  "version": "0.26.2",
+  "description": "Audit trail and traceability for AI agents. See what every coding agent did, with opt-in human approval and signed certify.",
   "license": "MIT",
   "type": "module",
   "mcpName": "io.github.The-Pixel-Boys/shield-kya",
@@ -71,6 +71,8 @@
     "pack:check": "pnpm run build && pnpm pack --pack-destination /tmp && node dist/cli.js --help",
     "sync:version": "node scripts/sync-version.mjs",
     "check:version": "node scripts/check-version-pins.mjs",
+    "sync:channel-copy": "node scripts/check-channel-copy.mjs --write",
+    "check:channel-copy": "node scripts/check-channel-copy.mjs",
     "prepublishOnly": "pnpm run check:version && pnpm run build && pnpm test"
   },
   "devDependencies": {

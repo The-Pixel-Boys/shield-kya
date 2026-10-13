@@ -1,0 +1,74 @@
+{
+  "$comment": "Single source of truth for how every distribution channel describes kya, and for the screenshots they show. Edit here, then run `pnpm sync:channel-copy`; `pnpm check:channel-copy` (CI) fails on any drift. Every variant starts with the tagline. Keep it truthful: local OSS is advisory and fails open except the never-list; never claim OSS enforcement or call the hosted console GA.",
+  "short": "Audit trail and traceability for AI agents.",
+  "long": "Audit trail and traceability for AI agents. See what every coding agent did, with opt-in human approval and signed certify.",
+  "variants": {
+    "mcp": "Audit trail and traceability for AI agents. MCP gate: evaluate, ingest, request approval.",
+    "plugin": "Audit trail and traceability for AI agents. See what every coding agent did. Advisory: records every tool call, blocks only the never-list, fails open.",
+    "python": "Audit trail and traceability for AI agents. In-process kya shim for Python agent frameworks (offline evaluate via the kya CLI).",
+    "webInstall": "Audit trail and traceability for AI agents. Install in minutes: offline demo, MCP gate, local free console, or hosted. No private protocol.",
+    "webHowKyaWorks": "Audit trail and traceability for AI agents. Register an agent, wrap a tool, get Allow, Hold, or Deny. What to do after a local or company install."
+  },
+  "screenshots": [
+    {
+      "file": "assets/logo.svg",
+      "sha256": "a9998290f03584f645821a002632c916ae4a9ab8a6dc4a3d93383929d9681528",
+      "alt": "kya logo"
+    },
+    {
+      "file": "assets/activity-receipt.png",
+      "sha256": "ce30013fc799e99a32e767a568769be3f997c5f9d2423823dcb9da2579563fc6",
+      "alt": "Activity receipt - one recorded agent tool call with its verdict and evidence"
+    },
+    {
+      "file": "assets/report-activity.png",
+      "sha256": "84ed0ffe538bcb56e27bb87b74e7a0958eb701dac62f75170ffb64db49966d19",
+      "alt": "Activity tab - filterable agent tool-call feed with verdicts"
+    },
+    {
+      "file": "assets/report-certify.png",
+      "sha256": "c234847a3aa9b27fb979727f5d58cdbe30a25d545c1381182fd5d13838444cec",
+      "alt": "Certify tab - full Agent Trust Baseline requirement table with evidence"
+    },
+    {
+      "file": "assets/report-changes.png",
+      "sha256": "03fd327d13410e5da32d9e40f740dc542e88441aef652f8510a7973436d923bd",
+      "alt": "Changes tab - what actually changed per session: files touched with redacted diff previews"
+    },
+    {
+      "file": "assets/report-gateway-backends.png",
+      "sha256": "af07e8c8fcfdb10fb7adef4a82cd97c8e789280539e2057562561006c9ad89b7",
+      "alt": "Gateway backends - MCP servers the local gate routes to"
+    },
+    {
+      "file": "assets/report-gateway-listeners.png",
+      "sha256": "08803a753effd05aa002a96b9648f8b337062a5c88867259d6a9a53974c79d9a",
+      "alt": "Gateway listeners - local MCP gate endpoints"
+    },
+    {
+      "file": "assets/report-gateway-playground.png",
+      "sha256": "d1352a4740dc7f9c214e15c9862aa5e166935f96b22e250b5e7e1838337e046e",
+      "alt": "Gateway playground - dry-run a tool call against the local policy"
+    },
+    {
+      "file": "assets/report-gateway-policies.png",
+      "sha256": "f34cafd08f19cde8c7e6cc5074fc4ba08139d1e11534ab0aa9cb391d7f3fc6fc",
+      "alt": "Gateway policies - local gate policy rules"
+    },
+    {
+      "file": "assets/report-gateway-routes.png",
+      "sha256": "7eeca63c89b648254ccb3fbf4541210df4e52b06876a880ece0fd810fffe2c6a",
+      "alt": "Gateway routes - which tools route to which backend"
+    },
+    {
+      "file": "assets/report-gateway.png",
+      "sha256": "f035253cb5ad1b0a5b7d9fad5180bf22265705c37553b1504a8c9508d1e6db93",
+      "alt": "Gateway section - local MCP gate with listeners, routes, backends, policies, and a dry-run playground"
+    },
+    {
+      "file": "assets/report-overview.png",
+      "sha256": "c897e2971df839af58f199ecd892b758923917828ec36d03c069779ed2809a7a",
+      "alt": "KYA report - live dashboard: Certify trust baseline, verdicts, analytics"
+    }
+  ]
+}
