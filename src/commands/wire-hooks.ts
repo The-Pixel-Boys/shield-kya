@@ -22,6 +22,15 @@ export interface WireHookInput {
   readonly host: string;
   readonly home: string;
   readonly force?: boolean;
+  /** Hosted-plane hook (beta, claude only): flags appended to the command. Never the key. */
+  readonly hosted?: HostedHookWiring;
+}
+
+export interface HostedHookWiring {
+  /** Absolute path of the 0600 plane config file (validated by the caller). */
+  readonly configPath: string;
+  readonly strict?: boolean;
+  readonly shadow?: boolean;
 }
 
 export interface WireHookResult {
@@ -43,22 +52,39 @@ export function hookSupported(hostId: string): boolean {
 const HOOK_TIMEOUT_SECONDS = 5;
 
 /** Shell command a host's PreToolUse hook runs. JSON-quoted paths are safe to embed. */
-export function hookCommand(hostId: string): string {
-  return [process.execPath, cliJsPath()]
+export function hookCommand(hostId: string, hosted?: HostedHookWiring): string {
+  const base = [process.execPath, cliJsPath()]
     .map((s) => JSON.stringify(s))
     .join(" ") + ` hook --host ${hostId}`;
+  if (!hosted) return base;
+  // Inside double quotes the shell still expands $ and backticks: refuse them.
+  if (/[$`"\\\n\r]/.test(hosted.configPath)) {
+    throw new UsageError("--plane-config path must not contain $, backtick, quote, backslash or newline");
+  }
+  return `${base} --plane-config ${JSON.stringify(hosted.configPath)}` +
+    (hosted.strict ? " --strict" : "") +
+    (hosted.shadow ? " --plane-shadow" : "");
 }
 
 function hookIdentity(hostId: string): string {
   return `hook --host ${hostId}`;
 }
 
-/** Claude/Grok JSON entry shape: matcher "" matches every tool. */
-function preToolUseEntry(hostId: string): Record<string, unknown> {
+/**
+ * Claude/Grok JSON entry shape: matcher "" matches every tool. The hosted hook
+ * also sets onFailure "block" (Claude Code 2.1.295+), so a crash or host
+ * timeout blocks the call instead of letting it through.
+ */
+function preToolUseEntry(hostId: string, hosted?: HostedHookWiring): Record<string, unknown> {
   return {
     matcher: "",
     hooks: [
-      { type: "command", command: hookCommand(hostId), timeout: HOOK_TIMEOUT_SECONDS },
+      {
+        type: "command",
+        command: hookCommand(hostId, hosted),
+        timeout: HOOK_TIMEOUT_SECONDS,
+        ...(hosted ? { onFailure: "block" } : {}),
+      },
     ],
   };
 }
@@ -73,8 +99,8 @@ interface ClaudeSettingsHookEntry {
  * instead of rewritten. An existing kya entry (matched by command identity)
  * means skipped; --force replaces that one entry, preserving all others.
  */
-function wireClaudeSettings(path: string, force: boolean): ConnectStatus {
-  const entry = preToolUseEntry("claude");
+function wireClaudeSettings(path: string, force: boolean, hosted?: HostedHookWiring): ConnectStatus {
+  const entry = preToolUseEntry("claude", hosted);
   if (!existsSync(path)) {
     atomicWriteSync(
       createTarget(path),
@@ -118,7 +144,17 @@ function wireClaudeSettings(path: string, force: boolean): ConnectStatus {
       (h) => typeof h.command === "string" && h.command.includes(hookIdentity("claude")),
     );
   const kyaIndex = entries.findIndex(isKyaEntry);
-  if (kyaIndex !== -1 && !force) return "skipped";
+  const existingHosted = kyaIndex !== -1 &&
+    (entries[kyaIndex]!.hooks ?? []).some((h) => typeof h.command === "string" && h.command.includes("--plane-config"));
+  if (existingHosted && !hosted) {
+    // Never silently swap a fail-closed hosted hook for the fail-open OSS one.
+    throw new UsageError(
+      `${path} already has the hosted-plane kya hook; re-run with --hosted to change it, or remove that entry by hand to go back to the local hook`,
+    );
+  }
+  // Hosted always replaces the kya entry: keeping the OSS copy next to it would
+  // leave a second, fail-open hook (and two plane calls) per tool call.
+  if (kyaIndex !== -1 && !force && !hosted) return "skipped";
   if (kyaIndex !== -1) {
     entries[kyaIndex] = entry as ClaudeSettingsHookEntry;
   } else {
@@ -235,6 +271,11 @@ function wireKimiToml(path: string, force: boolean): ConnectStatus {
 export function wireHook(input: WireHookInput): WireHookResult {
   const key = input.host.trim().toLowerCase();
   const force = Boolean(input.force);
+  if (input.hosted && key !== "claude") {
+    throw new UsageError(
+      `--hosted hook wiring is claude only in this beta (needs the host's onFailure "block"); ${input.host} is not supported`,
+    );
+  }
   let label: string;
   let path: string;
   let status: ConnectStatus;
@@ -242,7 +283,7 @@ export function wireHook(input: WireHookInput): WireHookResult {
     case "claude":
       label = CONNECT_REGISTRY["claude"]!.label;
       path = join(input.home, ".claude", "settings.json");
-      status = wireClaudeSettings(path, force);
+      status = wireClaudeSettings(path, force, input.hosted);
       break;
     case "grok":
       label = CONNECT_REGISTRY["grok"]!.label;

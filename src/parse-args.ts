@@ -9,6 +9,9 @@ export interface ParsedArgs {
   readonly flags: Readonly<Record<string, string | boolean>>;
 }
 
+/** Pure switches: never take the next token as their value (`kya --dry-run team init` must not eat `team`). */
+const SWITCHES = new Set(["dry-run"]);
+
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const args = [...argv];
   // drop node + script path when present (cli entry strips itself; tests pass raw)
@@ -32,7 +35,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       }
       const key = token.slice(2);
       const next = args[i + 1];
-      if (next !== undefined && !next.startsWith("-")) {
+      if (next !== undefined && !next.startsWith("-") && !SWITCHES.has(key)) {
         // boolean-looking flags stay boolean when next is another command-like word
         // only consume next if it looks like a value (not a known pattern of pure flag)
         flags[key] = next;

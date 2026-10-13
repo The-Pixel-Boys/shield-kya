@@ -1,20 +1,38 @@
 /**
  * kya hook - PreToolUse interception for hosts with native hooks
- * (Claude Code, Grok, Kimi Code). Offline local evaluate only: no network,
- * sub-second, fail-open on any internal error unless --fail-closed (hosted).
+ * (Claude Code, Grok, Kimi Code). Default: offline local evaluate only, no
+ * network, sub-second, fail-open on any internal error unless --fail-closed.
  * DENY (local never-list) blocks; REQUIRE_APPROVE records advisory unless
- * --strict.
+ * --strict. With --plane-config (beta) it evaluates on the hosted plane and
+ * fails closed (runHostedHook below; --plane-shadow records without blocking).
  */
 import { createHash } from "node:crypto";
-import { closeSync, lstatSync, mkdirSync, openSync, readdirSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { globalConfigDir, resolveConfig } from "../config.js";
+import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
+import { configFilePath, globalConfigDir, resolveConfig } from "../config.js";
 import type { PolicyEvaluateResponse } from "../client.js";
 import { runEvalTool } from "./eval-tool.js";
 import { appendTrail, defaultSessionId, hostToProduct } from "../trail.js";
 import { deriveWireChangeFields } from "../diff-preview.js";
 import { matchesNeverList } from "../offline-evaluate.js";
 import { maybeSpawnNotifyFlush } from "../notify/dispatch.js";
+import { computeArgsHash } from "../hash.js";
+import { evaluateHosted, hostedDecision, hostedEnvProblem, loadPlaneConfig, PlaneError, scrubNetworkEnv, type PlaneConfig, type PlaneTransport } from "./hosted-hook.js";
+
+/** Hosted-plane mode (`--plane-config`). Only argv sets these; never env or files. */
+export interface HostedHookOptions {
+  readonly configPath: string;
+  /** --plane-shadow: evaluate and record, never block (the local never-list still blocks). */
+  readonly shadow: boolean;
+  readonly budgetMs: number;
+  /** --plane-allow-http-loopback: http://127.0.0.1 planes for local tests. */
+  readonly allowHttpLoopback: boolean;
+  /** Test seams for the wire, clock and jitter. */
+  readonly fetch?: PlaneTransport;
+  readonly now?: () => number;
+  readonly sleep?: (ms: number) => Promise<void>;
+  readonly random?: () => number;
+}
 
 export interface HookInput {
   readonly host: string;
@@ -28,6 +46,8 @@ export interface HookInput {
   readonly cwd: string;
   /** Test seam - defaults to the offline runEvalTool path. */
   readonly evaluate?: (toolId: string, args: unknown) => Promise<PolicyEvaluateResponse>;
+  /** Set by --plane-config: hosted mode (implies fail-closed unless shadow). */
+  readonly plane?: HostedHookOptions;
 }
 
 export interface HookResult {
@@ -231,6 +251,7 @@ function auditedDeny(
 const OTHER_EVENT = /^(post[_-]?tool[_-]?use.*|stop|subagent[_-]?(start|stop)|permission[_-]?request|elicitation.*|session[_-]?(start|end)|user[_-]?prompt[_-]?submit|notification|pre[_-]?compact)$/i;
 
 export async function runHook(input: HookInput): Promise<HookResult> {
+  if (input.plane) return runHostedHook(input, input.plane);
   let payload: HookPayload | undefined;
   try {
     payload = parsePayload(input.stdinText);
@@ -337,4 +358,198 @@ export async function runHook(input: HookInput): Promise<HookResult> {
     }
     return ALLOW;
   }
+}
+
+/** Env that steers the OSS hook and is ignored in hosted mode (design T2/T3). */
+const HOSTED_IGNORED_ENV = ["KYA_OFFLINE", "KYA_BASE_URL", "KYA_API_KEY", "SHIELD_API_KEY", "KYA_AGENT_ID", "KYA_HOME", "KYA_HOST", "KYA_NOTIFY_WEBHOOK", "KYA_OTLP_EXPORT_ENDPOINT"] as const;
+
+interface HostedVerdict {
+  readonly verdict: string;
+  readonly reasonCode: string;
+  /** Model-facing deny text; fixed strings plus tool name and codes, never the key. */
+  readonly reason: string;
+  /** Whether every hook copy reaches this verdict (dedupe the row) or it is this copy's own failure. */
+  readonly dedupe: boolean;
+}
+
+/**
+ * Hosted mode. Order: payload, local never-list, env and config checks, plane
+ * call, then a raise-only merge in which the local never-list always wins.
+ * Every failure is a deny (fail-closed) unless --plane-shadow, which records
+ * the would-be verdict and allows. Nothing here reads resolveConfig, the repo's
+ * .kya/config.json or KYA_* env, so none of them can downgrade this path.
+ */
+async function runHostedHook(input: HookInput, plane: HostedHookOptions): Promise<HookResult> {
+  const env = input.env;
+  const home = env.HOME?.trim() ?? "";
+  const homeOk = isAbsolute(home);
+  // State (trail, dedupe markers, notify) lives under $HOME/.kya; KYA_HOME is ignored.
+  const stateEnv: NodeJS.ProcessEnv = { ...env, KYA_HOME: homeOk ? home : undefined };
+  for (const k of HOSTED_IGNORED_ENV) if (k !== "KYA_HOME") delete stateEnv[k];
+  scrubNetworkEnv(stateEnv);
+  // Sinks only from the user-level config file: env can be set by a repo's .claude/settings.json.
+  delete stateEnv.KYA_NOTIFY_WEBHOOK;
+  delete stateEnv.KYA_OTLP_EXPORT_ENDPOINT;
+  const configIgnored =
+    HOSTED_IGNORED_ENV.some((k) => env[k] !== undefined) || safeExists(configFilePath(input.cwd));
+  const stderrNotes: string[] = [];
+  if (configIgnored) stderrNotes.push("KYA hosted mode: KYA_* env and the project .kya/config.json are ignored");
+
+  // Crash path state: unknown until the local never-list has been evaluated below.
+  hostedDecision.neverList = "unknown";
+  let payload: HookPayload | undefined;
+  let verdict: HostedVerdict;
+  let response: PolicyEvaluateResponse | undefined;
+  let config: PlaneConfig | undefined;
+  try {
+    payload = parsePayload(input.stdinText);
+  } catch { /* handled below */ }
+  if (payload) {
+    const isPre = !payload.event || /^(PreToolUse|pre[_-]tool[_-]use)$/i.test(payload.event);
+    if (!isPre && OTHER_EVENT.test(payload.event ?? "")) {
+      hostedDecision.neverList = "clear";
+      return ALLOW;
+    }
+  }
+  const toolName = payload?.toolName;
+  let neverListed = false;
+  // The local never-list runs first, before any env, config or plane code, and is stored so a
+  // crash later can never lower it (crashDecision). A throw leaves it "unknown", which denies.
+  try {
+    if (toolName) {
+      neverListed = matchesNeverList(toolName);
+      hostedDecision.neverList = neverListed ? "deny" : "clear";
+    }
+  } catch { /* stays unknown */ }
+
+  if (!payload || !toolName) {
+    verdict = {
+      verdict: "DENY",
+      reasonCode: "FAIL_CLOSED",
+      reason: `KYA hosted: ${payload ? "hook payload has no tool_name" : "unreadable hook payload"} (FAIL_CLOSED); tool call denied (fails closed)`,
+      dedupe: false,
+    };
+  } else {
+    let failure: { code: string; message: string } | undefined;
+    try {
+      if (!homeOk) throw new PlaneError("PLANE_CONFIG", "HOME must be an absolute path");
+      const envProblem = hostedEnvProblem(env);
+      if (envProblem) throw new PlaneError("PLANE_ENV_REFUSED", `refusing to run: ${envProblem} (TLS, proxy, CA or code-loading override)`);
+      // Before any network code: no proxy or TLS override can reach the plane call.
+      scrubNetworkEnv(process.env);
+      config = loadPlaneConfig(plane.configPath, {
+        cwds: [input.cwd, payload.cwd ?? ""],
+        home,
+        allowHttpLoopback: plane.allowHttpLoopback,
+      });
+      response = await evaluateHosted({
+        config,
+        toolName,
+        args: payload.toolInput ?? {},
+        product: hostToProduct(input.host),
+        strict: input.strict,
+        sessionId: payload.sessionId,
+        toolUseId: payload.toolUseId,
+        env,
+        budgetMs: plane.budgetMs,
+        fetch: plane.fetch,
+        now: plane.now,
+        sleep: plane.sleep,
+        random: plane.random,
+      });
+    } catch (e) {
+      failure = e instanceof PlaneError
+        ? { code: e.code, message: e.message }
+        : { code: "FAIL_CLOSED", message: "internal error" };
+    }
+    // Raise-only merge: the local never-list beats any plane answer or failure.
+    if (neverListed) {
+      verdict = { verdict: "DENY", reasonCode: "NEVER_EVENT", reason: `KYA denied ${toolName}: NEVER_EVENT`, dedupe: true };
+    } else if (failure || !response) {
+      const f = failure ?? { code: "FAIL_CLOSED", message: "internal error" };
+      verdict = {
+        verdict: "DENY",
+        reasonCode: f.code,
+        reason: `KYA hosted: ${f.message} (${f.code}); ${toolName} denied (fails closed)`,
+        dedupe: false,
+      };
+    } else if (response.verdict === "DENY") {
+      verdict = { verdict: "DENY", reasonCode: response.reasonCode, reason: `KYA denied ${toolName}: ${response.reasonCode}`, dedupe: true };
+    } else {
+      verdict = { verdict: response.verdict, reasonCode: response.reasonCode, reason: "", dedupe: true };
+    }
+  }
+
+  const blocks =
+    verdict.verdict === "DENY" ||
+    (input.strict && verdict.verdict === "REQUIRE_APPROVE");
+  // Shadow never blocks, except the LOCAL never-list. Keyed to the local evaluation, never to the
+  // plane's reason code: the plane answers NEVER_EVENT for every registered DENY-tier tool.
+  const enforce = blocks && (!plane.shadow || neverListed);
+  let firstSeen = true;
+  try {
+    firstSeen = recordHostedRow(input, stateEnv, homeOk, home, payload, verdict, response, plane.shadow, configIgnored);
+  } catch { /* the trail never decides the verdict */ }
+
+  if (blocks && !enforce) {
+    stderrNotes.push(`KYA shadow: would deny ${toolName ?? "tool call"} (${verdict.reasonCode}); allowed because --plane-shadow is set`);
+  }
+  const notes = stderrNotes.length ? `${stderrNotes.join("\n")}\n` : "";
+  if (!enforce) return { exitCode: 0, stdout: "", stderr: notes, firstSeen };
+  const reason =
+    verdict.verdict === "REQUIRE_APPROVE"
+      ? `KYA hold: ${toolName} needs approval (${verdict.reasonCode}). No approval request was opened; an operator can review KYA policy at ${config?.baseUrl ?? "the KYA console"}/app/kya/approvals. Do not retry until told.`
+      : verdict.reason;
+  const d = deny(reason);
+  return { ...d, stderr: notes + d.stderr, firstSeen };
+}
+
+function safeExists(p: string): boolean {
+  try { return existsSync(p); } catch { return false; }
+}
+
+/** One local trail row per decision. Returns firstSeen (false when another hook copy already recorded it). */
+function recordHostedRow(
+  input: HookInput,
+  stateEnv: NodeJS.ProcessEnv,
+  homeOk: boolean,
+  home: string,
+  payload: HookPayload | undefined,
+  verdict: HostedVerdict,
+  response: PolicyEvaluateResponse | undefined,
+  shadow: boolean,
+  configIgnored: boolean,
+): boolean {
+  if (!homeOk) return true;
+  if (verdict.dedupe && payload?.toolUseId && !claimToolUse(payload.toolUseId, payload.sessionId, stateEnv)) {
+    return false;
+  }
+  const toolName = payload?.toolName ?? "unknown";
+  let argsHash = response?.argsHash;
+  let changeFields;
+  try {
+    argsHash ??= payload?.toolName ? computeArgsHash(payload.toolInput ?? {}) : undefined;
+    changeFields = payload?.toolName ? deriveWireChangeFields(toolName, payload.toolInput ?? {}, input.env) : undefined;
+  } catch { /* row without hash or preview */ }
+  const ev = {
+    ts: new Date().toISOString(),
+    sessionId: payload?.sessionId ?? defaultSessionId(input.env),
+    host: "ide",
+    product: hostToProduct(input.host),
+    toolId: response?.toolId ?? toolName,
+    verdict: verdict.verdict,
+    reasonCode: verdict.reasonCode,
+    mode: input.strict ? ("hold" as const) : ("observe" as const),
+    neverEvent: verdict.reasonCode === "NEVER_EVENT",
+    ...(argsHash ? { argsHash } : {}),
+    ...(changeFields ?? {}),
+    ...(payload?.usage?.tokensIn !== undefined ? { tokensIn: payload.usage.tokensIn } : {}),
+    ...(payload?.usage?.tokensOut !== undefined ? { tokensOut: payload.usage.tokensOut } : {}),
+    ...(shadow ? { shadow: true } : {}),
+    ...(configIgnored ? { configIgnored: true } : {}),
+  };
+  try { appendTrail(payload?.cwd?.trim() || input.cwd, ev, stateEnv); } catch { /* best effort */ }
+  // cwd = home: only the user-level notify config applies, never a repo's sinks.
+  maybeSpawnNotifyFlush({ env: stateEnv, cwd: home, event: ev });
+  return true;
 }

@@ -10,7 +10,7 @@ This repo is also a Claude Code plugin marketplace named `shield-kya`. It ships 
 - It blocks only the small never-list (for example `mcp__postgres__drop_table`). Everything else is allowed and recorded.
 - It is advisory and fails open: if kya is missing, crashes or times out, the tool call proceeds and nothing is recorded.
 - The hook evaluates locally. It makes no hosted-plane calls, so it has no Hold tickets and no human sign-off.
-- Hosted-plane enforcement today is the MCP/gateway path (`kya.policy_evaluate`, see [claude.md](claude.md)). A hook that evaluates against the hosted plane and denies when it cannot is planned and is not part of this plugin yet.
+- Hosted-plane enforcement today is the MCP/gateway path (`kya.policy_evaluate`, see [claude.md](claude.md)). A separate hosted-plane hook (beta) evaluates each call on your workspace and denies when the plane cannot answer. It is not part of this plugin; see [hosted-hook.md](../hosted-hook.md).
 
 ## Install (one user)
 
@@ -48,42 +48,61 @@ Host trust assumption: the hook and bootstrap run under whatever `node` and envi
 
 ## Roll out to a team (project settings)
 
-Commit this to the repository's `.claude/settings.json`:
+Run `kya team init` at the repository root and commit the `.claude/settings.json` it writes. It merges these two keys and keeps the rest of the file (`--dry-run` shows the change first):
 
 ```json
 {
   "extraKnownMarketplaces": {
     "shield-kya": {
-      "source": { "source": "github", "repo": "The-Pixel-Boys/shield-kya" }
+      "source": { "source": "github", "repo": "The-Pixel-Boys/shield-kya", "ref": "vX.Y.Z" }
     }
   },
   "enabledPlugins": { "kya@shield-kya": true }
 }
 ```
+
+`vX.Y.Z` is the release tag that matches the kya you ran (needs the first kya release that includes `kya team`; `kya --help` lists `team init` when yours has it). Write a tag here, never a branch: this file decides what runs on every teammate's machine. A tag is still not immutable: anyone with write access to the public repository can move it, Claude Code's GitHub marketplace source has no commit `sha` pin, and the public repository has no tag protection rule today (a `v*` tag ruleset is recommended). The command makes no network call; check the tag exists with `git ls-remote https://github.com/The-Pixel-Boys/shield-kya refs/tags/vX.Y.Z` (if it does not, the plugin is skipped, not reported as an error).
 
 What a teammate sees:
 
 - **Interactive:** after they accept the workspace trust dialog for the folder, Claude Code registers the marketplace and installs and enables the plugin at the next session start.
-- **Untrusted folder:** the `extraKnownMarketplaces` entry is ignored silently. No marketplace, no plugin, no message.
+- **Untrusted folder:** the `extraKnownMarketplaces` entry is ignored silently: the marketplace is not added from this file, and there is no message.
 - **`claude -p` and CI:** the entry applies only in a folder whose trust was already accepted interactively (or `hasTrustDialogAccepted` is set in `~/.claude.json`). Installs run in the background, so the first turn can miss the plugin; set `CLAUDE_CODE_SYNC_PLUGIN_INSTALL=1` to wait for it.
+
+Full guide (refusals, pin upgrades, supply-chain notes, undo): [team-rollout.md](../team-rollout.md).
 
 ## Roll out to an organization (managed settings)
 
-Admins can force the plugin on every machine with `managed-settings.json` (macOS `/Library/Application Support/ClaudeCode/`, Linux and WSL `/etc/claude-code/`, Windows `C:\Program Files\ClaudeCode\`), MDM, or server-managed settings. Users cannot disable a managed plugin.
+`kya team managed-settings` prints the same two keys with the same tag pin. Admins deploy them on every machine with `managed-settings.json` (macOS `/Library/Application Support/ClaudeCode/`, Linux and WSL `/etc/claude-code/`, Windows `C:\Program Files\ClaudeCode\`), MDM, or server-managed settings. Users cannot disable a managed plugin.
+
+To restrict users to your marketplace, pair this with `strictKnownMarketplaces`, copying the exact source including its `ref`; see [team-rollout.md](../team-rollout.md) and the [organization guide](https://code.claude.com/docs/en/plugins/org). This rollout is advisory like the plugin itself.
+
+## Hosted-plane hook for a fleet (beta, managed settings)
+
+The plugin hook above is local only. For the hosted-plane hook, wire it per user with `kya connect claude --hooks --hosted --plane-config <absolute path>`, or deploy it in managed settings. A repository's `.claude/settings.json` can set `"disableAllHooks": true`, which turns off user and plugin hooks but not managed ones. `allowManagedHooksOnly` (managed settings only) blocks every hook that managed settings did not deploy, including this plugin's hooks unless the plugin is force-enabled there.
 
 ```json
 {
-  "extraKnownMarketplaces": {
-    "shield-kya": {
-      "source": { "source": "github", "repo": "The-Pixel-Boys/shield-kya" },
-      "autoUpdate": true
-    }
-  },
-  "enabledPlugins": { "kya@shield-kya": true }
+  "allowManagedHooksOnly": true,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/usr/local/bin/node\" \"/usr/local/lib/node_modules/@shield-agent/kya/dist/cli.js\" hook --host claude --plane-config \"/Users/you/.kya/hosted.json\"",
+            "timeout": 5,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ]
+  }
 }
 ```
 
-To restrict users to your marketplace, pair this with `strictKnownMarketplaces`; see the [organization guide](https://code.claude.com/docs/en/plugins/org). This rollout is advisory like the plugin itself.
+`onFailure` needs Claude Code 2.1.295 or later. The config file format, the beta limits and the full behaviour table are in [hosted-hook.md](../hosted-hook.md).
 
 ## Already ran `kya start`?
 

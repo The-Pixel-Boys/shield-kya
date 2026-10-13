@@ -8,7 +8,7 @@
  * Offline sample: eval-tool --offline (demo only; not production PEP).
  */
 
-import { realpathSync } from "node:fs";
+import { realpathSync, writeSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolveConfig } from "./config.js";
 import { KyaError } from "./errors.js";
@@ -81,6 +81,7 @@ import {
 } from "./commands/invoke.js";
 import { runSandboxCommand } from "./commands/sandbox.js";
 import { runHook } from "./commands/hook.js";
+import { crashDecision, guardStream, hostedCrashHandler, planeBudgetMs } from "./commands/hosted-hook.js";
 import { importOptionsFromArgs, runImport } from "./commands/import-traces.js";
 import {
   investigateOptionsFromArgs,
@@ -113,6 +114,7 @@ import {
   shouldSkipUpdateCheck,
 } from "./update-check.js";
 import { runUpdate } from "./commands/update.js";
+import { formatTeamInitHuman, managedSettings, runTeamInit } from "./commands/team.js";
 import {
   maybePromptConsent,
   maybeSpawnHookPing,
@@ -136,10 +138,15 @@ Commands:
   connect <host>    Wire KYA MCP into a coding host config
                     (${connectableHosts().join("|")}; --project for project scope, --force to overwrite)
                     --hooks also wires the host's PreToolUse hook (claude|grok|kimi)
+                    --hooks --hosted --plane-config <abs path> wires the hosted hook (claude, beta)
                     --gate points the host at the local kya gateway (kya gate run)
   gate              Local MCP gateway: govern + audit tool calls to any MCP server
                     (init | setup | doctor | status | run | stop)
   init              Scaffold .kya/ config + sample tools + .env.example
+  team init         Enable the Claude Code plugin for everyone who opens this repo:
+                    merges a tag-pinned marketplace + enabledPlugins into the project's
+                    .claude/settings.json (--dry-run shows the change, writes nothing)
+  team managed-settings  Print the managed-settings JSON an admin deploys
   update            Self-update to the latest npm version (kya start warns when
                     a newer release exists; --no-update-check / KYA_UPDATE_CHECK=0 opts out)
   register-agent    POST /api/v1/kya/agents (human mint; server applies allow/break-glass/approve)
@@ -153,6 +160,10 @@ Commands:
                     timeout needs onFailure=block in the plugin hooks.json.
                     Records once per tool_use_id (dual-hook safe). Never-list DENY
                     blocks in both modes.
+                    --plane-config <abs path> (beta): evaluate on the hosted plane,
+                    fail closed; key/URL/agent come only from that 0600 file.
+                    --plane-shadow records hosted verdicts without blocking;
+                    --plane-budget-ms <n> total plane budget (default 3000, max 4000).
   receipt           Activity report HTML/JSON/MD (default: last 3 days, all tools; --open)
                     --q pre-fills feed search · --share publishes a redacted summary (see --share-url)
   invoke            Authorize on the plane after Allow or APPROVED. Never runs the write here.
@@ -261,6 +272,14 @@ const defaultIo: CliIo = {
   exit: (c) => process.exit(c),
 };
 
+/** Set by the hosted hook: the CLI entry exits right after the answer is flushed. */
+let exitWhenDone = false;
+
+/** Whether the CLI entry will exit right after the hook answer (hosted mode). Exposed for tests. */
+export function hostedExitPending(): boolean {
+  return exitWhenDone;
+}
+
 /** Testable entry - does not call process.exit when custom io.exit is provided that throws. */
 export async function runCli(
   argv: readonly string[],
@@ -354,6 +373,11 @@ export async function runCli(
       }
 
       case "connect": {
+        if (parsed.flags["plane-config"] !== undefined && !flagBool(parsed.flags, "hosted")) {
+          // Without --hosted this would quietly wire the local, fail-open hook.
+          io.error("--plane-config needs --hosted (kya connect claude --hooks --hosted --plane-config <absolute path>)");
+          return 2;
+        }
         const host = parsed.positionals[0];
         if (!host) {
           io.error(
@@ -379,9 +403,16 @@ export async function runCli(
             ? ("project" as const)
             : ("global" as const);
         if (!config.json) await maybePromptConsent(io, env);
+        const hosted = flagBool(parsed.flags, "hosted")
+          ? {
+              configPath: flagString(parsed.flags, "plane-config") ?? "",
+              strict: flagBool(parsed.flags, "strict"),
+              shadow: flagBool(parsed.flags, "plane-shadow"),
+            }
+          : undefined;
         const result = await runConnect(
           config,
-          { host, scope, force, hooks, ...(gate ? { gateUrl: gateMcpUrl(env) } : {}) },
+          { host, scope, force, hooks, hosted, ...(gate ? { gateUrl: gateMcpUrl(env) } : {}) },
           env,
         );
         if (config.json) {
@@ -484,6 +515,24 @@ export async function runCli(
           for (const p of result.skipped) io.log(`  exists:  ${p}`);
           io.log("Next: kya start");
         }
+        return 0;
+      }
+
+      case "team": {
+        const sub = parsed.positionals[0];
+        if (sub === "managed-settings") {
+          io.log(JSON.stringify(managedSettings(), null, 2));
+          return 0;
+        }
+        if (sub !== "init") {
+          io.error("Usage: kya team init [--dry-run] [--json] | kya team managed-settings");
+          return 2;
+        }
+        // Present means on (like --fail-closed): parseArgs would let `--dry-run x` swallow x.
+        const dr = parsed.flags["dry-run"];
+        const dryRun = dr !== undefined && dr !== false && !/^(false|0)$/i.test(String(dr));
+        const result = runTeamInit({ cwd, env, dryRun });
+        io.log(flagBool(parsed.flags, "json") ? JSON.stringify(result, null, 2) : formatTeamInitHuman(result));
         return 0;
       }
 
@@ -884,6 +933,29 @@ export async function runCli(
         // Present means on, except an explicit false/0.
         const fcFlag = parsed.flags["fail-closed"];
         const failClosed = fcFlag !== undefined && fcFlag !== false && !/^(false|0)$/i.test(String(fcFlag));
+        // Hosted plane (beta): argv only. Missing or empty path still means hosted (it denies PLANE_CONFIG).
+        const planeFlag = parsed.flags["plane-config"];
+        const plane = planeFlag === undefined
+          ? undefined
+          : {
+              configPath: typeof planeFlag === "string" ? planeFlag : "",
+              shadow: flagBool(parsed.flags, "plane-shadow"),
+              budgetMs: planeBudgetMs(parsed.flags["plane-budget-ms"]),
+              allowHttpLoopback: flagBool(parsed.flags, "plane-allow-http-loopback"),
+            };
+        if (plane && isCliEntry()) {
+          // Hosted: the key is redacted from anything written, and a crash denies (exit 2), never exit 1.
+          guardStream(process.stdout);
+          guardStream(process.stderr);
+          const crash = hostedCrashHandler({
+            shadow: plane.shadow,
+            out: (t) => writeSync(1, t),
+            err: (t) => writeSync(2, t),
+            exit: (c) => process.exit(c),
+          });
+          process.on("uncaughtException", crash);
+          process.on("unhandledRejection", crash);
+        }
         let stdinText = "";
         if (!process.stdin.isTTY) {
           stdinText = await new Promise<string>((res) => {
@@ -900,9 +972,26 @@ export async function runCli(
             );
           });
         }
-        const r = await runHook({ host, strict, failClosed, stdinText, env, cwd });
-        if (r.stdout) process.stdout.write(r.stdout);
-        if (r.stderr) process.stderr.write(r.stderr);
+        let r;
+        try {
+          r = await runHook({ host, strict, failClosed, stdinText, env, cwd, plane });
+        } catch (e) {
+          if (!plane) throw e;
+          // Hosted: an escaped error follows the crash decision (deny exit 2), never the generic exit 1.
+          // Exit explicitly in every hosted mode, shadow included: no lingering handle may outlive it.
+          exitWhenDone = true;
+          const d = crashDecision(plane.shadow);
+          io.error(d.reason);
+          if (d.code === 2) {
+            process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: d.reason } })}\n`);
+          }
+          return d.code;
+        }
+        // Await the write callbacks: pipes can be async, and hosted mode exits explicitly below.
+        if (r.stdout) await new Promise<void>((ok) => process.stdout.write(r.stdout, () => ok()));
+        if (r.stderr) await new Promise<void>((ok) => process.stderr.write(r.stderr, () => ok()));
+        // Hosted: no lingering socket may hold the hook past the host timeout.
+        if (plane) exitWhenDone = true;
         // After the answer is out. Opt-in, at most daily, detached: the hook never waits on the network.
         // Skipped when another hook copy already handled this tool_use_id.
         if (r.firstSeen !== false) maybeSpawnHookPing({ env, cwd, host });
@@ -962,6 +1051,6 @@ function isCliEntry(): boolean {
 
 if (isCliEntry()) {
   void runCli(process.argv.slice(2)).then((code) => {
-    if (code !== 0) process.exit(code);
+    if (code !== 0 || exitWhenDone) process.exit(code);
   });
 }

@@ -6,7 +6,8 @@ does not serve npm `latest`.
 
 | Channel | Source here | Live location | State |
 |---|---|---|---|
-| npm | `package.json` | npmjs.com | automated on the `kya-v*` tag |
+| npm | `package.json` | npmjs.com | automated on the `kya-v*` tag, only after the public repo sync merged |
+| GitHub Release | none | `The-Pixel-Boys/shield-kya` Releases `vX.Y.Z` | automated after npm publish, with the `vX.Y.Z` tag |
 | Homebrew | `homebrew/shield-kya.rb` | `The-Pixel-Boys/homebrew-tap` `Formula/shield-kya.rb` | bump script + manual copy; tested in the `homebrew/brew` container |
 | Scoop | `scoop/shield-kya.json` | `The-Pixel-Boys/scoop-bucket` `bucket/shield-kya.json` | bump script + manual copy; **UNVERIFIED on Windows** |
 | Docker / GHCR | `docker/Dockerfile` | `ghcr.io/the-pixel-boys/shield-kya` (not published yet) | draft, no publish step |
@@ -130,5 +131,10 @@ Register each as a CI secret available to tag builds only.
    `scoop-bucket` `bucket/shield-kya.json` (token: `kya_pkg_pat`).
 5. Image: build and push `:X.Y.Z` and `:latest` (once the GHCR token and publish step exist).
 6. Snap and WinGet: once those channels exist.
-7. Confirm the release watchdog reports `OK` (it compares npm `latest` with the live tap formula and Scoop
-   bucket). A new channel is enabled in the watchdog's `KYA_CHANNELS` list in the same change that adds its probe.
+7. Confirm the release watchdog reports `OK` (it compares npm `latest` with the live tap formula, the Scoop
+   bucket and this repo's latest GitHub Release, each with a grace period for a release that is only hours
+   old). A new channel is enabled in the watchdog's `KYA_CHANNELS` list in the same change that adds its probe.
+
+The release pipeline itself fails red unless npm `latest`, this repo's `main`, its `vX.Y.Z` tag and its latest
+GitHub Release all agree. Homebrew and Scoop are bumped by the steps above after publish, so only the watchdog
+checks them. Next step (not built yet): bump the tap and bucket from the pipeline with `kya_pkg_pat`.

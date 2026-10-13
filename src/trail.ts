@@ -62,6 +62,10 @@ export interface TrailEvent {
   readonly sourceHash?: string;
   /** agt import: false when the source log's hash chain did not verify. */
   readonly chainVerified?: boolean;
+  /** Hosted hook with --plane-shadow: the verdict was recorded, never enforced (except the never-list). */
+  readonly shadow?: boolean;
+  /** Hosted hook: env or repo config tried to steer it and was ignored. */
+  readonly configIgnored?: boolean;
 }
 
 export function globalTrailPath(env: NodeJS.ProcessEnv = process.env): string {
@@ -221,6 +225,8 @@ function parseTrailEvent(raw: unknown): TrailEvent | undefined {
     ...(typeof e.importedFrom === "string" ? { importedFrom: e.importedFrom } : {}),
     ...(typeof e.sourceHash === "string" ? { sourceHash: e.sourceHash } : {}),
     ...(typeof e.chainVerified === "boolean" ? { chainVerified: e.chainVerified } : {}),
+    ...(typeof e.shadow === "boolean" ? { shadow: e.shadow } : {}),
+    ...(typeof e.configIgnored === "boolean" ? { configIgnored: e.configIgnored } : {}),
   };
 }
 
