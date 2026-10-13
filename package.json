@@ -1,6 +1,6 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.25.0",
+  "version": "0.26.1",
   "description": "Shield KYA - Know Your AI Agent. Audit trail and traceability for AI agents. Gate, record, and certify every tool call.",
   "license": "MIT",
   "type": "module",

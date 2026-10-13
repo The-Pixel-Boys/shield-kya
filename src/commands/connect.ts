@@ -23,7 +23,8 @@ import { fileURLToPath } from "node:url";
 import type { ResolvedConfig } from "../config.js";
 import { UsageError } from "../errors.js";
 import { hostReload, hostRunning, listProcessNames, reloadMessage } from "../host-reload.js";
-import { hookSupported, wireHook } from "./wire-hooks.js";
+import { hookSupported, wireHook, type HostedHookWiring } from "./wire-hooks.js";
+import { loadPlaneConfig, PlaneError } from "./hosted-hook.js";
 import { atomicWriteSync } from "../fs-atomic.js";
 
 export { atomicWriteSync } from "../fs-atomic.js";
@@ -221,6 +222,8 @@ export interface ConnectInput {
   readonly force?: boolean;
   /** Also wire the host's PreToolUse hook (claude/grok/kimi only). */
   readonly hooks?: boolean;
+  /** With hooks: wire the hosted-plane hook (beta, claude only) pointing at this config file. */
+  readonly hosted?: HostedHookWiring;
   /** Wire the "shield-kya-gate" remote entry at this URL (from a running kya gateway). */
   readonly gateUrl?: string;
   /** Test hook: running process basenames instead of a live ps scan. */
@@ -504,6 +507,18 @@ export async function runConnect(
       `no hook wiring for ${input.host} - supported: claude, grok, kimi`,
     );
   }
+  if (input.hosted) {
+    if (!input.hooks) throw new UsageError("--hosted needs --hooks (it wires the hosted PreToolUse hook)");
+    if (input.host.trim().toLowerCase() !== "claude") {
+      throw new UsageError("--hosted hook wiring is claude only in this beta (needs the host's onFailure \"block\")");
+    }
+    // Same loader the hook runs, so a bad file fails here and not on the first tool call.
+    try {
+      loadPlaneConfig(input.hosted.configPath, { cwds: [config.cwd], home });
+    } catch (e) {
+      throw new UsageError(e instanceof PlaneError ? `--plane-config: ${e.message}` : "--plane-config could not be validated");
+    }
+  }
   const wired = wireHost({
     host: input.host,
     scope: input.scope,
@@ -517,7 +532,7 @@ export async function runConnect(
   if (input.hooks) {
     let r;
     try {
-      r = wireHook({ host: wired.host, home, force: input.force });
+      r = wireHook({ host: wired.host, home, force: input.force, hosted: input.hosted });
     } catch (err) {
       // The MCP write already landed - say so, so the user knows the state.
       if (err instanceof UsageError) {

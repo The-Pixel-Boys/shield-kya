@@ -1,6 +1,6 @@
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { UsageError } from "../src/errors.js";
 import {
@@ -130,13 +130,19 @@ describe("attestations store", () => {
     expect(statSync(attestationsPath(cwd)).mode & 0o777).toBe(0o600);
   });
 
-  it("a failed write leaves the prior store intact", () => {
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)("a failed write leaves the prior store intact", () => {
     const cwd = tmp();
     recordAttestation(cwd, "SOC-01", "runbook v1");
-    // Force the tmp write inside atomicWriteSync to fail (EISDIR): the crash
-    // path must not truncate or corrupt the existing store.
-    mkdirSync(`${attestationsPath(cwd)}.kya-tmp-${process.pid}`);
-    expect(() => recordAttestation(cwd, "SOC-02", "runbook v2")).toThrow();
+    // Force the tmp create inside atomicWriteSync to fail (EACCES on a read-only
+    // dir; the tmp name is random, so it cannot be pre-planted): the crash path
+    // must not truncate or corrupt the existing store.
+    const dir = dirname(attestationsPath(cwd));
+    chmodSync(dir, 0o555);
+    try {
+      expect(() => recordAttestation(cwd, "SOC-02", "runbook v2")).toThrow();
+    } finally {
+      chmodSync(dir, 0o755);
+    }
     const map = loadAttestations(cwd);
     expect(map.size).toBe(1);
     expect(map.get("SOC-01")?.text).toBe("runbook v1");
