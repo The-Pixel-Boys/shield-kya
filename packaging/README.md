@@ -138,3 +138,62 @@ Register each as a CI secret available to tag builds only.
 The release pipeline itself fails red unless npm `latest`, this repo's `main`, its `vX.Y.Z` tag and its latest
 GitHub Release all agree. Homebrew and Scoop are bumped by the steps above after publish, so only the watchdog
 checks them. Next step (not built yet): bump the tap and bucket from the pipeline with `kya_pkg_pat`.
+
+## Copy and screenshot parity
+
+`channel-copy.json` (package root) is the single source of truth for how every channel describes kya:
+`short` (the tagline), `long` (the description), `variants` for channels that are a different product
+surface (`mcp` for `server.json` / `manifest.json`, `plugin` for the Claude marketplace and plugin manifests (hooks only, advisory), `python`
+for the Python shim's `pyproject.toml`, `webInstall` / `webHowKyaWorks` for the shield-agent.com page descriptions), and
+`screenshots` (file, sha256, alt) for every image in `assets/` (png, jpg, jpeg, webp, svg, gif).
+Every variant starts with the tagline. Keep it truthful: local OSS is advisory and fails open except
+the never-list. The checker rejects copy and alt texts that claim enforcement, fail-closed behaviour,
+"blocks every / all", a guarantee, production readiness, or GA / general availability.
+
+To change copy: edit `channel-copy.json`, then
+
+```bash
+cd sdks/kya
+pnpm sync:channel-copy     # rewrites every drifted description in place
+pnpm check:channel-copy    # what CI runs (with --require-all in the monorepo)
+```
+
+To change a screenshot: replace the image in `assets/` (the source of truth), paste the sha256 the
+check prints into `channel-copy.json`, and run `pnpm sync:channel-copy`, which copies it over the
+same-named web copy where that tree exists. A new image also needs an `alt`. A web image with the same
+name but another format (for example a `.jpg` re-encode of an `assets/` `.png`) or with no `assets/`
+counterpart cannot be byte-compared: the check prints it as `not covered` and does not fail.
+
+Checked in this repo: `package.json`, `manifest.json`, `server.json` (MCP registry limit: 100
+chars), `.claude-plugin/marketplace.json` (top level and every plugin entry),
+`plugins/kya/.claude-plugin/plugin.json`, `.cursor-plugin/plugin.json` (mirrored from this package
+to the public repo, so the checked copy is the one Cursor reads), the monorepo copy of the Python
+shim's `pyproject.toml` (`[project]` table only; not the PyPI source, see below), `homebrew/shield-kya.rb` `desc` (brew audit style: no trailing period, no leading
+article, at most 80 chars), `scoop/shield-kya.json`, the newest `winget/` locale manifest, the
+README lead paragraph, README image links (must stay inside the package, or they 404 in the public
+mirror), and the shield-agent.com install / how-kya-works meta
+descriptions. Comparison is exact (case and whitespace); a winget `Description` wrapped over several
+lines counts as drift and `--write` unwraps it. A file that is absent (the public mirror has no Python shim or web tree) is skipped and
+printed; a file that exists but lacks the field fails.
+
+Not covered, by design: `mcp.json` (a client config example) and the `ci/` templates (CircleCI orb,
+Bitbucket pipe, GitLab) describe the CI integration, not the product. The Docker image has no
+description `LABEL` yet.
+
+Channels CI cannot edit. Paste this text by hand when it drifts:
+
+| Channel | Where | Text |
+|---|---|---|
+| GitHub repo description | `The-Pixel-Boys/shield-kya` settings, About | `long` |
+| VS Code Marketplace / Open VSX | extension listing (built from the extension's own manifest) | `long` |
+| Claude plugin directory / Cursor marketplace pages | listing forms | `variants.plugin` (Claude, hooks only) / `long` (Cursor) |
+| PyPI `shield-kya` | published from the public repo's own `kya-python/` (kept on the public side, not mirrored from here, so its `pyproject.toml` is not checked); set its `[project].description` at the next Python shim release | `variants.python` |
+| npm, MCP registry | update on the next kya release (from `package.json` / `server.json`) | `long` / `variants.mcp` |
+| Homebrew tap, Scoop bucket | update on the next manual copy of `homebrew/` and `scoop/` | `short` without the period / `long` |
+
+`long` today: "Audit trail and traceability for AI agents. See what every coding agent did, with opt-in
+human approval and signed certify."
+`variants.python` today: "Audit trail and traceability for AI agents. In-process kya shim for Python
+agent frameworks (offline evaluate via the kya CLI)."
+`variants.plugin` today: "Audit trail and traceability for AI agents. See what every coding agent did. Advisory:
+records every tool call, blocks only the never-list, fails open."
