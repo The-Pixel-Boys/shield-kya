@@ -30,7 +30,7 @@ jobs:
           set -euo pipefail
           tag="gate-v${VER}"
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "kya gateway binaries v${VER}" \
+            gh release create "$tag" --latest=false --title "kya gateway binaries v${VER}" \
               --notes "Repacked upstream gateway v${VER} (Apache-2.0; LICENSE/NOTICE embedded in each tarball)."
           fi
 
