@@ -18,6 +18,7 @@ export type TrailProduct =
   | "cursor"
   | "claude"
   | "codex"
+  | "gemini"
   | "grok"
   | "kimi"
   | "ide"
@@ -115,6 +116,8 @@ export function productLabel(p: TrailProduct | undefined): string {
       return "Claude Code";
     case "codex":
       return "Codex";
+    case "gemini":
+      return "Gemini CLI";
     case "grok":
       return "Grok";
     case "kimi":
@@ -141,6 +144,8 @@ export function hostToProduct(host: string): TrailProduct {
       return "cursor";
     case "codex":
       return "codex";
+    case "gemini":
+      return "gemini";
     default:
       return "other";
   }
@@ -165,6 +170,7 @@ const TRAIL_PRODUCTS = new Set<string>([
   "cursor",
   "claude",
   "codex",
+  "gemini",
   "grok",
   "kimi",
   "ide",

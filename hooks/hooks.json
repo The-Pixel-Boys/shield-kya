@@ -1,0 +1,34 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "name": "shield-kya-bootstrap",
+            "description": "Install the pinned kya once into the extension folder (advisory, never blocks).",
+            "command": "node \"${extensionPath}${/}plugins${/}kya${/}scripts${/}bootstrap.mjs\" @shield-agent/kya@0.27.0",
+            "env": {
+              "CLAUDE_PLUGIN_DATA": "${extensionPath}${/}.kya-runtime"
+            },
+            "timeout": 120000
+          }
+        ]
+      }
+    ],
+    "BeforeTool": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "name": "shield-kya",
+            "description": "Record every tool call on the local kya trail; block only the never-list. Fails open.",
+            "command": "node \"${extensionPath}${/}.kya-runtime${/}node_modules${/}@shield-agent${/}kya${/}dist${/}cli.js\" hook --host gemini; exit 0",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}

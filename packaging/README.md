@@ -143,7 +143,7 @@ checks them. Next step (not built yet): bump the tap and bucket from the pipelin
 
 `channel-copy.json` (package root) is the single source of truth for how every channel describes kya:
 `short` (the tagline), `long` (the description), `variants` for channels that are a different product
-surface (`mcp` for `server.json` / `manifest.json`, `plugin` for the Claude marketplace and plugin manifests (hooks only, advisory), `python`
+surface (`mcp` for `server.json` / `manifest.json`, `plugin` for the Claude marketplace, the Claude Code and Codex plugin manifests and the Gemini CLI extension (hooks only, advisory), `python`
 for the Python shim's `pyproject.toml`, `webInstall` / `webHowKyaWorks` for the shield-agent.com page descriptions), and
 `screenshots` (file, sha256, alt) for every image in `assets/` (png, jpg, jpeg, webp, svg, gif).
 Every variant starts with the tagline. Keep it truthful: local OSS is advisory and fails open except
@@ -166,7 +166,7 @@ counterpart cannot be byte-compared: the check prints it as `not covered` and do
 
 Checked in this repo: `package.json`, `manifest.json`, `server.json` (MCP registry limit: 100
 chars), `.claude-plugin/marketplace.json` (top level and every plugin entry),
-`plugins/kya/.claude-plugin/plugin.json`, `.cursor-plugin/plugin.json` (mirrored from this package
+`plugins/kya/.claude-plugin/plugin.json`, `plugins/kya/.codex-plugin/plugin.json`, `gemini-extension.json`, `.cursor-plugin/plugin.json` (mirrored from this package
 to the public repo, so the checked copy is the one Cursor reads), the monorepo copy of the Python
 shim's `pyproject.toml` (`[project]` table only; not the PyPI source, see below), `homebrew/shield-kya.rb` `desc` (brew audit style: no trailing period, no leading
 article, at most 80 chars), `scoop/shield-kya.json`, the newest `winget/` locale manifest, the
@@ -176,7 +176,7 @@ descriptions. Comparison is exact (case and whitespace); a winget `Description` 
 lines counts as drift and `--write` unwraps it. A file that is absent (the public mirror has no Python shim or web tree) is skipped and
 printed; a file that exists but lacks the field fails.
 
-Not covered, by design: `mcp.json` (a client config example) and the `ci/` templates (CircleCI orb,
+Not covered, by design: `.agents/plugins/marketplace.json` (the Codex marketplace format has no description field), `mcp.json` (a client config example) and the `ci/` templates (CircleCI orb,
 Bitbucket pipe, GitLab) describe the CI integration, not the product. The Docker image has no
 description `LABEL` yet.
 

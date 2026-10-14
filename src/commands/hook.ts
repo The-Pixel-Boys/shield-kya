@@ -1,6 +1,6 @@
 /**
  * kya hook - PreToolUse interception for hosts with native hooks
- * (Claude Code, Grok, Kimi Code). Default: offline local evaluate only, no
+ * (Claude Code, Codex, Grok, Kimi Code; Gemini CLI BeforeTool). Default: offline local evaluate only, no
  * network, sub-second, fail-open on any internal error unless --fail-closed.
  * DENY (local never-list) blocks; REQUIRE_APPROVE records advisory unless
  * --strict. With --plane-config (beta) it evaluates on the hosted plane and
@@ -93,6 +93,27 @@ function readUsageShape(raw: unknown): HookUsage | undefined {
   };
 }
 
+/**
+ * Gemini CLI names MCP tools `mcp_<server>_<tool>` (single underscores, ambiguous when names
+ * contain `_`) and sends the parts in `mcp_context`. Rebuild the `mcp__<server>__<tool>` id the
+ * never-list and the trail use everywhere else. Done at parse time so the error fallback in
+ * runHook sees the same id. Read for BeforeTool payloads only: on every other event `tool_name`
+ * wins, so a stray mcp_context can never change a Claude/Codex/other verdict.
+ */
+function geminiMcpToolId(raw: unknown): string | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const c = raw as Record<string, unknown>;
+  const server = typeof c.server_name === "string" ? c.server_name.trim() : "";
+  const tool = typeof c.tool_name === "string" ? c.tool_name.trim() : "";
+  return server && tool ? `mcp__${server}__${tool}` : undefined;
+}
+
+const isBeforeTool = (event?: string): boolean => /^BeforeTool$/i.test(event ?? "");
+
+/** Gemini CLI reads the decision from stdout JSON (`decision`), not hookSpecificOutput: `--host gemini` or a BeforeTool payload. */
+const geminiShape = (input: HookInput, p?: HookPayload): boolean =>
+  input.host.trim().toLowerCase() === "gemini" || isBeforeTool(p?.event);
+
 /** Accept snake_case (Claude/Kimi) and camelCase (Grok) envelopes. */
 function parsePayload(stdinText: string): HookPayload | undefined {
   let raw: unknown;
@@ -121,6 +142,7 @@ function parsePayload(stdinText: string): HookPayload | undefined {
       undefined,
     cwd: typeof p.cwd === "string" ? p.cwd : undefined,
     toolName:
+      (isBeforeTool(event) ? geminiMcpToolId(p.mcp_context) : undefined) ||
       (typeof p.tool_name === "string" && p.tool_name) ||
       (typeof p.toolName === "string" && p.toolName) ||
       undefined,
@@ -135,18 +157,18 @@ function parsePayload(stdinText: string): HookPayload | undefined {
 
 const ALLOW: HookResult = { exitCode: 0, stdout: "", stderr: "" };
 
-function deny(reason: string): HookResult {
-  return {
-    exitCode: 2,
-    stdout: `${JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason: reason,
-      },
-    })}\n`,
-    stderr: `${reason}\n`,
-  };
+function deny(reason: string, gemini = false): HookResult {
+  // Gemini parses stdout JSON whatever the exit code, and a JSON body without `decision` means allow.
+  const body = gemini
+    ? { decision: "deny", reason }
+    : {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: reason,
+        },
+      };
+  return { exitCode: 2, stdout: `${JSON.stringify(body)}\n`, stderr: `${reason}\n` };
 }
 
 const SEEN_TTL_MS = 24 * 3600_000;
@@ -227,7 +249,7 @@ function auditedDeny(
     // Only for NEVER_EVENT: every hook copy reaches the same never-list verdict,
     // so the claim only collapses duplicate rows/notifies and never the verdict.
     if (dedupe && payload?.toolUseId && !claimToolUse(payload.toolUseId, payload.sessionId, input.env)) {
-      return deny(reason);
+      return deny(reason, geminiShape(input, payload));
     }
     const trailCwd = payload?.cwd?.trim() || input.cwd;
     const ev = {
@@ -244,7 +266,7 @@ function auditedDeny(
     try { appendTrail(trailCwd, ev, input.env); } catch { /* audit is best effort */ }
     maybeSpawnNotifyFlush({ env: input.env, cwd: trailCwd, event: ev });
   } catch { /* never block the deny itself */ }
-  return deny(reason);
+  return deny(reason, geminiShape(input, payload));
 }
 
 // Non-PreToolUse hook events that legitimately carry no gate decision.
@@ -258,7 +280,7 @@ export async function runHook(input: HookInput): Promise<HookResult> {
     if (!payload) {
       return input.failClosed ? auditedDeny("KYA fail-closed: unreadable hook payload", "FAIL_CLOSED", input) : ALLOW;
     }
-    const isPre = !payload.event || /^(PreToolUse|pre[_-]tool[_-]use)$/i.test(payload.event);
+    const isPre = !payload.event || /^(PreToolUse|pre[_-]tool[_-]use|BeforeTool)$/i.test(payload.event);
     // Fail-closed: an event name we do not recognize is evaluated, not waved through.
     if (!isPre && (!input.failClosed || OTHER_EVENT.test(payload.event ?? ""))) return ALLOW;
     if (!payload.toolName) {
@@ -335,10 +357,10 @@ export async function runHook(input: HookInput): Promise<HookResult> {
     }
 
     if (response.verdict === "DENY") {
-      return { ...deny(`KYA denied ${toolName}: ${response.reasonCode}`), firstSeen };
+      return { ...deny(`KYA denied ${toolName}: ${response.reasonCode}`, geminiShape(input, payload)), firstSeen };
     }
     if (input.strict && response.verdict === "REQUIRE_APPROVE") {
-      return { ...deny(`KYA strict mode: ${toolName} requires approval (${response.reasonCode})`), firstSeen };
+      return { ...deny(`KYA strict mode: ${toolName} requires approval (${response.reasonCode})`, geminiShape(input, payload)), firstSeen };
     }
     return { ...ALLOW, firstSeen };
   } catch {

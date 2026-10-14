@@ -345,6 +345,7 @@ const PRODUCT_ALIASES: Record<string, string[]> = {
   cursor: ["cursor"],
   claude: ["claude"],
   codex: ["codex"],
+  gemini: ["gemini"],
   grok: ["grok"],
   kimi: ["kimi"],
 };

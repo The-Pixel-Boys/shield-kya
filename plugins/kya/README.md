@@ -13,3 +13,5 @@ Advisory and fail-open: records every tool call on the local trail and blocks on
 - `.mcp.json`: the `shield-kya` MCP server from the same copy, with no hosted-plane base URL and no key (webhooks, OTLP and opt-in telemetry can still send; see the guide).
 
 Full guide (team and admin rollout, uninstall, limits): [`docs/hosts/claude-plugin.md`](../../docs/hosts/claude-plugin.md).
+
+Codex CLI loads this same folder through `.codex-plugin/plugin.json` (it wins over `.claude-plugin/` in Codex): hooks come from `hooks/codex-hooks.json` (shell-string commands with `${PLUGIN_ROOT}` / `${PLUGIN_DATA}`, `--host codex`) and no MCP server is bundled. Install with `codex plugin marketplace add The-Pixel-Boys/shield-kya` and `codex plugin add kya@shield-kya`, then trust the hooks in `/hooks`. Codex trusts the hook commands, not the scripts they run: the SessionStart command carries the kya version, so each release asks again, and an auto-upgraded marketplace runs whatever this repo's main branch holds at the next start (pin a release ref to control that). Guide: [`docs/hosts/codex.md`](../../docs/hosts/codex.md#codex-plugin).
