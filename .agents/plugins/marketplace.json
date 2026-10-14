@@ -1,0 +1,20 @@
+{
+  "name": "shield-kya",
+  "interface": {
+    "displayName": "Shield KYA"
+  },
+  "plugins": [
+    {
+      "name": "kya",
+      "source": {
+        "source": "local",
+        "path": "./plugins/kya"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

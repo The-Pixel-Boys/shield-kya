@@ -1,6 +1,6 @@
 {
   "name": "shield-kya",
-  "version": "0.26.2",
+  "version": "0.27.0",
   "description": "Audit trail and traceability for AI agents. See what every coding agent did, with opt-in human approval and signed certify.",
   "author": {
     "name": "Shield Agent",
@@ -11,6 +11,7 @@
   "license": "MIT",
   "keywords": ["kya", "know-your-agent", "policy", "mcp", "approval", "dual-plane"],
   "logo": "assets/logo.svg",
+  "hooks": "./.cursor-plugin/hooks.json",
   "variables": {
     "type": "object",
     "properties": {

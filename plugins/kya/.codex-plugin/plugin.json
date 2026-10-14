@@ -1,0 +1,27 @@
+{
+  "name": "kya",
+  "version": "0.27.0",
+  "description": "Audit trail and traceability for AI agents. See what every coding agent did. Advisory: records every tool call, blocks only the never-list, fails open.",
+  "author": {
+    "name": "MFR Limited (Shield KYA)",
+    "email": "it@shield-agent.com",
+    "url": "https://shield-agent.com"
+  },
+  "homepage": "https://shield-agent.com/install",
+  "repository": "https://github.com/The-Pixel-Boys/shield-kya",
+  "license": "MIT",
+  "keywords": [
+    "audit-trail",
+    "traceability",
+    "kya",
+    "hooks"
+  ],
+  "hooks": "./hooks/codex-hooks.json",
+  "mcpServers": {},
+  "interface": {
+    "displayName": "Shield KYA",
+    "developerName": "MFR Limited (Shield KYA)",
+    "category": "Developer Tools",
+    "websiteURL": "https://shield-agent.com/install"
+  }
+}

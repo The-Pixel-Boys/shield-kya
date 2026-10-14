@@ -55,7 +55,7 @@ scoop bucket add The-Pixel-Boys https://github.com/The-Pixel-Boys/scoop-bucket.g
 scoop install shield-kya
 ```
 
-Claude Code and GitHub Copilot CLI users can also install the [plugin](#claude-code--github-copilot-cli-plugin).
+Claude Code and GitHub Copilot CLI users can also install the [plugin](#claude-code--github-copilot-cli-plugin); Codex CLI users the [Codex plugin](#codex-plugin); Gemini CLI users the [Gemini CLI extension](#gemini-cli-extension).
 
 That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/mcp.json` → `kya serve-mcp --stdio`), also **wires user-level configs for every installed host it detects** (`~/.claude.json`, `~/.kimi-code/`, `~/.grok/`, `~/.cursor/`, …), and **opens** the live activity report. The report runs in the background - you get your terminal back; `kya stop` stops it, `kya receipt --open` reopens it. Cursor, Kiro, Qwen, Amp, Droid, Cline, and Grok pick the server up live with no restart (Kimi: just a new session); Claude Code, Codex, OpenCode, Gemini, Copilot CLI, and Kilo CLI load it on next launch - `claude --resume` keeps your conversation.
 
@@ -122,6 +122,27 @@ This repo is also a Claude Code plugin marketplace named `shield-kya` with one p
 The plugin is **advisory and fails open**: it records every tool call on the local trail (`~/.kya/trail.jsonl`) and blocks only the small never-list. If kya is missing, crashes or times out, the tool call proceeds and nothing is recorded. It evaluates offline, so it has no Hold and no approval; hosted enforcement is the MCP gate path.
 
 Team rollout: commit `extraKnownMarketplaces` (the `shield-kya` GitHub source) and `enabledPlugins` (`"kya@shield-kya": true`) to the repository's `.claude/settings.json`, or force it org-wide with managed settings. Details, limits and Copilot CLI notes (hook support there is not verified; `kya connect copilot` is the verified path): [docs/hosts/claude-plugin.md](docs/hosts/claude-plugin.md).
+
+## Codex plugin
+
+The same repo is a Codex plugin marketplace (`.agents/plugins/marketplace.json`) with the same `kya` plugin:
+
+```bash
+codex plugin marketplace add The-Pixel-Boys/shield-kya
+codex plugin add kya@shield-kya
+```
+
+Then open `/hooks` in Codex CLI and trust the two Shield KYA hooks: Codex runs no plugin hook until you do. Codex trusts the hook command, not the scripts it runs; the SessionStart command carries the kya version, so each kya release asks again. Codex also auto-upgrades Git marketplaces at startup, so whoever can push to this repo can change what runs next; teams can pin a release ref (see the guide). Same behaviour as the Claude Code plugin: advisory, fails open, records every tool call Codex sends through its hooks (shell, `apply_patch`, MCP and other local tools; not hosted tools such as web search), blocks only the never-list. It bundles no MCP server; add one with `kya connect codex`. Details: [docs/hosts/codex.md](docs/hosts/codex.md#codex-plugin).
+
+## Gemini CLI extension
+
+The repo root is also a Gemini CLI extension (`gemini-extension.json` + `hooks/hooks.json`):
+
+```bash
+gemini extensions install https://github.com/The-Pixel-Boys/shield-kya
+```
+
+Same behaviour as the other plugins: advisory, fails open, records every tool call Gemini sends through its `BeforeTool` hook, blocks only the never-list. Gemini runs extension hooks without a separate trust step. The extension pins the kya version it was released with. It bundles no MCP server; see the MCP examples. Details: [docs/hosts/gemini.md](docs/hosts/gemini.md#gemini-cli-extension).
 
 ## Gate (local MCP gateway)
 
@@ -231,7 +252,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.26.2", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.27.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -271,7 +292,7 @@ Offline evaluate by default (no network, no hosted plane); an explicit config ho
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.26.2 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.27.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -282,7 +303,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI / IDE:** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.26.2 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.27.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -450,7 +471,7 @@ pnpm build
 - [OTLP metrics (OSS + hosted)](docs/otlp.md)
 - [Anonymous usage stats (opt-in): what is sent, controls, retention](docs/telemetry.md)
 - [OWASP MCP governance map](docs/owasp-mcp-governance.md)
-- [Claude Code / Copilot CLI plugin](docs/hosts/claude-plugin.md)
+- [Claude Code / Copilot CLI plugin](docs/hosts/claude-plugin.md) · [Codex plugin](docs/hosts/codex.md#codex-plugin) · [Gemini CLI extension](docs/hosts/gemini.md#gemini-cli-extension)
 - [Import the AGT audit log (CLI)](docs/import-agt.md) · [hosted](docs/import-agt-hosted.md)
 - [kya certify - Agent Trust Baseline gap reports](docs/certify.md)
 - [EU AI Act crosswalk for the Agent Trust Baseline](docs/certify-eu-ai-act.md)
