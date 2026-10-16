@@ -8,7 +8,7 @@ import type { SandboxDriver } from "./types.js";
 const pids = new Map<string, number>();
 const socks = new Map<string, string>();
 
-function resolveBin(name: string, envName: string): string {
+export function resolveBin(name: string, envName: string): string {
   const fromEnv = process.env[envName]?.trim();
   if (fromEnv) {
     if (!fromEnv.startsWith("/") || basename(fromEnv) !== name) {

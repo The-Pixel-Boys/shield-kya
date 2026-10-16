@@ -228,6 +228,15 @@ export interface ConnectInput {
   readonly gateUrl?: string;
   /** Test hook: running process basenames instead of a live ps scan. */
   readonly procs?: ReadonlySet<string>;
+  /** Test hook: whether this node knows --use-env-proxy (default: process.allowedNodeEnvironmentFlags). */
+  readonly nodeKnowsEnvProxy?: boolean;
+}
+
+/** Node 20 and 22 before 22.21.0 exit 9 on NODE_OPTIONS=--use-env-proxy before kya runs (see docs/hosted-hook.md). */
+export function hostedEnvProxyNote(knows: boolean, version: string = process.version): string {
+  return knows
+    ? ""
+    : ` Note: Node ${version} does not know --use-env-proxy, so NODE_OPTIONS=--use-env-proxy makes node exit 9 before kya runs and only the host's onFailure "block" stops that call; use Node 22.21+ or 24 for hosted mode.`;
 }
 
 function serverBlock(hostId: string, spec: HostSpec): Record<string, unknown> {
@@ -555,7 +564,8 @@ export async function runConnect(
           wired.host,
           wired.label,
           input.procs ?? listProcessNames(),
-        ) + (hooksStatus && hooksStatus !== "skipped" ? " Hooks take effect in new sessions." : ""),
+        ) + (hooksStatus && hooksStatus !== "skipped" ? " Hooks take effect in new sessions." : "") +
+        (input.hosted ? hostedEnvProxyNote(input.nodeKnowsEnvProxy ?? process.allowedNodeEnvironmentFlags.has("--use-env-proxy")) : ""),
   };
 }
 

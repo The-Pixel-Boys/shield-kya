@@ -79,7 +79,7 @@ include:
 ## Notes
 
 - The runner must have outbound access to the public npm registry.
-- Node.js 24+ is required; the component pins the `node:24` Docker image.
+- Node.js 22+ is required (24 recommended); the component pins the `node:24` Docker image.
 - `kya certify` exits non-zero when gaps exist and `--fail-on gap` is set. Use `--fail-on never` to report gaps without failing the pipeline.
 - For commands with subcommands (for example `orr run`), pass the full command string in `command`.
 

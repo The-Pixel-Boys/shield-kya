@@ -1,0 +1,6 @@
+# Own workspace root: the extension is not part of the kya npm package (sdks/kya/pnpm-workspace.yaml).
+packages:
+  - "."
+
+allowBuilds:
+  "@vscode/vsce-sign": false

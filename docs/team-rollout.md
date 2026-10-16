@@ -4,7 +4,7 @@ Audit trail and traceability for AI agents. See what every coding agent did, for
 
 Two ways to spread the `kya` plugin (see [hosts/claude-plugin.md](hosts/claude-plugin.md) for what the plugin does):
 
-- **Per repository:** `kya team init` writes the project's `.claude/settings.json`. A teammate who opens the repository in Claude Code, accepts the folder trust prompt, and has Node.js 24+ and `npm` gets the plugin, provided the pinned release tag exists on the public repository (see below).
+- **Per repository:** `kya team init` writes the project's `.claude/settings.json`. A teammate who opens the repository in Claude Code, accepts the folder trust prompt, and has Node.js 22+ and `npm` gets the plugin, provided the pinned release tag exists on the public repository (see below).
 - **Per organization:** `kya team managed-settings` prints the managed-settings JSON an admin deploys to every machine.
 
 Requires the first kya release that includes `kya team`. To check yours, run `kya --help`: versions that have it list `team init`; older ones answer `Unknown command: team`.
@@ -57,7 +57,7 @@ What a teammate sees after pulling the commit:
 - **Untrusted folder:** the marketplace is not added from this file, without a message. (`enabledPlugins` still applies, so a teammate who registered `shield-kya` themselves can still get the plugin.)
 - **`claude -p` and CI:** the marketplace entry applies only in a folder whose trust was already accepted interactively (or has `hasTrustDialogAccepted` in `~/.claude.json`). Installs run in the background, so the first turn can miss the plugin; set `CLAUDE_CODE_SYNC_PLUGIN_INSTALL=1` to wait for it.
 - **`Remote branch vX.Y.Z not found`** in `/plugin` or in `claude -p --output-format stream-json --verbose` output: the release tag is not on the public repository. The plugin is skipped, not reported as an error, and the session continues without it (fail open). Pin a kya version whose tag exists, or wait for the tag.
-- Each machine still needs Node.js 24+ and `npm` on the PATH; see [hosts/claude-plugin.md](hosts/claude-plugin.md).
+- Each machine still needs Node.js 22+ (24 recommended) and `npm` on the PATH; see [hosts/claude-plugin.md](hosts/claude-plugin.md).
 
 ## Per organization: `kya team managed-settings`
 

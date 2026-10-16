@@ -1,11 +1,11 @@
 class ShieldKya < Formula
   desc "Audit trail and traceability for AI agents"
   homepage "https://shield-agent.com/install"
-  url "https://registry.npmjs.org/@shield-agent/kya/-/kya-0.26.2.tgz"
-  sha256 "ef9362e1ed63e531148fb2aebb17e91cba0a6900f30cfcab6a94c5dcc968ed9b"
+  url "https://registry.npmjs.org/@shield-agent/kya/-/kya-0.27.0.tgz"
+  sha256 "16b1d6e2e04d90d378efe8367e8a85aba9a8a67c4b47ac498cc39d221fc8def8"
   license "MIT"
 
-  # kya needs Node >= 24 (package.json engines). Homebrew "node" is the current
+  # kya needs Node >= 22 (package.json engines). Homebrew "node" is the current
   # release line (26.x on 2026-10-10), which satisfies it and is what
   # Language::Node expects; node@24 is keg-only and would need PATH plumbing.
   depends_on "node"

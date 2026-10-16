@@ -189,7 +189,7 @@ export class KyaHttpClient {
     this.agentId = options.agentId;
     const fetchImpl = options.fetch ?? globalThis.fetch;
     if (typeof fetchImpl !== "function") {
-      throw new KyaError("global fetch unavailable; Node 24+ required", "NO_FETCH");
+      throw new KyaError("global fetch unavailable; Node.js 22+ required", "NO_FETCH");
     }
     this.fetchImpl = fetchImpl;
   }

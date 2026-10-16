@@ -791,6 +791,24 @@ describe("kya connect claude --hooks --hosted", () => {
     expect(h.timeout).toBe(5);
   });
 
+  it("warns, in next, when this node does not know --use-env-proxy (Node 20, 22 before 22.21)", async () => {
+    const run = (nodeKnowsEnvProxy: boolean) => {
+      const home = freshTestHome();
+      return runConnect(
+        resolveConfig({ cwd: tmp("kya-proj-"), env: { KYA_HOME: home }, flags: {}, allowMissingApiKey: true, requireApiKey: false, offline: true }),
+        { host: "claude", hooks: true, hosted: { configPath: planeFile() }, procs: new Set(), nodeKnowsEnvProxy },
+        { KYA_HOME: home },
+      );
+    };
+    const old = await run(false);
+    expect(old.next).toContain("does not know --use-env-proxy");
+    expect(old.next).toContain('only the host\'s onFailure "block" stops that call; use Node 22.21+ or 24');
+    expect((await run(true)).next).not.toContain("use-env-proxy");
+    // The real default follows this node's flag table.
+    const real = await connect(freshTestHome(), { configPath: planeFile() });
+    expect(real.next.includes("use-env-proxy")).toBe(!process.allowedNodeEnvironmentFlags.has("--use-env-proxy"));
+  });
+
   it("replaces an existing OSS kya hook instead of adding a second copy", async () => {
     const home = freshTestHome();
     mkdirSync(join(home, ".claude"), { recursive: true });

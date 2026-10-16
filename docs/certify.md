@@ -47,8 +47,8 @@ rows - see "Overall result" below.
 ## The catalog
 
 `catalog/agent-trust-baseline-v0.json` (shipped in the npm package) is the
-source of truth: 30 requirements across 6 domains, each with a `severity` and
-one machine `check` (12 kinds) or an `attest` escape hatch. Schema:
+source of truth: 31 requirements across 6 domains, each with a `severity` and
+one machine `check` (13 kinds) or an `attest` escape hatch. Schema:
 
 ```json
 {
@@ -68,7 +68,8 @@ Check kinds v0: `config_mode` (`not:"observe"`), `hooks_wired` (`min`),
 `trail_zero` / `trail_min` / `trail_ratio` (`windowDays`, `match`
 {`verdict`, `reasonCode`, `mode`, `neverEvent`}, plus `min` or `maxRatio`),
 `orr_overall` / `orr_category` (`max:"green"|"amber"`), `orr_fresh`
-(`maxAgeDays`), `sandbox_inventory` (`min`), `receipts_present` (`min`),
+(`maxAgeDays`), `sandbox_inventory` (`min`), `openshell_prover` (no params,
+see below), `receipts_present` (`min`),
 `showback_present`, `attest` (`prompt`). Trail checks read the merged trail:
 the global `~/.kya/trail.jsonl` merged with the legacy per-project
 `.kya/trail.jsonl` (pre-0.3.0 location, still honored on read). An empty
@@ -82,6 +83,29 @@ gate itself uses** (`resolveGateMode` in `src/config.ts`), so a certify
 other value is ignored) > `observe` default. Setting
 `{"gateMode": "hold"}` in `.kya/config.json` genuinely puts wrap / hook /
 eval into hold mode, not just the report.
+
+## OpenShell prover evidence (SAFE-06)
+
+SAFE-06 is optional formal-verification evidence. NVIDIA OpenShell ships
+`openshell-prover`, a standalone SMT-based verifier (deterministic, never
+LLM-as-judge) as release artifacts for linux amd64/arm64 and macOS arm64.
+When the binary is present, `kya certify` runs it against the OpenShell
+boundary policy and reports the verdict:
+
+- the policy of the newest running `openshell` sandbox is proved when one
+  exists; otherwise a default-deny policy is rendered on the fly (same
+  renderer as `kya sandbox spawn`)
+- `pass`: the prover verifies the policy grants no more than the boundary
+- `gap`: the prover runs and reports a violation
+- `insufficient_evidence`: the binary is absent (the common case on machines
+  without OpenShell; this never counts as fail), or its output is
+  unparseable. Unknown output never crashes certify and never fabricates a
+  pass.
+
+KYA never ships the binary. Locate it on `PATH` or point
+`KYA_OPENSHELL_PROVER` at an absolute path whose basename is
+`openshell-prover`. Telemetry stays disabled (`OPENSHELL_TELEMETRY_ENABLED=false`)
+on the spawned process, same as the sandbox driver.
 
 ## Overall result
 

@@ -1687,6 +1687,7 @@ function importHeroCard(card: ImportCard | undefined, nowMs: number, live: boole
       <option value="otel">OTel JSON</option>
       <option value="agt">AGT audit log</option>
       <option value="adr-sensor">ADR Sensor</option>
+      <option value="openshell">OpenShell</option>
     </select>
     <label class="sr-only" for="import-file">File path</label>
     <input id="import-file" name="file" type="text" placeholder="/path/to/traces.json" />
@@ -1696,8 +1697,8 @@ function importHeroCard(card: ImportCard | undefined, nowMs: number, live: boole
       : "";
     return `<section class="panel" aria-label="Import">
   <h2>Import</h2>
-  <p class="line">Nothing imported yet. Bring existing LangSmith, Langfuse, Phoenix, OTel, AGT, or ADR Sensor traces into the trail so they show up in this report and feed Certify.</p>
-  <p class="mute small">CLI: <code>kya import --from langsmith|langfuse|phoenix|otel|adr-sensor FILE</code> · <code>kya import --from agt</code> reads the AGT audit log</p>
+  <p class="line">Nothing imported yet. Bring existing LangSmith, Langfuse, Phoenix, OTel, AGT, ADR Sensor, or OpenShell traces into the trail so they show up in this report and feed Certify.</p>
+  <p class="mute small">CLI: <code>kya import --from langsmith|langfuse|phoenix|otel|adr-sensor|openshell FILE</code> · <code>kya import --from agt</code> reads the AGT audit log</p>
   ${form}
 </section>`;
   }
@@ -1717,7 +1718,7 @@ function importHeroCard(card: ImportCard | undefined, nowMs: number, live: boole
   <div class="chiprow">
     ${chips}
   </div>
-  <p class="mute small">${last}add more with <code>kya import --from langsmith|langfuse|phoenix|otel|adr-sensor FILE</code></p>
+  <p class="mute small">${last}add more with <code>kya import --from langsmith|langfuse|phoenix|otel|adr-sensor|openshell FILE</code></p>
 </section>`;
 }
 

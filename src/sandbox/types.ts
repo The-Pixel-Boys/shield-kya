@@ -1,4 +1,4 @@
-export type SandboxBackend = "firecracker";
+export type SandboxBackend = "firecracker" | "openshell";
 
 export interface SandboxRecord {
   readonly sandboxId: string;
@@ -6,10 +6,14 @@ export interface SandboxRecord {
   readonly createdAt: string;
   readonly status: "running" | "killed";
   readonly agentId?: string;
+  /** Backend-side name, when the backend keeps its own (openshell sandbox name). */
+  readonly externalName?: string;
 }
 
 export interface SandboxDriver {
   readonly backend: SandboxBackend;
+  /** Backend-side name for a spawned sandbox, when the backend has one. */
+  readonly externalNameFor?: (sandboxId: string) => string | undefined;
   spawn(input: {
     sandboxId: string;
     kernelPath: string;

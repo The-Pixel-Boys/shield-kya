@@ -27,6 +27,7 @@ export type RequirementCheck =
   | { readonly kind: "orr_category"; readonly id: string; readonly max: "green" | "amber" }
   | { readonly kind: "orr_fresh"; readonly maxAgeDays: number }
   | { readonly kind: "sandbox_inventory"; readonly min: number }
+  | { readonly kind: "openshell_prover" }
   | { readonly kind: "receipts_present"; readonly min: number }
   | { readonly kind: "showback_present" }
   | { readonly kind: "attest"; readonly prompt: string };
@@ -61,6 +62,7 @@ const CHECK_KINDS = new Set<string>([
   "orr_category",
   "orr_fresh",
   "sandbox_inventory",
+  "openshell_prover",
   "receipts_present",
   "showback_present",
   "attest",
@@ -179,6 +181,8 @@ function parseCheck(id: string, raw: unknown): RequirementCheck {
       return { kind: "hooks_wired", min: minOf(id, c, "hooks_wired") };
     case "sandbox_inventory":
       return { kind: "sandbox_inventory", min: minOf(id, c, "sandbox_inventory") };
+    case "openshell_prover":
+      return { kind: "openshell_prover" };
     case "receipts_present":
       return { kind: "receipts_present", min: minOf(id, c, "receipts_present") };
     case "trail_zero":

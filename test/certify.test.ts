@@ -162,7 +162,7 @@ describe("runCertify", () => {
     expect(result.exitCode).toBe(1); // unattested attest requirements are gaps
     expect(result.report.format).toBe("shield-kya-certify-report");
     expect(result.report.catalog.id).toBe("agent-trust-baseline");
-    expect(result.report.requirements).toHaveLength(30);
+    expect(result.report.requirements).toHaveLength(31);
     expect(result.report.trail.eventCount).toBe(1);
     expect(result.report.trail.verdictMix).toEqual({ ALLOW: 1, DENY: 0, REQUIRE_APPROVE: 0 });
     expect(result.report.trail.modes).toEqual({ observe: 0, hold: 1, offline: 0 });

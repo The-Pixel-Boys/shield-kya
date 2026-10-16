@@ -39,6 +39,7 @@ export async function runSandboxCommand(parsed: ParsedArgs): Promise<number> {
   const root = jailRoot(flagString(parsed.flags, "path") ?? process.cwd());
   const driver = resolveSandboxDriver(
     flagString(parsed.flags, "sandbox") ?? process.env.KYA_SANDBOX,
+    { root },
   );
 
   async function evaluate(

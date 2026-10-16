@@ -11,7 +11,7 @@ import {
   type ImportSource,
 } from "../importers/index.js";
 
-const SOURCES: readonly ImportSource[] = ["langsmith", "langfuse", "phoenix", "otel", "agt", "adr-sensor"];
+const SOURCES: readonly ImportSource[] = ["langsmith", "langfuse", "phoenix", "otel", "agt", "adr-sensor", "openshell"];
 
 export interface ImportCliOptions {
   readonly from: ImportSource | undefined;
@@ -33,7 +33,7 @@ export async function runImport(
   // agt reads AGT's own audit log, so --file is optional there.
   const file = opts.file ?? (opts.from === "agt" ? defaultAgtAuditPath(env) : undefined);
   if (!opts.from || !file) {
-    io.error("Usage: kya import --from <langsmith|langfuse|phoenix|otel|agt|adr-sensor> <file> | --file <path>");
+    io.error("Usage: kya import --from <langsmith|langfuse|phoenix|otel|agt|adr-sensor|openshell> <file> | --file <path>");
     return 2;
   }
   const result = await importTraces({ from: opts.from, file, cwd, env });
