@@ -1,7 +1,7 @@
 {
   "name": "kya",
   "displayName": "Shield KYA",
-  "version": "0.27.0",
+  "version": "0.28.0",
   "description": "Audit trail and traceability for AI agents. See what every coding agent did. Advisory: records every tool call, blocks only the never-list, fails open.",
   "author": {
     "name": "MFR Limited (Shield KYA)",

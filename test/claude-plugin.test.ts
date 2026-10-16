@@ -129,6 +129,37 @@ ${lockStage ? 'chmod 555 "$d"' : ""}
     expect(r.stdout).toBe("");
   });
 
+  /** Run SessionStart with process.versions.node faked to `v` (preloaded), the rest as Claude Code does. */
+  const runAs = (v: string, data: string, env: Record<string, string>) => {
+    const pluginRoot = join(root, "plugins/kya");
+    const sub = (s: string) => s.replaceAll("${CLAUDE_PLUGIN_ROOT}", pluginRoot).replaceAll("${CLAUDE_PLUGIN_DATA}", data);
+    const fake = `data:text/javascript,Object.defineProperty(process,"versions",{value:{...process.versions,node:"${v}"}})`;
+    return spawnSync(process.execPath, ["--import", fake, ...hook("SessionStart").args.map(sub)], {
+      encoding: "utf8",
+      env: { PATH: env.PATH ?? "", CLAUDE_PLUGIN_ROOT: pluginRoot, CLAUDE_PLUGIN_DATA: data },
+    });
+  };
+
+  it("Node floor: 22/23/24 silent, 20/21 one 'unsupported but works' note, 18 'not supported', always exit 0", () => {
+    const data = tmp();
+    seed(data, version, "process.exit(0);");
+    for (const v of ["22.0.0", "22.23.3", "23.11.1", "24.21.0"]) {
+      const r = runAs(v, data, noNpm());
+      expect(r.status, v).toBe(0);
+      expect(r.stdout, v).toBe("");
+    }
+    for (const v of ["21.7.3", "20.20.2"]) {
+      const r = runAs(v, data, noNpm());
+      expect(r.status, v).toBe(0);
+      expect(JSON.parse(r.stdout).systemMessage).toBe(`Shield KYA: Node ${v} is unsupported but works; kya supports Node.js 22+ (24 recommended).`);
+    }
+    const old = runAs("18.20.8", data, noNpm());
+    expect(old.status).toBe(0);
+    const msg = JSON.parse(old.stdout).systemMessage as string;
+    expect(msg).toContain("Node 18.20.8 is not supported by kya");
+    expect(msg).not.toMatch(/works/);
+  });
+
   it("npm missing gives a loud NOT recording message and exit 0", () => {
     const r = run(tmp(), noNpm());
     expect(r.status).toBe(0);

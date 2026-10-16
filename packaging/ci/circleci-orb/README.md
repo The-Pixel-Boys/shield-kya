@@ -103,7 +103,7 @@ jobs:
 
 ## Executor
 
-The orb provides `kya/node`, based on `cimg/node:24.0`. Node.js 24+ is required by the KYA CLI.
+The orb provides `kya/node`, based on `cimg/node:24.0`. The KYA CLI requires Node.js 22+ (24 recommended).
 
 ## Publishing
 

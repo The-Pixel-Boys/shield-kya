@@ -190,8 +190,8 @@ Commands:
                     --sign also writes an ed25519-signed evidence-bundle.json
                     (self-signed: integrity + key continuity, NOT identity)
   import            Import foreign traces into the local trail so the receipt
-                    and certify see them (--from langsmith|langfuse|phoenix|otel|adr-sensor <file>, or
-                    --from agt [--file <path>] for the AGT audit log)
+                    and certify see them (--from langsmith|langfuse|phoenix|otel|adr-sensor|openshell
+                    <file>, or --from agt [--file <path>] for the AGT audit log)
   investigate       Deterministic trail analysis: detectors, grouped incidents,
                     markdown fix briefs for coding agents (--json)
   discover          Scan this endpoint for AI agents, IDEs, runtimes, and MCP servers
@@ -214,7 +214,7 @@ Options (shared):
   --window <n>      certify: report window in days (default 30)
   --fail-on <m>     certify: gap (default, exit 1 on gaps) | never
   --pane <name>     dash pane (home|policy|agents|approvals|sessions|orr|mcp|dashboard|…)
-  --from <source>   import: trace format (langsmith|langfuse|phoenix|otel|agt|adr-sensor)
+  --from <source>   import: trace format (langsmith|langfuse|phoenix|otel|agt|adr-sensor|openshell)
   --file <path>     import: input file (agt defaults to ~/.claude/agt/audit-log.json)
   --json            Machine-readable output
   --help, -h        Show help
@@ -245,6 +245,7 @@ Examples:
   npx @shield-agent/kya dash --once --pane policy
   npx @shield-agent/kya import --from langfuse ./langfuse-export.json
   npx @shield-agent/kya import --from adr-sensor ./adr-sensor-events.jsonl
+  npx @shield-agent/kya import --from openshell ./openshell-events.jsonl
   npx @shield-agent/kya investigate
   npx @shield-agent/kya discover
   npx @shield-agent/kya discover --json

@@ -10,7 +10,7 @@
 import type { TrailEvent, TrailImportFormat } from "../trail.js";
 import { redactTrailText } from "../trail-summary.js";
 
-/** Formats mapped record by record here; "agt" has its own importer (agt.ts). */
+/** Formats mapped record by record here; "agt" and "openshell" have their own importers. */
 export type TraceSource = TrailImportFormat;
 export type ImportSource = TraceSource | "agt";
 
@@ -282,6 +282,8 @@ function mapRecordBySource(
       return mapOtel(rec, fallbackSession);
     case "adr-sensor":
       return err("adr-sensor is handled by the dedicated importer");
+    case "openshell":
+      return err("openshell is handled by the dedicated importer");
   }
 }
 
@@ -325,6 +327,8 @@ export function extractRecords(source: TraceSource, json: unknown): unknown[] {
     case "otel":
       return otlpSpans(json) ?? arr(json.spans) ?? arr(json.data) ?? [];
     case "adr-sensor":
+      return [];
+    case "openshell":
       return [];
   }
 }

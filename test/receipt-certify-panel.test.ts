@@ -100,7 +100,7 @@ describe("loadCertifyCard", () => {
     expect(card.topGaps).toEqual(expected);
   });
 
-  it("carries the full requirement detail: all 30, statuses as evaluated", () => {
+  it("carries the full requirement detail: all 31, statuses as evaluated", () => {
     const cwd = tmp();
     const home = tmp();
     seedTrail(home);
@@ -110,7 +110,7 @@ describe("loadCertifyCard", () => {
     if (!card) return;
 
     const report = computeLiveCertify(cwd, env, 30);
-    expect(card.requirements).toHaveLength(30);
+    expect(card.requirements).toHaveLength(31);
     expect(card.requirements).toEqual(report.requirements);
     // Seeded fixture: KYA_HOLD=1 → SEC-01 passes, gate title intact
     const sec01 = card.requirements.find((r) => r.id === "SEC-01");
@@ -140,8 +140,8 @@ describe("loadCertifyCard", () => {
     expect(c).toBeDefined();
     if (!c) return;
     expect(c.windowDays).toBe(30);
-    // Counts cover every catalog requirement (30) - never a partial rollup
-    expect(c.pass + c.gap + c.insufficientEvidence + c.attested).toBe(30);
+    // Counts cover every catalog requirement (31) - never a partial rollup
+    expect(c.pass + c.gap + c.insufficientEvidence + c.attested).toBe(31);
   });
 });
 

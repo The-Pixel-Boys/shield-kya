@@ -1,4 +1,4 @@
-// Shared by bump-homebrew.mjs and bump-scoop.mjs. No dependencies: Node 24 built-ins only.
+// Shared by bump-homebrew.mjs and bump-scoop.mjs. No dependencies: Node 22+ built-ins only.
 //
 // A bump rewrites the pinned npm tarball url + sha256 of one channel file to a published version.
 // The tarball sha256 only exists after `npm publish`, so a bump always runs AFTER the release.

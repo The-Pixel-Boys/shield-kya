@@ -1,0 +1,9 @@
+**
+!dist/core.js
+!dist/extension.js
+!media/icon.png
+!media/activity.svg
+!package.json
+!README.md
+!LICENSE
+!CHANGELOG.md

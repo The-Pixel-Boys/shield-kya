@@ -36,14 +36,14 @@ describe("bundled catalog", () => {
       "accountability",
       "society",
     ]);
-    expect(catalog.requirements).toHaveLength(30);
+    expect(catalog.requirements).toHaveLength(31);
     expect(defaultCatalogPath()).toMatch(/catalog\/agent-trust-baseline-v0\.json$/);
     const ids = catalog.requirements.map((r) => r.id);
-    expect(new Set(ids).size).toBe(30);
+    expect(new Set(ids).size).toBe(31);
     const attest = catalog.requirements.filter((r) => r.check.kind === "attest");
     const machine = catalog.requirements.filter((r) => r.check.kind !== "attest");
     expect(attest.length).toBe(13);
-    expect(machine.length).toBe(17);
+    expect(machine.length).toBe(18);
     // every requirement sits in a declared domain
     for (const r of catalog.requirements) {
       expect(catalog.domains).toContain(r.domain);

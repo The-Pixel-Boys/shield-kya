@@ -103,7 +103,7 @@ export interface ReportActionResult {
   readonly body: Record<string, unknown>;
 }
 
-const IMPORT_SOURCES: readonly ImportSource[] = ["langsmith", "langfuse", "phoenix", "otel", "agt", "adr-sensor"];
+const IMPORT_SOURCES: readonly ImportSource[] = ["langsmith", "langfuse", "phoenix", "otel", "agt", "adr-sensor", "openshell"];
 
 const OTEL_CONFIG_HINT =
   "configure otlpExport.endpoint in .kya/config.json or KYA_OTLP_EXPORT_ENDPOINT";
@@ -128,7 +128,7 @@ export async function runReportImportAction(
   if (!IMPORT_SOURCES.includes(from)) {
     return {
       status: 400,
-      body: { ok: false, error: "invalid source - expected one of langsmith|langfuse|phoenix|otel|agt|adr-sensor" },
+      body: { ok: false, error: "invalid source - expected one of langsmith|langfuse|phoenix|otel|agt|adr-sensor|openshell" },
     };
   }
   let file = typeof raw["file"] === "string" ? raw["file"].trim() : "";

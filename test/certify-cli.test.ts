@@ -72,7 +72,7 @@ describe("cli certify", () => {
     expect(code).toBe(0);
     const report = JSON.parse(logs.join("\n")) as { format: string; requirements: unknown[] };
     expect(report.format).toBe("shield-kya-certify-report");
-    expect(report.requirements).toHaveLength(30);
+    expect(report.requirements).toHaveLength(31);
   });
 
   it("--attest records and re-runs; usage errors exit 2", async () => {
