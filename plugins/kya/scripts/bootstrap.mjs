@@ -154,7 +154,7 @@ async function install() {
     { shell: win, cwd: stage, env },
     70_000,
   );
-  if (r.error?.code === "ENOENT") return void fail("npm was not found on PATH, so kya was not installed. Install Node.js 24+ (it ships npm).");
+  if (r.error?.code === "ENOENT") return void fail("npm was not found on PATH, so kya was not installed. Install Node.js 22+ (it ships npm).");
   if (r.error || r.status !== 0) {
     const lines = (r.stderr || String(r.error?.message ?? "")).trim().split("\n");
     const why = lines.find((l) => /^npm error (code|404|network)/.test(l))?.replace(/^npm error /, "") ?? lines[0];
@@ -185,7 +185,11 @@ else if (!(await completeAt(data))) {
   }
 }
 
-if (Number.parseInt(process.versions.node, 10) < 24) {
-  warns.push(`Node ${process.versions.node} is below 24; kya targets Node 24+ and is only lightly tested on this version.`);
+// Floor 22 (24 recommended), same thresholds as src/node-upgrade.ts. 22+ is silent; this never blocks.
+const nodeMajor = Number.parseInt(process.versions.node, 10);
+if (nodeMajor < 20) {
+  warns.push(`Node ${process.versions.node} is not supported by kya: some features break on it. Install Node.js 22+ (24 recommended).`);
+} else if (nodeMajor < 22) {
+  warns.push(`Node ${process.versions.node} is unsupported but works; kya supports Node.js 22+ (24 recommended).`);
 }
 done();

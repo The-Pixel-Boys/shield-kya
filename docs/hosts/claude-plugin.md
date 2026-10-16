@@ -39,7 +39,7 @@ Known limits: there is no sha512 integrity pin and no `npm-shrinkwrap.json` insi
 
 ### Requirements and what you see when something is wrong
 
-Node.js 24+ and `npm` on the PATH of the machine that runs Claude Code. On Node below 24 the plugin still installs and the hook still runs, with a notice at session start.
+Node.js 22+ (24 recommended) and `npm` on the PATH of the machine that runs Claude Code. Claude Code itself does not need Node, but this plugin does: its hooks run `node` from that PATH. A Claude Code started from a GUI (Dock, Start menu) may not see the PATH your shell gets from nvm or fnm, so check there first. On Node 20 or 21 the plugin installs and the hook runs, with a one-line `unsupported but works` notice at every session start; on Node 18 or older the notice says it is not supported. Node 22 and newer print nothing.
 
 - npm missing, install failing, a partial install, or another session installing at that moment: SessionStart prints `Shield KYA is NOT recording: <reason>` and the session continues. A partial install is replaced by a fresh, verified one.
 - `node` itself cannot start (for example a GUI launch without Node on PATH): no script can run, so no KYA message can print. SessionStart is marked `onFailure: "block"`, so Claude Code shows its own hook-failure error for that hook (Claude Code 2.1.295 or later), and PreToolUse tool calls proceed unrecorded.
@@ -123,6 +123,6 @@ Uninstalling from the last scope deletes `${CLAUDE_PLUGIN_DATA}` (the installed 
 
 ## Troubleshooting
 
-- `/plugin` shows the plugin enabled but nothing is recorded: look for the `Shield KYA is NOT recording` message at session start; check `node --version` (24+) and that `npm` is on PATH, then restart the session.
+- `/plugin` shows the plugin enabled but nothing is recorded: look for the `Shield KYA is NOT recording` message at session start; check `node --version` (22+) and that `npm` is on PATH, then restart the session.
 - First session after install: bootstrap runs at session start. If the MCP server shows as failed in that very first session, run `/reload-plugins` or start a new session.
 - Check the trail: `kya receipt --q Read --json`, or open `~/.kya/trail.jsonl`.

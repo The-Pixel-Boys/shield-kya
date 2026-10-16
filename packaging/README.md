@@ -8,14 +8,14 @@ does not serve npm `latest`.
 |---|---|---|---|
 | npm | `package.json` | npmjs.com | automated on the `kya-v*` tag, only after the public repo sync merged |
 | GitHub Release | none | `The-Pixel-Boys/shield-kya` Releases `vX.Y.Z` | automated after npm publish, with the `vX.Y.Z` tag |
-| Homebrew | `homebrew/shield-kya.rb` | `The-Pixel-Boys/homebrew-tap` `Formula/shield-kya.rb` | bump script + manual copy; tested in the `homebrew/brew` container |
-| Scoop | `scoop/shield-kya.json` | `The-Pixel-Boys/scoop-bucket` `bucket/shield-kya.json` | bump script + manual copy; **UNVERIFIED on Windows** |
+| Homebrew | `homebrew/shield-kya.rb` (template) | `The-Pixel-Boys/homebrew-tap` `Formula/shield-kya.rb` | automated after each stable release: PR, tap checks, merge, byte check; container gate by hand when the template changes |
+| Scoop | `scoop/shield-kya.json` (template) | `The-Pixel-Boys/scoop-bucket` `bucket/shield-kya.json` | automated after each stable release (PR, merge, byte check); **UNVERIFIED on Windows** |
 | Docker / GHCR | `docker/Dockerfile` | `ghcr.io/the-pixel-boys/shield-kya` (not published yet) | draft, no publish step |
 | GitLab / CircleCI / Bitbucket | `ci/*` | none yet | drafts, install `@latest` at runtime, no per-release bump |
 | WinGet | `winget/` | none | draft, blocked on a Windows installer artifact |
 | Snap | none | none | not started (needs `classic` confinement, store review) |
 
-Nothing in this tree is wired into a pipeline yet; the owner creates the secrets below first.
+Every channel, including marketplaces, plugin manifests and the planned ones, is registered in `channels.json` with how it is updated and a live check. A release is not done until every automatic channel serves it; manual and not-built channels are always reported as unresolved with what a human must do. A file in this package that carries a version must be registered there (or listed as not a channel), or CI fails. Homebrew and Scoop are bumped by the release pipeline; the other rows below are not wired yet.
 
 ## Pin policy
 
@@ -32,7 +32,7 @@ Lag against the LIVE channels is the watchdog's job, not the pin check's.
 
 ## Bump scripts
 
-No dependencies, Node 24. Both download `https://registry.npmjs.org/@shield-agent/kya/-/kya-<version>.tgz`,
+No dependencies, Node 22+. Both download `https://registry.npmjs.org/@shield-agent/kya/-/kya-<version>.tgz`,
 hash it, and rewrite only the pinned fields. Idempotent: a second run reports `already at <version>`.
 
 ```bash
@@ -49,7 +49,7 @@ Tests: `test/packaging-bump.test.ts`, `test/version-pins-packaging.test.ts` (`pn
 
 ## Homebrew
 
-`depends_on "node"` (kya needs Node >= 24; `node` is the current line). The install pulls the optional
+`depends_on "node"` (kya needs Node >= 22; `node` is the current line). The install pulls the optional
 `fastembed` / `onnxruntime-node` dependency, about 260MB on disk, so offline semantic search works. Both
 resolve to the script-free forks `@shield-agent/fastembed` / `@shield-agent/onnxruntime-node` (installed
 under the upstream names via npm: aliases), so no install scripts run.
@@ -59,7 +59,7 @@ The formula test asserts the usage output, because `kya --version` does not exis
 and exits 0). Follow-up when the flag lands: replace the two assertions marked in the test block with
 `assert_match version.to_s, shell_output("#{bin}/kya --version")`.
 
-Gate before copying to the tap (path installs are refused by Homebrew 7, use a local tap):
+Container gate, run by hand in any PR that changes the formula beyond its pinned fields (path installs are refused by Homebrew 7, use a local tap):
 
 ```bash
 podman run --rm -v "$PWD/packaging/homebrew/shield-kya.rb:/in/shield-kya.rb:ro" docker.io/homebrew/brew:latest bash -c '
@@ -111,33 +111,36 @@ event, which the release process does not use. A tag-triggered image publish ste
 per release. WinGet needs a Windows installer (exe/msi/zip), which npm does not provide; its manifest
 is still at 0.19.0 with a placeholder hash.
 
-## Secrets the owner must create (none exist yet; nothing here invents a value)
+## Secrets
 
 | Secret | What | Used by |
 |---|---|---|
-| `kya_pkg_pat` | fine-grained PAT, Contents: read/write on `The-Pixel-Boys/homebrew-tap` and `The-Pixel-Boys/scoop-bucket` only (separate from `KYA_SYNC_PAT`, which also admin-merges) | brew and scoop publish steps |
-| GHCR token | classic PAT with `write:packages` (fine-grained PATs with GHCR: unverified); set the package public once | image push |
+| `kya_pkg_pat` (exists) | fine-grained PAT on `The-Pixel-Boys/homebrew-tap` and `The-Pixel-Boys/scoop-bucket` only: Contents read/write, **Pull requests read/write** (needed to open the bump PR), Metadata read; CI events: tag only. Separate from the sync token, which also admin-merges | Homebrew and Scoop bump |
+| GHCR token (owner, not created yet) | classic PAT with `write:packages` (fine-grained PATs with GHCR: unverified); set the package public once | image push |
 | `snapcraft_store_credentials` | output of `snapcraft export-login --snaps=shield-kya --acls package_access,package_push,package_update,package_release -`; owner registers the name and files the `classic` request | snap publish |
 | winget PAT | classic PAT with `public_repo` from the account that owns the `winget-pkgs` fork (Komac cannot open the PR with a fine-grained token); owner signs the Microsoft CLA | WinGet submission |
 
 Register each as a CI secret available to tag builds only.
 
-## Release checklist (after `npm publish` of `kya-vX.Y.Z` succeeded)
+## Release fan-out (after `npm publish` of `kya-vX.Y.Z` succeeded)
 
-1. `cd sdks/kya && node scripts/packaging/bump-homebrew.mjs X.Y.Z && node scripts/packaging/bump-scoop.mjs X.Y.Z`
-2. `node scripts/check-version-pins.mjs` is green; open a PR with the two changed files (keeps this tree the source of truth).
-3. Homebrew container gate (above) is green.
-4. Copy `homebrew/shield-kya.rb` to `homebrew-tap` `Formula/shield-kya.rb` and `scoop/shield-kya.json` to
-   `scoop-bucket` `bucket/shield-kya.json` (token: `kya_pkg_pat`).
-5. Image: build and push `:X.Y.Z` and `:latest` (once the GHCR token and publish step exist).
-6. Snap and WinGet: once those channels exist.
-7. Confirm the release watchdog reports `OK` (it compares npm `latest` with the live tap formula, the Scoop
-   bucket and this repo's latest GitHub Release, each with a grace period for a release that is only hours
-   old). A new channel is enabled in the watchdog's `KYA_CHANNELS` list in the same change that adds its probe.
+Automatic, in the maintainers' release pipeline, for a stable version (prereleases are not fanned out):
 
-The release pipeline itself fails red unless npm `latest`, this repo's `main`, its `vX.Y.Z` tag and its latest
-GitHub Release all agree. Homebrew and Scoop are bumped by the steps above after publish, so only the watchdog
-checks them. Next step (not built yet): bump the tap and bucket from the pipeline with `kya_pkg_pat`.
+1. The npm tarball is downloaded and must match npm's `dist.integrity`; its sha256 is what gets pinned.
+2. Homebrew and Scoop: the template in this directory, at the release tag, is bumped to X.Y.Z with the scripts
+   above. The tap and bucket get a PR with exactly that file. The PR waits for the repo's checks (tap: CodeQL),
+   is squash-merged with its head pinned, and `main` is then compared byte for byte. Re-running is safe: a
+   channel already at the version is left alone and a newer version is never downgraded.
+3. A final gate reads every automatic channel in `channels.json` (npm, the public repo main, its tag and latest
+   Release, the MCP registry, the Claude Code and Codex plugins, the Gemini extension, the Cursor manifest, the
+   tap, the bucket). It fails unless all serve X.Y.Z, and prints the manual and not-built channels as UNRESOLVED.
+4. The maintainers' daily watchdog repeats that check with each channel's grace period.
+
+Never edit the tap or bucket by hand: the next release overwrites the file, and the watchdog reports the
+difference until then. Change the template here instead. If the change touches more than the pinned
+url / sha256 / version, run the Homebrew container gate above in that PR (it is not run per release).
+
+The image, Snap and WinGet join the same flow once they exist: register them in `channels.json` first.
 
 ## Copy and screenshot parity
 
@@ -189,7 +192,7 @@ Channels CI cannot edit. Paste this text by hand when it drifts:
 | Claude plugin directory / Cursor marketplace pages | listing forms | `variants.plugin` (Claude, hooks only) / `long` (Cursor) |
 | PyPI `shield-kya` | published from the public repo's own `kya-python/` (kept on the public side, not mirrored from here, so its `pyproject.toml` is not checked); set its `[project].description` at the next Python shim release | `variants.python` |
 | npm, MCP registry | update on the next kya release (from `package.json` / `server.json`) | `long` / `variants.mcp` |
-| Homebrew tap, Scoop bucket | update on the next manual copy of `homebrew/` and `scoop/` | `short` without the period / `long` |
+| Homebrew tap, Scoop bucket | updated by the release pipeline at the next stable release (templates `homebrew/` and `scoop/`) | `short` without the period / `long` |
 
 `long` today: "Audit trail and traceability for AI agents. See what every coding agent did, with opt-in
 human approval and signed certify."

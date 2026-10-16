@@ -1,6 +1,6 @@
 # kya certify - EU AI Act crosswalk
 
-Maps the 30 requirements of the [Agent Trust Baseline](../catalog/agent-trust-baseline-v0.json)
+Maps the 31 requirements of the [Agent Trust Baseline](../catalog/agent-trust-baseline-v0.json)
 (evaluated by `kya certify`) onto the EU AI Act, Regulation (EU) 2024/1689.
 
 Who this serves: deployers of AI agents who must produce evidence for a
@@ -29,6 +29,7 @@ evidence that they hold.
 | SAFE-02 | Sandbox isolation for high-risk execution is a technical risk measure. |
 | SAFE-03 | Overall ORR not red is the periodic risk picture the risk-management system reviews. |
 | SAFE-05 | Bounded retries close the bypass loop on blocked actions. |
+| SAFE-06 | A formally verified sandbox boundary is a technical risk measure with machine-checked evidence. |
 | REL-02 | Bounded unknown-tool rate measures how well the control surface is understood. |
 | SOC-01 | An acceptable-use policy is the documented intent the risk system enforces. |
 
@@ -108,6 +109,7 @@ covers the cybersecurity and resilience slice for agent tool use.
 | SEC-04 | A green or amber security posture tracks cybersecurity weaknesses over time. |
 | SEC-05 | Fail-closed on unknown tools is resilience against unclassified behavior. |
 | SAFE-02 | Sandbox isolation limits blast radius of high-risk execution. |
+| SAFE-06 | A formally verified sandbox boundary is a cybersecurity control on the isolation layer. |
 | REL-02 | A bounded unknown-tool rate is an accuracy measure of classification. |
 | REL-04 | A supervised evidence pipeline keeps security-relevant logging resilient to failure. |
 
@@ -159,6 +161,7 @@ baseline's freshness and continuity checks map here.
 | SAFE-03 | safety | art-9, art-72 |
 | SAFE-04 | safety | art-14 |
 | SAFE-05 | safety | art-14, art-9 |
+| SAFE-06 | safety | art-9, art-15 |
 | REL-01 | reliability | art-12 |
 | REL-02 | reliability | art-15, art-9 |
 | REL-03 | reliability | art-72 |

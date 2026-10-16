@@ -14,7 +14,7 @@
 npm i -g @shield-agent/kya@latest && kya start
 ```
 
-Requires **Node.js 24+**. Restart Cursor / Claude Code / Codex once so MCP loads. Hosted desk: [shield-agent.com](https://shield-agent.com/install).
+Requires **Node.js 22+** (24 recommended). Restart Cursor / Claude Code / Codex once so MCP loads. Hosted desk: [shield-agent.com](https://shield-agent.com/install).
 
 
 CLI and local MCP gate for Shield’s Know Your Agent path.
@@ -27,7 +27,7 @@ Walkthrough: [how you use it](https://shield-agent.com/how-kya-works#using).
 npx @shield-agent/kya@latest --help
 ```
 
-Requires **Node.js 24+** (`engines.node: >=24`). On an older Node the CLI offers to install 24 for you (via volta / fnm / nvm / brew), reinstall itself, and finish the command - declining just prints a warning and continues.
+Requires **Node.js 22+** (`engines.node: >=22`); 24 is the recommended line. Node 20 and 21 are unsupported but work: the CLI prints a one-line warning. Node 18 and older are unsupported and some features break there (HTTP `serve-mcp`, the gateway OTLP receiver). Below 22 the CLI offers to install Node 24 for you (via volta / fnm / nvm / brew), reinstall itself, and finish the command - declining just prints the warning and continues. `kya hook` never warns or prompts.
 
 It works with any host that speaks MCP or OpenAPI. Vertical packs are optional. Shield is the only policy decision point: this gate never auto-approves an irreversible side effect.
 
@@ -252,7 +252,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.27.0", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.28.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -292,7 +292,7 @@ Offline evaluate by default (no network, no hosted plane); an explicit config ho
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.27.0 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.28.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -303,7 +303,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.27.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.28.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -355,7 +355,7 @@ ORR is a reporting board. Scanners, `--scorecard`, and `harness.agentshield` are
 
 ## Certify (continuous agent assurance)
 
-`kya certify` evaluates the open **Agent Trust Baseline** catalog (`catalog/agent-trust-baseline-v0.json` - 30 requirements across Data & Privacy, Security, Safety, Reliability, Accountability, Society) against local evidence: the global trail, ORR output, wired hosts, sandbox inventory, receipts, showback, and your recorded attestations. It writes a gap report to `.kya/certify/` (JSON + Markdown + HTML). The gap list is your work plan. The receipt report shows the same state live: a **Certify** panel recomputed on every render (so `kya start`'s live report updates as events stream in), plus a dedicated **Certify** tab with the full live requirement table - run `kya certify` for the full gap report + signed evidence bundle.
+`kya certify` evaluates the open **Agent Trust Baseline** catalog (`catalog/agent-trust-baseline-v0.json` - 31 requirements across Data & Privacy, Security, Safety, Reliability, Accountability, Society) against local evidence: the global trail, ORR output, wired hosts, sandbox inventory, receipts, showback, and your recorded attestations. It writes a gap report to `.kya/certify/` (JSON + Markdown + HTML). The gap list is your work plan. The receipt report shows the same state live: a **Certify** panel recomputed on every render (so `kya start`'s live report updates as events stream in), plus a dedicated **Certify** tab with the full live requirement table - run `kya certify` for the full gap report + signed evidence bundle.
 
 ```bash
 npx @shield-agent/kya certify                  # gap report; exit 1 when gaps exist (CI-friendly)
@@ -371,7 +371,7 @@ Certify is **evidence-only**. It never ALLOWs, DENYs, or blocks anything - the s
 
 `kya certify` is local, free, and offline: no account, no network calls, no license check (it never sends usage stats). The catalog is MIT-licensed and PRs are welcome. An EU AI Act crosswalk (baseline requirements mapped to Articles 9-15, 26, 72) ships in [docs/certify-eu-ai-act.md](docs/certify-eu-ai-act.md) and `src/certify/eu-ai-act-map.json`.
 
-## Import traces (LangSmith, Langfuse, Phoenix, OTel, AGT, ADR Sensor)
+## Import traces (LangSmith, Langfuse, Phoenix, OTel, AGT, ADR Sensor, OpenShell)
 
 Bring existing observability exports into the trail so the receipt and certify see them:
 
@@ -381,9 +381,10 @@ kya import --from langfuse ./observations.jsonl
 kya import --from otel ./otraces.json
 kya import --from agt   # Microsoft Agent Governance Toolkit audit log
 kya import --from adr-sensor ./adr-sensor-events.jsonl
+kya import --from openshell ./openshell-events.jsonl
 ```
 
-The AGT importer verifies AGT's hash chain, flags tampered logs with chainVerified=false, and never duplicates rows on re-import; see [docs/import-agt.md](docs/import-agt.md). ADR Sensor events map one `AgentEvent` to one or more trail events, with stable `uuid` dedup on re-import; see [docs/import-adr-sensor.md](docs/import-adr-sensor.md). AGT's hash chain is unkeyed, so "verified" means internally consistent, not authentic. The hosted console accepts the same formats ([docs/import-agt-hosted.md](docs/import-agt-hosted.md)).
+The AGT importer verifies AGT's hash chain, flags tampered logs with chainVerified=false, and never duplicates rows on re-import; see [docs/import-agt.md](docs/import-agt.md). ADR Sensor events map one `AgentEvent` to one or more trail events, with stable `uuid` dedup on re-import; see [docs/import-adr-sensor.md](docs/import-adr-sensor.md). OpenShell OCSF logs map one record to one trail event, with stable `uid` dedup on re-import; see [docs/import-openshell.md](docs/import-openshell.md). AGT's hash chain is unkeyed, so "verified" means internally consistent, not authentic. The hosted console accepts the same formats ([docs/import-agt-hosted.md](docs/import-agt-hosted.md)).
 
 Imports land as observe-mode events (`host: import`, `reasonCode: IMPORTED`, error runs become `DENY`/`IMPORTED_ERROR`), with latency and token counts mapped when the source carries them. Files over 50MB are refused; malformed records are skipped, never fatal. The report (`kya start` / `kya receipt`) shows an **Import** card with per-format counts, error count, and the latest imported event once any import has landed.
 
@@ -434,7 +435,7 @@ Route DENY / REQUIRE_APPROVE events to Slack, Linear, Jira, or any webhook. Conf
 
 `KYA_NOTIFY_WEBHOOK=<url>` is the zero-config variant (generic payload). Delivery retries with exponential backoff (250ms/1s/4s + jitter), per-attempt timeouts, a per-URL circuit breaker, and a send rate limiter; payloads are built only from redacted trail fields, with an automatic minimized fallback if the secret scan trips. From short-lived hook/wrap spawns delivery rides a detached helper (`kya notify-flush`), so the gate path never waits on the network. Every delivery attempt is appended to `~/.kya/notify-log.jsonl` (target host only, never the full URL; capped at the last 500 entries), and the report's System tab shows an **Alerts** panel with per-target delivered/failed counts and the last attempt.
 
-## Optional sandbox wrap (Firecracker)
+## Optional sandbox wrap (Firecracker, OpenShell)
 
 Beside the gate, not inside MCP. Opt-in only:
 
@@ -444,7 +445,7 @@ KYA_SANDBOX=mock kya sandbox exec --sandbox-id <id> --cmd "true"
 KYA_SANDBOX=mock kya sandbox kill --sandbox-id <id>
 ```
 
-`org.sample.sandbox.exec` without `--sandbox-id` is **DENY** `MISSING_SANDBOX_ID`. Real Firecracker needs `firecracker` + `jailer` on PATH and kernel/rootfs env (`KYA_SANDBOX_KERNEL`, `KYA_SANDBOX_ROOTFS`). We do not ship those binaries. `serve-mcp` still exposes only evaluate / ingest / request_approval.
+`org.sample.sandbox.exec` without `--sandbox-id` is **DENY** `MISSING_SANDBOX_ID`. Real Firecracker needs `firecracker` + `jailer` on PATH and kernel/rootfs env (`KYA_SANDBOX_KERNEL`, `KYA_SANDBOX_ROOTFS`). We do not ship those binaries. `KYA_SANDBOX=openshell` drives [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) through the `openshell` CLI and needs `openshell` plus `docker` or `podman` on PATH; KYA renders an OpenShell policy per spawn, pins a minimum CLI version, and always sets `OPENSHELL_TELEMETRY_ENABLED=false`. See [docs/sandbox.md](docs/sandbox.md) for backend details. `serve-mcp` still exposes only evaluate / ingest / request_approval.
 
 ## Cost showback (observe only)
 
@@ -475,6 +476,7 @@ pnpm build
 - [Import the AGT audit log (CLI)](docs/import-agt.md) · [hosted](docs/import-agt-hosted.md)
 - [kya certify - Agent Trust Baseline gap reports](docs/certify.md)
 - [EU AI Act crosswalk for the Agent Trust Baseline](docs/certify-eu-ai-act.md)
+- [Sandbox backends (mock / firecracker / openshell)](docs/sandbox.md)
 - [Works with your observability stack](docs/marketing/observability-stack.md)
 - [SDK & framework integrations (in-process shims)](docs/sdk-integrations.md)
 - [Hosted operator SSO / SCIM (not in OSS CLI)](docs/hosted-operator-sso.md)

@@ -1,0 +1,264 @@
+{
+  "$comment": "Registry of every kya distribution channel: the single source of truth the maintainers' release fan-out gate and daily drift watchdog read. Every channel kya has or plans is listed with how its version is updated and a live probe. A file under the package that carries a version must be a channel file here or be listed in not_channels with a reason, or CI fails. Paths are relative to the maintainers' monorepo root; {version} in a probe url is the version under test. No version pins in this file.",
+  "update_values": {
+    "auto-pipeline": "a monorepo Woodpecker workflow updates it on every kya-v* tag; a lag after grace_hours is red",
+    "auto-mirror": "it lives in the public repo The-Pixel-Boys/shield-kya, which kya-public-sync mirrors on every tag; a lag after grace_hours is red",
+    "auto-runtime": "it installs npm latest when it runs; nothing to bump per release",
+    "manual-owner": "a human updates it; always printed as UNRESOLVED with the action, never green",
+    "not-built": "planned or drafted, not published; always printed as UNRESOLVED with what blocks it"
+  },
+  "channels": [
+    {
+      "id": "npm",
+      "kind": "package registry",
+      "where": "registry.npmjs.org @shield-agent/kya dist-tag latest",
+      "update": "auto-pipeline",
+      "by": "maintainers' release pipeline: npm publish step",
+      "files": ["sdks/kya/package.json"],
+      "probe": { "type": "json", "url": "https://registry.npmjs.org/@shield-agent/kya/latest", "path": "version" },
+      "grace_hours": 3
+    },
+    {
+      "id": "public-main",
+      "kind": "source mirror",
+      "where": "The-Pixel-Boys/shield-kya main package.json",
+      "update": "auto-mirror",
+      "by": "maintainers' release pipeline: public repo sync step",
+      "files": [],
+      "probe": { "type": "json", "url": "https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/package.json", "path": "version" },
+      "grace_hours": 3
+    },
+    {
+      "id": "public-tag",
+      "kind": "source mirror tag (plugin marketplace pins ref v<version>)",
+      "where": "The-Pixel-Boys/shield-kya tag v<version> package.json",
+      "update": "auto-pipeline",
+      "by": "maintainers' release pipeline: public tag and Release step",
+      "files": [],
+      "probe": { "type": "json", "url": "https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/v{version}/package.json", "path": "version" },
+      "grace_hours": 3
+    },
+    {
+      "id": "github-release",
+      "kind": "GitHub latest Release (Gemini installs from it)",
+      "where": "github.com/The-Pixel-Boys/shield-kya/releases/latest",
+      "update": "auto-pipeline",
+      "by": "maintainers' release pipeline: public tag and Release step",
+      "files": [],
+      "probe": { "type": "redirect", "url": "https://github.com/The-Pixel-Boys/shield-kya/releases/latest", "pattern": "/releases/tag/v([^/?#]+)$" },
+      "grace_hours": 3
+    },
+    {
+      "id": "mcp-registry",
+      "kind": "MCP registry",
+      "where": "registry.modelcontextprotocol.io io.github.The-Pixel-Boys/shield-kya versions/latest",
+      "update": "auto-mirror",
+      "by": "public repo publish-mcp workflow on the v<version> tag",
+      "files": ["sdks/kya/server.json"],
+      "probe": { "type": "json", "url": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.The-Pixel-Boys%2Fshield-kya/versions/latest", "path": "server.version" },
+      "grace_hours": 3
+    },
+    {
+      "id": "claude-code-plugin",
+      "kind": "Claude Code plugin marketplace",
+      "where": "public main plugins/kya/.claude-plugin/plugin.json (marketplace .claude-plugin/marketplace.json)",
+      "update": "auto-mirror",
+      "by": "maintainers' release pipeline: public repo sync step",
+      "files": ["sdks/kya/.claude-plugin/marketplace.json", "sdks/kya/plugins/kya/.claude-plugin/plugin.json"],
+      "probe": { "type": "json", "url": "https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/plugins/kya/.claude-plugin/plugin.json", "path": "version" },
+      "grace_hours": 3
+    },
+    {
+      "id": "codex-plugin",
+      "kind": "Codex plugin marketplace",
+      "where": "public main plugins/kya/.codex-plugin/plugin.json (marketplace .agents/plugins/marketplace.json)",
+      "update": "auto-mirror",
+      "by": "maintainers' release pipeline: public repo sync step",
+      "files": ["sdks/kya/.agents/plugins/marketplace.json", "sdks/kya/plugins/kya/.codex-plugin/plugin.json"],
+      "probe": { "type": "json", "url": "https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/plugins/kya/.codex-plugin/plugin.json", "path": "version" },
+      "grace_hours": 3
+    },
+    {
+      "id": "gemini-extension",
+      "kind": "Gemini CLI extension",
+      "where": "public gemini-extension.json (installed from the latest Release)",
+      "update": "auto-mirror",
+      "by": "maintainers' release pipeline: public repo sync step",
+      "files": ["sdks/kya/gemini-extension.json"],
+      "probe": { "type": "json", "url": "https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/gemini-extension.json", "path": "version" },
+      "grace_hours": 3
+    },
+    {
+      "id": "cursor-plugin",
+      "kind": "Cursor plugin manifest",
+      "where": "public main .cursor-plugin/plugin.json",
+      "update": "auto-mirror",
+      "by": "maintainers' release pipeline: public repo sync step",
+      "files": ["sdks/kya/.cursor-plugin/plugin.json"],
+      "probe": { "type": "json", "url": "https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/.cursor-plugin/plugin.json", "path": "version" },
+      "grace_hours": 3
+    },
+    {
+      "id": "homebrew",
+      "kind": "Homebrew tap",
+      "where": "The-Pixel-Boys/homebrew-tap Formula/shield-kya.rb (url + sha256)",
+      "update": "auto-pipeline",
+      "by": "maintainers' release pipeline: packaging bump step (PR, checks, merge, byte check)",
+      "files": ["sdks/kya/packaging/homebrew/shield-kya.rb"],
+      "probe": { "type": "regex", "url": "https://raw.githubusercontent.com/The-Pixel-Boys/homebrew-tap/main/Formula/shield-kya.rb", "pattern": "/kya-([0-9][^\"/]*)\\.tgz\"" },
+      "grace_hours": 3,
+      "bump": {
+        "repo": "The-Pixel-Boys/homebrew-tap",
+        "path": "Formula/shield-kya.rb",
+        "template": "sdks/kya/packaging/homebrew/shield-kya.rb",
+        "script": "sdks/kya/scripts/packaging/bump-homebrew.mjs",
+        "export": "bumpFormula",
+        "required_checks": ["Analyze (ruby)", "CodeQL"]
+      }
+    },
+    {
+      "id": "scoop",
+      "kind": "Scoop bucket",
+      "where": "The-Pixel-Boys/scoop-bucket bucket/shield-kya.json (version + url + hash)",
+      "update": "auto-pipeline",
+      "by": "maintainers' release pipeline: packaging bump step (PR, checks, merge, byte check)",
+      "files": ["sdks/kya/packaging/scoop/shield-kya.json"],
+      "probe": { "type": "json", "url": "https://raw.githubusercontent.com/The-Pixel-Boys/scoop-bucket/main/bucket/shield-kya.json", "path": "version" },
+      "grace_hours": 3,
+      "bump": {
+        "repo": "The-Pixel-Boys/scoop-bucket",
+        "path": "bucket/shield-kya.json",
+        "template": "sdks/kya/packaging/scoop/shield-kya.json",
+        "script": "sdks/kya/scripts/packaging/bump-scoop.mjs",
+        "export": "bumpManifest",
+        "required_checks": []
+      }
+    },
+    {
+      "id": "kya-action",
+      "kind": "GitHub Action (Marketplace listing kya-certify)",
+      "where": "The-Pixel-Boys/kya-action action.yml input kya-version, default latest",
+      "update": "auto-runtime",
+      "by": "installs @shield-agent/kya latest on every run",
+      "files": [],
+      "action": "No per-release bump. When a release changes `kya certify` (flags, output, exit codes), update The-Pixel-Boys/kya-action and its Marketplace listing in the same release."
+    },
+    {
+      "id": "claude-desktop-mcpb",
+      "kind": "Claude Desktop extension bundle",
+      "where": "sdks/kya/manifest.json, packed locally by the user (npx @anthropic-ai/mcpb pack)",
+      "update": "not-built",
+      "by": "nobody: no .mcpb is published; the manifest version follows package.json via pnpm sync:version",
+      "files": ["sdks/kya/manifest.json"],
+      "action": "Not published. Before publishing a .mcpb (Release asset or directory), add a pipeline step that builds it from the tag and a probe here."
+    },
+    {
+      "id": "pypi",
+      "kind": "PyPI shield-kya (Python shim)",
+      "where": "pypi.org/project/shield-kya (own version line, published from the public repo's kya-python/)",
+      "update": "manual-owner",
+      "by": "owner (held)",
+      "files": ["sdks/kya-python/pyproject.toml"],
+      "probe": { "type": "json", "url": "https://pypi.org/pypi/shield-kya/json", "path": "info.version" },
+      "action": "Held by the owner, not published (pypi.org JSON 404). The shim has its own version line, not the CLI's. On publish: set [project].description to channel-copy variants.python (sdks/kya/packaging/README.md, Copy and screenshot parity) and add a publish step + probe."
+    },
+    {
+      "id": "vscode-marketplace",
+      "kind": "VS Code Marketplace extension (own version line, starts at 0.1.0)",
+      "where": "marketplace.visualstudio.com shield-agent.shield-kya (sdks/kya/vscode/package.json version)",
+      "update": "manual-owner",
+      "by": "nobody yet (publisher account not created)",
+      "files": ["sdks/kya/vscode/package.json"],
+      "action": "Not published. Owner creates the Marketplace publisher 'shield-agent', then builds and publishes the .vsix (vsce publish, token in env or keychain, never argv). Then add a publish step and a probe here. The extension has its own version line, so it can only become auto once the registry tracks independent versions; listing text = channel-copy long. Per-item owner go."
+    },
+    {
+      "id": "open-vsx",
+      "kind": "Open VSX extension (Cursor, VSCodium; same package as vscode-marketplace)",
+      "where": "open-vsx.org shield-agent/shield-kya",
+      "update": "manual-owner",
+      "by": "nobody yet (Eclipse account, publisher agreement and namespace not created)",
+      "files": [],
+      "action": "Not published (open-vsx.org API 404). Owner signs the Open VSX publisher agreement, creates the shield-agent namespace (token via OVSX_PAT env, never -p), publishes the same .vsix and claims the namespace. Listing text = channel-copy long. Per-item owner go."
+    },
+    {
+      "id": "n8n-community-node",
+      "kind": "n8n community node @shield-agent/n8n-nodes-kya (own version line, starts at 0.1.0)",
+      "where": "npm @shield-agent/n8n-nodes-kya (integrations/n8n/package.json version), n8n Creator Portal",
+      "update": "manual-owner",
+      "by": "nobody yet (public source repo and npm trusted publisher not created)",
+      "files": ["integrations/n8n/package.json"],
+      "action": "Not published. Owner creates the public source repo, mirrors integrations/n8n into it, sets the npm trusted publisher (provenance is mandatory for n8n verification), tags 0.1.0, then submits in the n8n Creator Portal. Then add a probe here. Per-item owner go."
+    },
+    {
+      "id": "zapier-app",
+      "kind": "Zapier app Shield KYA (own version line, starts at 0.1.0)",
+      "where": "Zapier developer platform (integrations/zapier/package.json version)",
+      "update": "manual-owner",
+      "by": "nobody yet (Zapier developer account not created)",
+      "files": ["integrations/zapier/package.json"],
+      "action": "Not published. Owner logs in to the Zapier CLI (deploy key stays in ~/.zapierrc), registers and pushes the private app, tests both Zaps with a real hosted API key, then submits for publishing. Per-item owner go."
+    },
+    {
+      "id": "ghcr-image",
+      "kind": "container image",
+      "where": "ghcr.io/the-pixel-boys/shield-kya:<version> and :latest",
+      "update": "not-built",
+      "by": "nobody yet",
+      "files": ["sdks/kya/packaging/docker/Dockerfile"],
+      "action": "Blocked on the ghcr_token Woodpecker secret (owner) and a tag-triggered build + push step (packaging/README.md, Docker / GHCR). Then switch to auto-pipeline with a probe."
+    },
+    {
+      "id": "winget",
+      "kind": "WinGet",
+      "where": "microsoft/winget-pkgs manifests/t/The-Pixel-Boys/ShieldKYA",
+      "update": "not-built",
+      "by": "nobody yet",
+      "files": [
+        "sdks/kya/packaging/winget/manifests/t/The-Pixel-Boys/ShieldKYA/0.19.0/The-Pixel-Boys.ShieldKYA.yaml",
+        "sdks/kya/packaging/winget/manifests/t/The-Pixel-Boys/ShieldKYA/0.19.0/The-Pixel-Boys.ShieldKYA.installer.yaml",
+        "sdks/kya/packaging/winget/manifests/t/The-Pixel-Boys/ShieldKYA/0.19.0/The-Pixel-Boys.ShieldKYA.locale.en-US.yaml"
+      ],
+      "action": "Draft stuck at an old version with a placeholder hash: needs a Windows installer asset (exe/msi/zip), a winget PAT and the Microsoft CLA (owner). packaging/README.md, CI registries and WinGet."
+    },
+    {
+      "id": "snap",
+      "kind": "Snap Store",
+      "where": "snapcraft.io/shield-kya (name not registered)",
+      "update": "not-built",
+      "by": "nobody yet",
+      "files": [],
+      "action": "Not started: owner registers the name, files the classic confinement request and creates snapcraft_store_credentials (packaging/README.md, Secrets)."
+    },
+    {
+      "id": "ci-wrappers",
+      "kind": "GitLab component, CircleCI orb, Bitbucket pipe",
+      "where": "sdks/kya/packaging/ci (drafts, not registered in any catalog)",
+      "update": "not-built",
+      "by": "nobody yet; once published they install npm latest at runtime (auto-runtime)",
+      "files": [
+        "sdks/kya/packaging/ci/gitlab/template.yml",
+        "sdks/kya/packaging/ci/bitbucket-pipe/pipe.yml",
+        "sdks/kya/packaging/ci/bitbucket-pipe/run.sh"
+      ],
+      "action": "Drafts. Publishing needs owner accounts (CircleCI namespace, GitLab catalog project, pipe image). Then switch to auto-runtime."
+    },
+    {
+      "id": "listing-pages",
+      "kind": "directory and marketplace listing pages (Claude plugin directory, Cursor marketplace page, MCP directories, AlternativeTo, GitHub repo About)",
+      "where": "third-party listing forms",
+      "update": "manual-owner",
+      "by": "owner",
+      "files": [],
+      "action": "Not readable or editable from CI. When channel-copy.json changes, paste the texts from sdks/kya/packaging/README.md 'Copy and screenshot parity' (repo About = long, Claude directory = variants.plugin, Cursor = long). The GitHub repo description is also checked live by kya-channel-copy-live.sh."
+    }
+  ],
+  "not_channels": [
+    "sdks/kya/test/golden/bundle-input-1.json # test golden: catalog version of the trust baseline, not the CLI",
+    "sdks/kya/test/golden/bundle-input-2.json # test golden: catalog version of the trust baseline, not the CLI",
+    "sdks/kya/test/golden/bundle-input-3.json # test golden: catalog version of the trust baseline, not the CLI",
+    "sdks/kya/test/fixtures/otlp-capture.json # recorded OTLP fixture: service version inside telemetry, frozen on purpose",
+    "sdks/kya/catalog/agent-trust-baseline-v0.json # trust baseline catalog: its own content version, not a distribution channel",
+    "sdks/kya/integrations/grafana/kya-dashboard.json # Grafana dashboard: Grafana and plugin versions, not kya",
+    "sdks/kya/vscode/e2e/prod-harness/package.json # private e2e test harness of the VS Code extension, never published"
+  ]
+}

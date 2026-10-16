@@ -2,7 +2,9 @@
  * Shared evidence-context assembly for `kya certify` and live report panels.
  * Single source of truth: runCertify and the receipt report panel both build
  * their EvidenceContext here so they can never diverge. Local readers only:
- * no network, no account, no key check.
+ * no network, no account, no key check. The one exception is the optional
+ * openshell-prover subprocess (SAFE-06): it only spawns when the binary is
+ * present and never throws (see certify/openshell-prover.ts).
  */
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { kyaHome, resolveGateMode } from "../config.js";
@@ -16,6 +18,7 @@ import {
 import { readTrail, receiptsDir, type TrailEvent } from "../trail.js";
 import { loadAttestations } from "./attest.js";
 import type { EvidenceContext } from "./evaluate.js";
+import { runOpenshellProver } from "./openshell-prover.js";
 
 /** Receipt artifacts (html/json/md) in .kya/receipts. */
 export function countReceipts(cwd: string): number {
@@ -61,6 +64,7 @@ export function assembleEvidenceContext(
     orr: loadOrrCard(cwd),
     orrCategories: loadOrrCategoryRatings(cwd),
     sandboxCount: sandboxes.sandboxes.length,
+    openshellProver: runOpenshellProver(cwd, env),
     receiptCount: countReceipts(cwd),
     showbackPresent: loadShowbackCard(cwd) !== undefined,
     attestations: loadAttestations(cwd),

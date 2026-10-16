@@ -51,6 +51,9 @@
     { "id": "SAFE-05", "domain": "safety", "title": "Blocked actions have a retry policy",
       "text": "A documented policy bounds automated retries of DENYed or held actions so blocks cannot be brute-forced.",
       "severity": "medium", "check": { "kind": "attest", "prompt": "Confirm a policy bounds automated retries of blocked actions (no bypass loops)." } },
+    { "id": "SAFE-06", "domain": "safety", "title": "Sandbox boundary verified by openshell-prover",
+      "text": "The OpenShell sandbox boundary policy is formally verified by openshell-prover (SMT, deterministic) to grant no more than the intended boundary.",
+      "severity": "medium", "check": { "kind": "openshell_prover" } },
 
     { "id": "REL-01", "domain": "reliability", "title": "Trail recording is active",
       "text": "At least one trail event in the last 7 days proves the evidence pipeline is live.",

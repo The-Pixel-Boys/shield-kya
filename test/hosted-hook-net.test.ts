@@ -141,8 +141,15 @@ describe("hosted hook transport (real sockets, dist/cli.js)", () => {
     expect(plane.seen.requests).toHaveLength(0);
 
     const viaOpt = await hook(`http://127.0.0.1:${plane.port}`, [], { HTTPS_PROXY: proxyUrl, NODE_OPTIONS: "--use-env-proxy" });
-    expect(viaOpt.status).toBe(2);
-    expect(reason(viaOpt.stdout)).toContain("PLANE_ENV_REFUSED");
+    if (process.allowedNodeEnvironmentFlags.has("--use-env-proxy")) {
+      expect(viaOpt.status).toBe(2);
+      expect(reason(viaOpt.stdout)).toContain("PLANE_ENV_REFUSED");
+    } else {
+      // Node 20 and Node 22 before 22.21.0 do not know the flag: node itself exits 9 before kya
+      // runs, so kya cannot answer exit 2 there. Documented in docs/hosted-hook.md.
+      expect(viaOpt.status).toBe(9);
+    }
+    expect(plane.seen.requests).toHaveLength(0);
 
     const bare = await hook(`http://127.0.0.1:${plane.port}`, [], { HTTPS_PROXY: proxyUrl, HTTP_PROXY: proxyUrl, ALL_PROXY: proxyUrl });
     expect(bare.status).toBe(0);

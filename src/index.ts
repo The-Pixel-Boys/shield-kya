@@ -123,6 +123,13 @@ export {
 } from "./certify/evaluate.js";
 export { computeLiveCertify } from "./certify/live.js";
 export {
+  parseOpenshellProverOutput,
+  resolveOpenshellProver,
+  runOpenshellProver,
+  type OpenshellProverOutcome,
+  type OpenshellProverStatus,
+} from "./certify/openshell-prover.js";
+export {
   attestationsPath,
   loadAttestations,
   recordAttestation,

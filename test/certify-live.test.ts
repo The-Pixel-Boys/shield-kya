@@ -58,7 +58,7 @@ describe("computeLiveCertify", () => {
     expect(report.format).toBe("shield-kya-certify-report");
     expect(report.version).toBe(1);
     expect(report.catalog.id).toBe("agent-trust-baseline");
-    expect(report.requirements).toHaveLength(30);
+    expect(report.requirements).toHaveLength(31);
     // Empty trail: every trail-based check is insufficient_evidence
     for (const id of TRAIL_BASED) {
       expect(report.requirements.find((r) => r.id === id)?.status).toBe(
@@ -70,7 +70,7 @@ describe("computeLiveCertify", () => {
     expect(report.requirements.every((r) => r.status !== "pass")).toBe(true);
     // Counts are consistent and fail-closed
     const o = report.overall;
-    expect(o.pass + o.gap + o.insufficientEvidence + o.attested).toBe(30);
+    expect(o.pass + o.gap + o.insufficientEvidence + o.attested).toBe(31);
     expect(o.result).toBe("gap");
     // Window/trail stats mirror the runCertify report shape
     expect(report.window.days).toBe(30);

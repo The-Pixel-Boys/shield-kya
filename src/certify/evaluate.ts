@@ -7,6 +7,7 @@
 import type { OrrRating } from "../commands/orr.js";
 import type { OrrCard } from "../receipt/enrich.js";
 import type { TrailEvent } from "../trail.js";
+import type { OpenshellProverOutcome } from "./openshell-prover.js";
 import type {
   CatalogRequirement,
   RequirementCheck,
@@ -85,6 +86,13 @@ export interface EvidenceContext {
   /** Category id → rating from the latest ORR report, when present. */
   readonly orrCategories: Readonly<Record<string, OrrRating>> | undefined;
   readonly sandboxCount: number;
+  /**
+   * openshell-prover verdict over the sandbox boundary policy, assembled by
+   * certify/context.ts. Absent binary or unparseable output stays optional
+   * evidence: insufficient_evidence, never a fail on machines without
+   * OpenShell.
+   */
+  readonly openshellProver?: OpenshellProverOutcome;
   readonly receiptCount: number;
   readonly showbackPresent: boolean;
   readonly attestations: ReadonlyMap<string, RequirementAttestation>;
@@ -302,6 +310,16 @@ export function evaluateRequirement(
         "gap",
         `no sandbox inventory - KYA_SANDBOX=mock kya sandbox spawn`,
       );
+    }
+    case "openshell_prover": {
+      const prover = ctx.openshellProver;
+      if (!prover || prover.status === "unavailable" || prover.status === "unparseable") {
+        return result("insufficient_evidence", prover?.detail ?? "openshell-prover not evaluated");
+      }
+      if (prover.status === "violation") {
+        return result("gap", prover.detail);
+      }
+      return result("pass", prover.detail);
     }
     case "receipts_present": {
       if (ctx.receiptCount >= check.min) {

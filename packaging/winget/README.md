@@ -40,6 +40,6 @@ gh pr create --repo microsoft/winget-pkgs \
 
 ## Notes
 
-- The manifest declares a dependency on Node.js 24+ (`OpenJS.NodeJS`).
+- The manifest declares a dependency on Node.js (`OpenJS.NodeJS`). The 0.19.0 draft says 24.0.0, which was that version's engines; a manifest for kya with `engines.node >=22` uses `MinimumVersion: 22.0.0`.
 - `InstallerType: nullsoft` is used as a placeholder; change it to match the
   actual installer type (`exe`, `msi`, `zip`, `portable`, `inno`, `wix`, etc.).

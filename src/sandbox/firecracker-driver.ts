@@ -1,5 +1,5 @@
 import { accessSync, constants, unlinkSync } from "node:fs";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import { spawn } from "node:child_process";
 import { UsageError } from "../errors.js";
 import { assertSandboxId } from "./id.js";
@@ -8,7 +8,7 @@ import type { SandboxDriver } from "./types.js";
 const pids = new Map<string, number>();
 const socks = new Map<string, string>();
 
-function resolveBin(name: string, envName: string): string {
+export function resolveBin(name: string, envName: string): string {
   const fromEnv = process.env[envName]?.trim();
   if (fromEnv) {
     if (!fromEnv.startsWith("/") || basename(fromEnv) !== name) {
@@ -22,7 +22,7 @@ function resolveBin(name: string, envName: string): string {
   const path = process.env.PATH ?? "";
   for (const dir of path.split(":")) {
     if (!dir || dir === "." || dir.startsWith(".")) continue;
-    const candidate = `${dir.replace(/\/+$/, "")}/${name}`;
+    const candidate = join(dir, name);
     if (!candidate.startsWith("/")) continue;
     try {
       accessSync(candidate, constants.X_OK);

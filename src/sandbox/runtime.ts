@@ -4,21 +4,26 @@ import { join } from "node:path";
 import { UsageError } from "../errors.js";
 import { createFirecrackerDriver } from "./firecracker-driver.js";
 import { createMockDriver } from "./mock-driver.js";
+import { createOpenshellDriver } from "./openshell-driver.js";
 import { assertSandboxId } from "./id.js";
 import { assertInsideRoot, jailRoot } from "./path-jail.js";
 import type { SandboxDriver, SandboxRecord } from "./types.js";
 
 export function resolveSandboxDriver(
   backend: string | undefined,
+  opts?: { readonly root?: string },
 ): SandboxDriver {
   const b = (backend ?? process.env.KYA_SANDBOX ?? "").trim().toLowerCase();
   if (!b) {
     throw new UsageError(
-      "sandbox is opt-in: set KYA_SANDBOX=firecracker or KYA_SANDBOX=mock",
+      "sandbox is opt-in: set KYA_SANDBOX=mock, KYA_SANDBOX=firecracker or KYA_SANDBOX=openshell",
     );
   }
   if (b === "mock") return createMockDriver();
   if (b === "firecracker") return createFirecrackerDriver();
+  if (b === "openshell") {
+    return createOpenshellDriver({ root: opts?.root ?? jailRoot(process.cwd()) });
+  }
   throw new UsageError(`unknown sandbox backend: ${b}`);
 }
 
@@ -62,12 +67,14 @@ export async function spawnSandbox(input: {
     kernelPath: input.kernelPath ?? process.env.KYA_SANDBOX_KERNEL ?? "",
     rootfsPath: input.rootfsPath ?? process.env.KYA_SANDBOX_ROOTFS ?? "",
   });
+  const externalName = input.driver.externalNameFor?.(sandboxId);
   const row: SandboxRecord = {
     sandboxId,
     backend: input.driver.backend,
     createdAt: new Date().toISOString(),
     status: "running",
     agentId: input.agentId,
+    ...(externalName ? { externalName } : {}),
   };
   const rows = loadSandboxState(input.root).filter((r) => r.status === "running");
   rows.push(row);

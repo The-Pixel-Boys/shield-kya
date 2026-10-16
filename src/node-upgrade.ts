@@ -1,7 +1,9 @@
 /**
  * Node version gate with a guided upgrade. The package declares
- * `engines.node: >=24`; on an older runtime the CLI warns, and on a TTY it
- * offers to install Node 24 via the detected version manager, reinstall the
+ * `engines.node: >=22` (24 recommended). Node 22 and newer run silently. On an
+ * older runtime the CLI prints one warning line (20 and 21: unsupported but
+ * works; below 20: unsupported, known breakage), and on a TTY it offers to
+ * install Node 24 via the detected version manager, reinstall the
  * global package under it, and re-run the original command. Declining (or a
  * non-TTY run) continues with a warning - the gate never blocks outright.
  *
@@ -15,7 +17,25 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
 
-export const REQUIRED_NODE_MAJOR = 24;
+/** Supported floor (package.json engines). Below it the CLI warns; it never blocks. */
+export const REQUIRED_NODE_MAJOR = 22;
+/** What the guided upgrade installs. Docs call it the recommended line. */
+export const RECOMMENDED_NODE_MAJOR = 24;
+/** Below this, real features break (HTTP serve-mcp, the gateway OTLP receiver hang on Node 18). */
+const WORKS_NODE_MAJOR = 20;
+
+/** One-line warning for an unsupported Node, or undefined when the version is supported. */
+export function nodeFloorWarning(version: string = process.version): string | undefined {
+  const major = currentNodeMajor(version);
+  if (major >= REQUIRED_NODE_MAJOR) return undefined;
+  if (major >= WORKS_NODE_MAJOR) {
+    return `KYA supports Node.js ${REQUIRED_NODE_MAJOR}+ (${RECOMMENDED_NODE_MAJOR} recommended); ${version} is unsupported but works.`;
+  }
+  return (
+    `KYA does not support Node.js ${version}: some features break on it (HTTP serve-mcp, the gateway OTLP receiver). ` +
+    `Install Node.js ${REQUIRED_NODE_MAJOR}+ (${RECOMMENDED_NODE_MAJOR} recommended).`
+  );
+}
 
 export type NodeManager = "volta" | "fnm" | "nvm" | "brew";
 
@@ -199,7 +219,7 @@ function rerunTail(argv: readonly string[]): string {
   return `npm i -g @shield-agent/kya@latest && KYA_NODE_CHECKED=1 kya ${args.join(" ")}`;
 }
 
-/** Shell script that installs Node 24, reinstalls the CLI, and re-runs argv. */
+/** Shell script that installs Node 24 (RECOMMENDED_NODE_MAJOR), reinstalls the CLI, and re-runs argv. */
 export function buildUpgradeScript(
   manager: NodeManager,
   env: NodeJS.ProcessEnv,
@@ -281,9 +301,8 @@ export async function ensureSupportedNode(
   if (!command || SKIP_COMMANDS.has(command)) return undefined;
   if (env.KYA_SKIP_NODE_CHECK === "1" || env.KYA_NODE_CHECKED === "1") return undefined;
   const version = deps.version ?? process.version;
-  if (nodeSatisfied(version)) return undefined;
-
-  const warn = `KYA needs Node.js ${REQUIRED_NODE_MAJOR}+ (you have ${version}).`;
+  const warn = nodeFloorWarning(version);
+  if (warn === undefined) return undefined;
   const manager = detectNodeManager(env, deps);
 
   // Upgrade already done once? Don't re-offer the install - re-exec this
@@ -325,7 +344,13 @@ export async function ensureSupportedNode(
   const isTty = io.isTty ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const confirm = io.confirm ?? defaultConfirm;
   if (!isTty) {
-    io.error(`${warn} Continuing anyway - some features may break.`);
+    io.error(`${warn} Continuing.`);
+    return undefined;
+  }
+
+  // 20/21 work: without a manager to offer, a blocking "Continue anyway?" prompt adds nothing.
+  if (!manager && currentNodeMajor(version) >= WORKS_NODE_MAJOR) {
+    io.error(`${warn} Continuing.`);
     return undefined;
   }
 
@@ -334,7 +359,7 @@ export async function ensureSupportedNode(
     : `${warn} No version manager found (nodejs.org/en/download). Continue anyway? [Y/n]`;
   const ok = await confirm(question);
   if (!ok) {
-    io.error("Continuing on an unsupported Node - some features may break.");
+    io.error(`Continuing on unsupported Node ${version}.`);
     return undefined;
   }
   if (!manager) return undefined;
