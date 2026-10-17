@@ -112,7 +112,12 @@ export function shareBaseUrl(override: string | undefined, env: NodeJS.ProcessEn
 }
 
 export type ShareResult =
-  | { readonly ok: true; readonly url: string }
+  | {
+      readonly ok: true;
+      readonly url: string;
+      /** Server-reported expiry (ISO-8601), when the response carried one. */
+      readonly expiresAt?: string;
+    }
   | {
       readonly ok: false;
       readonly error: string;
@@ -175,11 +180,13 @@ export async function shareReceiptPayload(
       }
       return { ok: false, status: res.status, error: `share failed: HTTP ${res.status}` };
     }
-    const data = (await res.json().catch(() => null)) as { url?: unknown } | null;
+    const data = (await res.json().catch(() => null)) as { url?: unknown; expiresAt?: unknown } | null;
     if (!data || typeof data.url !== "string" || !data.url) {
       return { ok: false, error: "share failed: response did not include a url" };
     }
-    return { ok: true, url: data.url };
+    return typeof data.expiresAt === "string" && data.expiresAt
+      ? { ok: true, url: data.url, expiresAt: data.expiresAt }
+      : { ok: true, url: data.url };
   } finally {
     clearTimeout(timer);
   }
@@ -228,4 +235,16 @@ export async function shareReceiptWithRetry(
     if (result.ok || !isShareRetryable(result) || attempt >= retries) return result;
     await sleep(shareRetryDelayMs(result, attempt));
   }
+}
+
+/** One-line hint after a successful share (human output only, never under --json). */
+export const SHARE_HOSTED_HINT =
+  "Send it to your security lead: they can turn on hosted audit for the whole team from that page.";
+
+/** `Shared report: <url> (expires YYYY-MM-DD)`; the date part is left out when unknown or invalid. */
+export function formatShareLine(url: string, expiresAt: string | undefined): string {
+  const t = expiresAt ? Date.parse(expiresAt) : Number.NaN;
+  return Number.isFinite(t)
+    ? `Shared report: ${url} (expires ${new Date(t).toISOString().slice(0, 10)})`
+    : `Shared report: ${url}`;
 }

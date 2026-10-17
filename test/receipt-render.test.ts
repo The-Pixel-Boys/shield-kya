@@ -328,16 +328,18 @@ describe("renderReceiptHtml sections", () => {
       "Products",
       "Wired hosts",
       "Sandboxes",
-      "ORR",
       "Showback",
     ]) {
       expect(html).not.toContain(`aria-label="${label}"`);
     }
+    // Capabilities and ORR are always-on panels (self-service report design).
+    expect(html).toContain('aria-label="Capabilities"');
+    expect(html).toContain('aria-label="ORR"');
+    expect(html).toContain('id="orr"');
     expect(html).not.toContain('class="identity"');
     expect(html).not.toContain("Mode:");
     expect(html).not.toContain("class=\"modeb\"");
     // The Capabilities index is the one always-on table; no data tables render.
-    expect(html).toContain('aria-label="Capabilities"');
     expect(html.match(/<table/g)).toHaveLength(1);
   });
 
