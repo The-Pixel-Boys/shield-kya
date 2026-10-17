@@ -1011,7 +1011,7 @@ function capabilitiesPanel(model: ReceiptModel): string {
       blurb: "Operational readiness review across producers",
       live: !!model.orr,
       liveLabel: "ran",
-      setup: "<code>kya orr run</code>",
+      setup: "runs automatically at <code>kya start</code>; refresh with <code>kya orr run</code>",
     },
   ];
   const body = rows
@@ -1543,8 +1543,27 @@ ${c.sandboxes
 </section>`;
 }
 
-function orrPanel(orr: OrrCard | undefined, nowMs: number): string {
-  if (!orr) return "";
+/**
+ * ORR zone body: the full-width Operational Readiness Review board behind the
+ * dedicated "ORR" nav item. Always rendered. With a report on disk it shows
+ * overall rating, disposition, primary failure mode, most urgent fix and the
+ * scorecard counts; without one it says the board runs automatically at
+ * `kya start` and refreshes every 30 minutes, and offers "Run ORR now" on the
+ * live report (docs/report-design.md self-service rule).
+ */
+function orrPanel(orr: OrrCard | undefined, nowMs: number, live: boolean): string {
+  const run = live
+    ? `<button type="button" class="stat" data-report-action="orr-run">Run ORR now</button>
+  <div id="report-action-result-orr-run"></div>`
+    : "";
+  if (!orr) {
+    return `<section class="panel" aria-label="ORR">
+  <h2>Operational readiness</h2>
+  <p class="line">No ORR board yet. kya runs one automatically when the report starts and refreshes it every 30 minutes; the board rates operational readiness across producers.</p>
+  <p class="mute small">CLI: <code>kya orr run --path .</code></p>
+  ${run}
+</section>`;
+  }
   const target = orr.targetName
     ? `<span class="mute">target ${esc(clip(orr.targetName, 60))}</span>`
     : "";
@@ -1564,7 +1583,8 @@ function orrPanel(orr: OrrCard | undefined, nowMs: number): string {
   </div>
   ${failure}
   ${fix}
-  <p class="mute small">scorecards: ${orr.scorecards.pass} pass · ${orr.scorecards.fail} fail · ${orr.scorecards.partial} partial · ${orr.scorecards.notEvaluated} n/e${when}</p>
+  <p class="mute small">scorecards: ${orr.scorecards.pass} pass · ${orr.scorecards.fail} fail · ${orr.scorecards.partial} partial · ${orr.scorecards.notEvaluated} n/e${when} · auto-refreshes every 30 min while the report runs</p>
+  ${run}
 </section>`;
 }
 
@@ -2833,7 +2853,6 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       wiredHostsPanel(model.wiredHosts),
       sandboxesPanel(model.sandboxes, nowMs),
       openshellPanel(model.openshell, nowMs),
-      orrPanel(model.orr, nowMs),
       alertsPanel(model.alerts, nowMs, livePaged),
       otelPanel(model.otel, nowMs, livePaged),
       toolsHtml,
@@ -2862,6 +2881,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     ${navItem("#activity", "Activity", events.length)}
     ${navItem("#changes", "Changes", changes.fileCount)}
     ${navItem("#certify", "Certify", model.certify?.gap ?? 0)}
+    ${navItem("#orr", "ORR", model.orr ? model.orr.scorecards.fail : undefined)}
     ${navGroup("Gateway", model.gate?.state === "running")}
     ${navSubItem("#gateway-home", "Home", model.gate?.servers.length ?? 0)}
     ${navSubItem("#gateway-listeners", "Listeners", model.gate?.listeners?.length ?? 0)}
@@ -2935,6 +2955,9 @@ ${changesPanel(changes, nowMs)}
   </section>
   <section class="zone" id="certify" aria-labelledby="tab-certify">
     ${certifyBody}
+  </section>
+  <section class="zone" id="orr" aria-labelledby="tab-orr">
+    ${orrPanel(model.orr, nowMs, livePaged)}
   </section>
   ${gatePagePanel(model.gate, nowMs)}
   <section class="zone" id="system" aria-labelledby="tab-system">

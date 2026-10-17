@@ -45,6 +45,11 @@ Corollaries for anyone changing this report:
   OTel test exports to a temporary collector), records the outcome where the
   panel reads it, and names the config key that makes it real. Erroring with
   "not configured" is a dead end and is not allowed.
+- Expensive boards run themselves. A report that is produced by a CLI command
+  the user has to discover (ORR is the precedent) is generated automatically
+  when the live report starts and refreshes on a fixed cadence while it runs,
+  so the menu item is populated on first open. The underlying CLI command
+  stays the escape hatch, and a "run now" action covers the impatient case.
 - Conditional rendering on data *inside* a panel (hide a table with zero
   rows, show counts only when non-zero) stays fine; conditional rendering of
   the feature itself does not.

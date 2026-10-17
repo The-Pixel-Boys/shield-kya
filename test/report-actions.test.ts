@@ -12,6 +12,7 @@ import {
   runReportImportAction,
   runReportInvestigateAction,
   runReportNotifyTestAction,
+  runReportOrrAction,
   runReportOtelTestAction,
 } from "../src/receipt/live-server.js";
 import {
@@ -131,6 +132,17 @@ describe("runReportOtelTestAction", () => {
     expect(res.body["loopback"]).toBe(true);
     expect(String(res.body["detail"])).toContain("temporary loopback collector");
     expect(String(res.body["detail"])).toContain("otlpExport.endpoint");
+  });
+});
+
+describe("runReportOrrAction", () => {
+  it("generates orr-report/report.json on demand", async () => {
+    const cwd = cwdOf();
+    const res = await runReportOrrAction(cwd);
+    expect(res.status).toBe(200);
+    expect(res.body["ok"]).toBe(true);
+    expect(String(res.body["detail"])).toContain("overall");
+    expect(existsSync(join(cwd, "orr-report", "report.json"))).toBe(true);
   });
 });
 

@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "shield-kya",
   "display_name": "Shield KYA",
-  "version": "0.30.0",
+  "version": "0.31.0",
   "description": "Audit trail and traceability for AI agents. MCP gate: evaluate, ingest, request approval.",
   "long_description": "Local Claude Desktop extension that runs the packaged `dist/cli.js serve-mcp --stdio` against your Shield control plane (local or https://shield-agent.com). Tools evaluate policy, ingest session risk, and open Hold tickets. They never execute irreversible side effects.",
   "author": {

@@ -11,10 +11,11 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
-import { dirname, isAbsolute } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { kyaHome, readFileConfig, type ResolvedConfig } from "../config.js";
 import { runGateDoctor, runGateRun, runGateStop } from "../commands/gate.js";
 import { runInvestigate } from "../commands/investigate.js";
+import { runOrr } from "../commands/orr.js";
 import { loadInvestigateLastRun } from "../investigate/last-run.js";
 import {
   defaultAgtAuditPath,
@@ -140,6 +141,61 @@ async function withLoopbackSink<T>(run: (url: string) => Promise<T>): Promise<T>
 /** Merged global + project .kya/config.json, project wins (same as notify dispatch). */
 function mergedFileConfig(cwd: string, env: NodeJS.ProcessEnv): Record<string, unknown> {
   return { ...readFileConfig(kyaHome(env)), ...readFileConfig(cwd) } as Record<string, unknown>;
+}
+
+const ORR_REPORT_REL = join("orr-report", "report.json");
+/** Re-run the board when the report is older than this (30 minutes). */
+const ORR_REFRESH_MS = 30 * 60 * 1000;
+
+function orrReportPath(cwd: string): string {
+  return join(cwd, ORR_REPORT_REL);
+}
+
+/** True when <cwd>/orr-report/report.json is missing or older than ORR_REFRESH_MS. */
+function orrReportStale(cwd: string): boolean {
+  try {
+    const st = statSync(orrReportPath(cwd));
+    return Date.now() - st.mtimeMs > ORR_REFRESH_MS;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Run the ORR board against cwd and write <cwd>/orr-report/report.json (+ .md).
+ * Read-only probes; never throws (a failed board must not break the report
+ * server). The first-party producer set keeps it dependency-free.
+ */
+export function runOrrBoard(cwd: string): { ok: boolean; detail: string } {
+  try {
+    const result = runOrr({
+      path: cwd,
+      out: join(cwd, "orr-report"),
+      rubric: "0",
+      disableCategories: [],
+      formats: ["json", "md"],
+      producers: ["sa.first_party"],
+      skipOptionalProducers: true,
+      quiet: true,
+      jsonStdout: false,
+    });
+    const overall = result.report.overall;
+    const disposition = result.report.disposition.replace(/_/g, " ");
+    return { ok: true, detail: `overall ${overall} · ${disposition}` };
+  } catch (err) {
+    return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** POST /action/orr-run: regenerate the ORR board on demand. */
+export async function runReportOrrAction(cwd: string): Promise<ReportActionResult> {
+  const ran = runOrrBoard(cwd);
+  return {
+    status: 200,
+    body: ran.ok
+      ? { ok: true, detail: `ORR board regenerated: ${ran.detail}` }
+      : { ok: false, error: `ORR run failed: ${ran.detail}` },
+  };
 }
 
 /**
@@ -286,6 +342,7 @@ export function startLiveReceiptServer(
   const clients = new Set<ServerResponse>();
   let watcher: FSWatcher | undefined;
   let debounce: ReturnType<typeof setTimeout> | undefined;
+  let orrTimer: ReturnType<typeof setInterval> | undefined;
   let closed = false;
   let onSignal: (() => void) | undefined;
   const cache = new EventEmbeddingCache();
@@ -389,7 +446,8 @@ export function startLiveReceiptServer(
           url.pathname === "/action/discover" ||
           url.pathname === "/action/import" ||
           url.pathname === "/action/notify-test" ||
-          url.pathname === "/action/otel-test");
+          url.pathname === "/action/otel-test" ||
+          url.pathname === "/action/orr-run");
       if (isPostAction && !isLoopbackClient(req)) {
         return forbidden(res, { ok: false, error: "loopback only" });
       }
@@ -563,6 +621,21 @@ export function startLiveReceiptServer(
         return;
       }
 
+      if (req.method === "POST" && url.pathname === "/action/orr-run") {
+        void (async () => {
+          try {
+            const result = await runReportOrrAction(cwd);
+            return jsonOk(res, result.body);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(`${JSON.stringify({ ok: false, error: message })}\n`);
+            return;
+          }
+        })();
+        return;
+      }
+
       if (req.method === "POST" && url.pathname === "/feed") {
         void (async () => {
           try {
@@ -684,6 +757,7 @@ export function startLiveReceiptServer(
       }
       closed = true;
       if (debounce) clearTimeout(debounce);
+      if (orrTimer) clearInterval(orrTimer);
       if (onSignal) {
         process.removeListener("SIGINT", onSignal);
         process.removeListener("SIGTERM", onSignal);
@@ -717,6 +791,18 @@ export function startLiveReceiptServer(
       const addr = server.address();
       const port = typeof addr === "object" && addr ? addr.port : 0;
       const url = `http://${LOOPBACK}:${port}/?t=${token}`;
+
+      // ORR board: generate at start when missing/stale, then re-run on a
+      // 30-minute cadence while the report server lives. Background, never
+      // blocking; the SSE broadcast makes the panel pick the result up live.
+      const refreshOrr = (): void => {
+        if (closed || !orrReportStale(cwd)) return;
+        const ran = runOrrBoard(cwd);
+        if (ran.ok) scheduleBroadcast();
+      };
+      setTimeout(refreshOrr, 1_500);
+      orrTimer = setInterval(refreshOrr, ORR_REFRESH_MS);
+      orrTimer.unref?.();
 
       try {
         mkdirSync(dirname(path), { recursive: true });

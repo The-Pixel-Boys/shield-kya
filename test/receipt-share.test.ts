@@ -10,6 +10,8 @@ import {
   shareReceiptPayload,
   shareReceiptWithRetry,
   type SharePayload,
+  formatShareLine,
+  SHARE_HOSTED_HINT,
 } from "../src/receipt/share.js";
 import {
   buildWindowReceiptModel,
@@ -342,6 +344,36 @@ describe("kya receipt --share", () => {
     expect(JSON.stringify(body)).not.toContain("top secret operation");
     expect(JSON.stringify(body)).not.toContain("share-session");
     expect(body.stats.total).toBe(1);
+  });
+
+  it("prints the expiry date and the one hosted hint line", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response(JSON.stringify({ id: "pub-9", url: "https://shield-agent.com/r/pub-9",
+        expiresAt: "2026-10-23T09:15:00.123Z" }), { status: 201 }),
+    ));
+    const { io, logs } = captureIo();
+    expect(await runCli(["receipt", "--share"], io, {}, cwd)).toBe(0);
+    expect(logs).toEqual([
+      "Shared report: https://shield-agent.com/r/pub-9 (expires 2026-10-23)",
+      SHARE_HOSTED_HINT,
+    ]);
+  });
+
+  it("--json prints only {url, expiresAt}: no hint line", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response(JSON.stringify({ url: "https://shield-agent.com/r/pub-8", expiresAt: "2026-10-23T09:15:00Z" }),
+        { status: 201 }),
+    ));
+    const { io, logs } = captureIo();
+    expect(await runCli(["receipt", "--share", "--json"], io, {}, cwd)).toBe(0);
+    expect(logs).toHaveLength(1);
+    expect(JSON.parse(logs[0]!)).toEqual({ url: "https://shield-agent.com/r/pub-8", expiresAt: "2026-10-23T09:15:00Z" });
+    expect(logs.join("\n")).not.toContain("security lead");
+  });
+
+  it("formatShareLine leaves the date out when the server sent none or garbage", () => {
+    expect(formatShareLine("https://x/r/a", undefined)).toBe("Shared report: https://x/r/a");
+    expect(formatShareLine("https://x/r/a", "not-a-date")).toBe("Shared report: https://x/r/a");
   });
 
   it("exits 1 with a one-line error on failure", async () => {
