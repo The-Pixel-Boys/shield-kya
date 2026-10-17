@@ -1,4 +1,3 @@
-import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import type { ResolvedConfig } from "../config.js";
@@ -12,6 +11,7 @@ import {
 } from "../receipt/render-receipt.js";
 import { ensureReceiptDaemon } from "../receipt/daemon.js";
 import { receiptsDir } from "../trail.js";
+import { ensureOutDir, writeOutFile } from "../fs-atomic.js";
 import {
   buildSharePayload,
   clampShareRetries,
@@ -70,7 +70,7 @@ export async function runReceipt(
   });
 
   const dir = input.outDir?.trim() || receiptsDir(config.cwd);
-  mkdirSync(dir, { recursive: true });
+  ensureOutDir(dir, config.cwd);
   const safe = (sessionId ?? `last-${days}d`).replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
   const htmlPath = join(dir, `${safe}.html`);
   const jsonPath = join(dir, `${safe}.json`);
@@ -81,9 +81,9 @@ export async function runReceipt(
   const jsonBody = `${JSON.stringify(model, null, 2)}\n`;
   assertNoSecrets(jsonBody);
 
-  writeFileSync(htmlPath, html, "utf8");
-  writeFileSync(jsonPath, jsonBody, "utf8");
-  writeFileSync(mdPath, md, "utf8");
+  for (const [p, body] of [[htmlPath, html], [jsonPath, jsonBody], [mdPath, md]] as const) {
+    writeOutFile(p, body, config.cwd);
+  }
 
   const base: ReceiptArtifacts = {
     title: model.title,

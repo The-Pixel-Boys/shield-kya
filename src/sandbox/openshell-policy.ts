@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { writeProjectFile } from "../fs-atomic.js";
 import { join } from "node:path";
 import { assertInsideRoot, jailRoot } from "./path-jail.js";
 import { assertSandboxId } from "./id.js";
@@ -55,7 +55,6 @@ export function renderOpenshellPolicy(input: {
 /** Render and write the policy file; returns the jailed path passed to --policy. */
 export function writeOpenshellPolicy(root: string, sandboxId: string): string {
   const path = openshellPolicyPath(root, sandboxId);
-  mkdirSync(join(path, ".."), { recursive: true });
-  writeFileSync(path, renderOpenshellPolicy({ sandboxId, workdir: OPENSHELL_WORKDIR }), "utf8");
+  writeProjectFile(path, renderOpenshellPolicy({ sandboxId, workdir: OPENSHELL_WORKDIR }), jailRoot(root));
   return path;
 }

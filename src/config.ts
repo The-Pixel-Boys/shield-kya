@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { AuthRequiredError, UsageError } from "./errors.js";
+import { ensureProjectDir, writeProjectFile } from "./fs-atomic.js";
 
 export type Host = "ide" | "runtime";
 
@@ -83,8 +84,7 @@ export function readFileConfig(cwd: string): KyaFileConfig {
 }
 
 export function writeFileConfig(cwd: string, patch: KyaFileConfig): KyaFileConfig {
-  const dir = configDir(cwd);
-  mkdirSync(dir, { recursive: true });
+  ensureProjectDir(configDir(cwd), cwd);
   const path = configFilePath(cwd);
   const prev = readFileConfig(cwd);
   const next: KyaFileConfig = {
@@ -93,7 +93,7 @@ export function writeFileConfig(cwd: string, patch: KyaFileConfig): KyaFileConfi
       Object.entries(patch).filter(([, v]) => v !== undefined),
     ),
   };
-  writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  writeProjectFile(path, `${JSON.stringify(next, null, 2)}\n`, cwd);
   return next;
 }
 

@@ -4,10 +4,10 @@
  * The flag lives in the project `.kya/` dir, so the CTA prints at most once
  * per project - it never gates or delays the report itself.
  */
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { configDir } from "./config.js";
-import { atomicWriteSync } from "./fs-atomic.js";
+import { ensureProjectDir, writeProjectFile } from "./fs-atomic.js";
 import { readTrailSince } from "./trail.js";
 
 export const STAR_REPO_URL = "https://github.com/The-Pixel-Boys/shield-agent";
@@ -42,8 +42,8 @@ export function maybePrintStarCta(
     if (events.length < STAR_CTA_MIN_EVENTS) return false;
     log(STAR_CTA_LINE);
     try {
-      mkdirSync(configDir(cwd), { recursive: true });
-      atomicWriteSync(starCtaFlagPath(cwd), `${new Date().toISOString()}\n`);
+      ensureProjectDir(configDir(cwd), cwd);
+      writeProjectFile(starCtaFlagPath(cwd), `${new Date().toISOString()}\n`, cwd);
     } catch {
       /* flag persistence is best-effort - worst case the CTA prints again */
     }

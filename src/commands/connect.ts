@@ -7,6 +7,9 @@
  * Home-config writes are merge-only and symlink-safe: an existing target is
  * resolved with realpath and must be a regular file (dotfile setups symlink
  * ~/.claude.json & co. - writing the resolved regular file is supported).
+ * Project-scope writes (--project, kya start) never leave the project: a
+ * symlink or parent that resolves outside it, a dangling symlink or a hard
+ * linked file is refused (fs-atomic projectWritePath, exit 1).
  */
 import {
   existsSync,
@@ -25,7 +28,7 @@ import { UsageError } from "../errors.js";
 import { hostReload, hostRunning, listProcessNames, reloadMessage } from "../host-reload.js";
 import { hookSupported, wireHook, type HostedHookWiring } from "./wire-hooks.js";
 import { loadPlaneConfig, PlaneError } from "./hosted-hook.js";
-import { atomicWriteSync } from "../fs-atomic.js";
+import { atomicWriteSync, projectWritePath, writeProjectFile } from "../fs-atomic.js";
 
 export { atomicWriteSync } from "../fs-atomic.js";
 
@@ -293,15 +296,20 @@ export function mergeJsonHostConfig(
   block: Record<string, unknown>,
   force: boolean,
   serverKey = "shield-kya",
+  root?: string,
 ): ConnectStatus {
+  // Project scope (root set): never follow a link out of the project; home scope keeps the dotfiles behaviour.
+  const write = (t: string, content: string) =>
+    root ? writeProjectFile(path, content, root) : atomicWriteSync(t, content);
+  const projectTarget = root ? projectWritePath(path, root) : undefined;
   if (!existsSync(path)) {
-    atomicWriteSync(
-      createTarget(path),
+    write(
+      projectTarget ?? createTarget(path),
       `${JSON.stringify({ [rootKey]: { [serverKey]: block } }, null, 2)}\n`,
     );
     return "created";
   }
-  const target = writeTarget(path);
+  const target = projectTarget ?? writeTarget(path);
   let raw: Record<string, unknown>;
   try {
     raw = JSON.parse(readFileSync(target, "utf8")) as Record<string, unknown>;
@@ -324,7 +332,7 @@ export function mergeJsonHostConfig(
     return "skipped";
   }
   raw[rootKey] = { ...servers, [serverKey]: block };
-  atomicWriteSync(target, `${JSON.stringify(raw, null, 2)}\n`);
+  write(target, `${JSON.stringify(raw, null, 2)}\n`);
   return "wired";
 }
 
@@ -426,8 +434,10 @@ function mergeHostConfig(
   force: boolean,
   serverKey = "shield-kya",
   gateUrl?: string,
+  root?: string,
 ): ConnectStatus {
   if (spec.shape === "grok-toml" || spec.shape === "codex-toml") {
+    // ponytail: no TOML host has a projectPath, so root is unused here; pass it on if one ever gets one.
     return mergeTomlHostConfig(path, hostId, force, spec.shape, serverKey, gateUrl);
   }
   const block = gateUrl
@@ -435,7 +445,7 @@ function mergeHostConfig(
       ? opencodeGateBlock(gateUrl)
       : gateServerBlock(hostId, gateUrl)
     : serverBlock(hostId, spec);
-  return mergeJsonHostConfig(path, spec.rootKey, block, force, serverKey);
+  return mergeJsonHostConfig(path, spec.rootKey, block, force, serverKey, root);
 }
 
 export interface WireHostInput {
@@ -487,6 +497,7 @@ export function wireHost(input: WireHostInput): WireHostResult {
     Boolean(input.force),
     input.gateUrl ? "shield-kya-gate" : "shield-kya",
     input.gateUrl,
+    scope === "project" ? input.cwd : undefined,
   );
   return { host: key, label: spec.label, path, status, scope };
 }

@@ -11,7 +11,6 @@ import {
   existsSync,
   fchmodSync,
   lstatSync,
-  mkdirSync,
   openSync,
   readFileSync,
   rmSync,
@@ -22,6 +21,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { configDir, isLoopbackUrl, type ResolvedConfig } from "../config.js";
 import { KyaError } from "../errors.js";
+import { ensureProjectDir, projectWritePath } from "../fs-atomic.js";
 import { CLI_VERSION } from "../version.js";
 
 export interface ReceiptDaemonState {
@@ -66,11 +66,12 @@ export function readDaemonState(cwd: string): ReceiptDaemonState | undefined {
 }
 
 export function writeDaemonState(cwd: string, state: ReceiptDaemonState): void {
-  mkdirSync(configDir(cwd), { recursive: true });
+  ensureProjectDir(configDir(cwd), cwd);
   const path = daemonStatePath(cwd);
   // Never write through a planted symlink; force 0600 on pre-existing files
-  // (the mode argument only applies at creation).
+  // (the mode argument only applies at creation). A hard linked file is refused.
   removeIfSymlink(path);
+  projectWritePath(path, cwd);
   const fd = openSync(path, "w", 0o600);
   try {
     fchmodSync(fd, 0o600);
@@ -284,9 +285,10 @@ export async function ensureReceiptDaemon(
   }
   clearDaemonState(config.cwd);
 
-  mkdirSync(configDir(config.cwd), { recursive: true });
+  ensureProjectDir(configDir(config.cwd), config.cwd);
   const logPath = daemonLogPath(config.cwd);
   removeIfSymlink(logPath);
+  projectWritePath(logPath, config.cwd);
   const logFd = openSync(logPath, "a");
   const args = [cliJsPath(), "receipt-serve", "--days", String(input.days)];
   if (input.sessionId) args.push("--session", input.sessionId);

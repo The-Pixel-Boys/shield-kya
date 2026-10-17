@@ -5,16 +5,15 @@
 
 import {
   existsSync,
-  mkdirSync,
   readdirSync,
   readFileSync,
   lstatSync,
   realpathSync,
   statSync,
-  writeFileSync,
 } from "node:fs";
 import { basename, join, resolve, sep } from "node:path";
 import { UsageError } from "../errors.js";
+import { ensureOutDir, writeOutFile } from "../fs-atomic.js";
 import type { ParsedArgs } from "../parse-args.js";
 import { flagBool, flagString } from "../parse-args.js";
 import {
@@ -306,16 +305,17 @@ export function runOrr(options: OrrRunOptions): OrrRunResult {
   };
 
   const outDir = resolve(options.out);
-  mkdirSync(outDir, { recursive: true });
+  // ponytail: --out resolves against the process cwd, so that is the project root here.
+  ensureOutDir(outDir, process.cwd());
   let reportJsonPath: string | undefined;
   let reportMdPath: string | undefined;
   if (options.formats.includes("json")) {
     reportJsonPath = join(outDir, "report.json");
-    writeFileSync(reportJsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    writeOutFile(reportJsonPath, `${JSON.stringify(report, null, 2)}\n`, process.cwd());
   }
   if (options.formats.includes("md")) {
     reportMdPath = join(outDir, "report.md");
-    writeFileSync(reportMdPath, formatOrrMarkdown(report), "utf8");
+    writeOutFile(reportMdPath, formatOrrMarkdown(report), process.cwd());
   }
 
   let exitCode = 0;

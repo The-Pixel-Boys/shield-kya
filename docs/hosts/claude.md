@@ -40,6 +40,8 @@ Three MCP tools: `kya.policy_evaluate` (Allow / Deny / Hold), `kya.session_inges
 
 Connect and `kya start` merge - existing servers and keys stay. A symlinked `~/.claude.json` (dotfiles setups) is written through to the real file it resolves to.
 
+Project files are different: `kya connect --project`, `kya start`, `kya init`, `kya certify`, `kya orr run`, `kya receipt` and the sandbox state under `.kya/` never write outside the project. If `.mcp.json`, `mcp.json`, `.cursor/`, `.kya/`, a report directory inside the project (such as `.kya/certify` or `./orr-report`) or any other project path is a symlink that resolves outside the project, is a dangling symlink, or is a file with other hard links (the other name may be anywhere, including inside the repo), kya refuses, writes nothing and exits 1 with `PROJECT_PATH_REFUSED`. An output directory you name outside the project (`--out`, `--out-dir`) is used as given, but a link planted at a report file name there is replaced, not followed. A cloned repo cannot use a planted link to make kya edit a file elsewhere on your machine. A symlink that stays inside the project is followed. To fix a refusal, replace the link with a regular file (remove the link, or copy the real content in its place) and run the command again.
+
 ## Verify
 
 1. Restart the host after wiring.
