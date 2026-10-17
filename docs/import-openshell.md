@@ -52,6 +52,17 @@ L7 when the `[ocsf]` line tag mentions HTTP, when the record carries an
 `http_request` or `http_response` block, or when its class or category name
 mentions HTTP.
 
+## Report panel
+
+Imported OpenShell events feed the dedicated OpenShell panel in the live
+report (`kya receipt`, or `kya start` for the auto-refreshing dashboard): the
+total policy decisions with DENY vs ALLOW pills, a `openshell.network` vs
+`openshell.http` split, the top five destinations parsed from the redacted
+`dst: host:port` summaries, and the time of the last event. The panel renders
+only when at least one OpenShell signal exists (imported events, openshell-backend
+sandboxes, or a detected `openshell` CLI / `openshell-prover`);
+fresh installs do not see it. See `docs/sandbox.md` for the runtime probes.
+
 ## Re-importing
 
 Imports are idempotent. Rows are matched by the OCSF `uid` (`sourceHash`), so

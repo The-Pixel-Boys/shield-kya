@@ -52,6 +52,7 @@ import {
 } from "./gate-page.js";
 import { receiptCss } from "./receipt-css.js";
 import { applyChipFilters, rankEvents } from "./search.js";
+import { loadOpenshellCard, type OpenshellCard } from "./openshell-card.js";
 
 export const PAGE_SIZE = 50;
 
@@ -83,6 +84,8 @@ export interface ReceiptModel {
   readonly identity?: KyaFileConfig;
   /** Sandbox state + configured KYA_SANDBOX backend. */
   readonly sandboxes?: SandboxCard;
+  /** OpenShell rollup: trail events, openshell sandboxes, detected CLI/prover. */
+  readonly openshell?: OpenshellCard;
   /** Per-host wiring status across the connect registry. */
   readonly wiredHosts?: readonly WiredHostRow[];
   /** Local gateway state + per-server activity in the window. */
@@ -392,6 +395,7 @@ export function buildReceiptModel(
     searchQuery: extras?.searchQuery,
     identity: extras?.identity,
     sandboxes: extras?.sandboxes,
+    openshell: extras?.openshell,
     wiredHosts: extras?.wiredHosts,
     gate: extras?.gate,
     orr: extras?.orr,
@@ -424,6 +428,7 @@ export function buildWindowReceiptModel(
     searchQuery: extras?.searchQuery,
     identity: extras?.identity,
     sandboxes: extras?.sandboxes,
+    openshell: extras?.openshell,
     wiredHosts: extras?.wiredHosts,
     gate: extras?.gate,
     orr: extras?.orr,
@@ -456,7 +461,9 @@ export function loadReceiptModel(input: {
     : readTrailSince(input.cwd, new Date(Date.now() - days * 24 * 60 * 60 * 1000), env);
   // The Import card aggregates the full trail, not just the window: imported
   // spans keep their foreign timestamps and would fall out of a short window.
+  // The OpenShell card rolls up the same full-trail view for the same reason.
   const importEvents = input.sessionId ? events : readTrail(input.cwd, env);
+  const certify = loadCertifyCard(input.cwd);
   const extras = {
     page: input.page ?? 1,
     live: input.live,
@@ -464,10 +471,11 @@ export function loadReceiptModel(input: {
     searchQuery: input.searchQuery,
     identity: loadIdentity(input.cwd),
     sandboxes: loadSandboxes(input.cwd),
+    openshell: loadOpenshellCard({ cwd: input.cwd, events: importEvents, env, certify }),
     wiredHosts: loadWiredHosts(input.cwd),
     gate: loadGatePage(events),
     orr: loadOrrCard(input.cwd),
-    certify: loadCertifyCard(input.cwd),
+    certify,
     showback,
     imports: aggregateImports(importEvents),
     discovery: loadDiscoveryCard(env),
@@ -1322,6 +1330,101 @@ ${card.sandboxes
   <h2>Sandboxes</h2>
   ${backend}
   ${tbl}
+</section>`;
+}
+
+/**
+ * System-tab OpenShell panel (NVIDIA OpenShell): policy activity from
+ * imported openshell trail events, openshell-backend sandbox rows with their
+ * on-disk policy-file status, and a runtime card probing the openshell CLI
+ * (version cached, probed once per report build), the container runtime, the
+ * pinned version floor, the openshell-prover binary, and the SAFE-06 certify
+ * outcome reused from the already-computed certify card. Rendered only when at
+ * least one OpenShell signal exists; the loader (never this function) decides.
+ */
+function openshellPanel(card: OpenshellCard | undefined, nowMs: number): string {
+  if (!card) return "";
+
+  const activity = card.activity
+    ? `<div class="card">
+  <h3>Policy activity</h3>
+  <div class="kpi-row">
+    ${kpiTile("Events", card.activity.total)}
+    ${kpiTile("Denied", card.activity.deny, "bad")}
+    ${kpiTile("Allowed", card.activity.allow)}
+  </div>
+  <div class="orrline">
+    <span class="pill${card.activity.deny > 0 ? " bad" : ""}">DENY ${card.activity.deny}</span>
+    <span class="pill ok">ALLOW ${card.activity.allow}</span>
+    <span class="mute">network ${card.activity.network} · http ${card.activity.http}</span>
+  </div>
+  ${
+    card.activity.topDestinations.length === 0
+      ? ""
+      : `<div class="chiprow">
+    ${card.activity.topDestinations
+      .map((d) => `<span class="chip"><code>${esc(clip(d.dst, 60))}</code> × ${d.count}</span>`)
+      .join("\n    ")}
+  </div>`
+  }
+  <p class="mute small">last event ${card.activity.lastTs ? esc(relativeTime(card.activity.lastTs, nowMs)) : "unknown"}</p>
+</div>`
+    : `<p class="empty small">No OpenShell policy events on the trail. Import an export with <code>kya import --from openshell FILE</code>.</p>`;
+
+  const sandboxTbl =
+    card.sandboxes.length === 0
+      ? `<p class="empty small">No openshell-backend sandboxes recorded. Spawn one with <code>KYA_SANDBOX=openshell kya sandbox spawn</code>.</p>`
+      : `<table class="tbl">
+    <thead><tr><th>id</th><th>status</th><th>name</th><th>created</th><th>policy</th></tr></thead>
+    <tbody>
+${card.sandboxes
+  .map(
+    (s) => `      <tr>
+        <td><code title="${esc(s.sandboxId)}">${esc(clip(s.sandboxId, 20))}</code></td>
+        <td><span class="pill ${s.status === "running" ? "ok" : "mute"}">${esc(s.status)}</span></td>
+        <td>${s.externalName ? `<code>${esc(clip(s.externalName, 40))}</code>` : '<span class="mute">-</span>'}</td>
+        <td>${esc(relativeTime(s.createdAt, nowMs))}</td>
+        <td><span class="pill ${s.policyFile ? "ok" : "mute"}">${s.policyFile ? "written" : "missing"}</span></td>
+      </tr>`,
+  )
+  .join("\n")}
+    </tbody>
+  </table>`;
+
+  const rt = card.runtime;
+  const cliLine = rt.cliFound
+    ? `<p class="line">openshell CLI <span class="pill ok">found</span>${
+        rt.cliVersion
+          ? ` <code>${esc(clip(rt.cliVersion, 40))}</code>`
+          : ' <span class="mute">version probe failed</span>'
+      }</p>`
+    : `<p class="line">openshell CLI <span class="pill">not detected</span></p>`;
+  const runtimeLine = rt.containerRuntime
+    ? `<span class="pill ok">${esc(rt.containerRuntime)}</span>`
+    : `<span class="pill">not detected</span>`;
+  const proverLine = rt.proverFound
+    ? `<p class="line">openshell-prover <span class="pill ok">found</span></p>`
+    : `<p class="line">openshell-prover <span class="pill">not detected</span></p>`;
+  const safe06Tone = rt.safe06 ? DETAIL_PILL_TONE[rt.safe06.status as RequirementStatus] ?? "" : "";
+  const safe06Line = rt.safe06
+    ? `<p class="line">SAFE-06 (openshell-prover) <span class="pill${safe06Tone ? ` ${safe06Tone}` : ""}">${esc(
+        rt.safe06.status.replace(/_/g, " "),
+      )}</span> <span class="mute">${esc(clip(rt.safe06.evidence, 120))}</span></p>`
+    : `<p class="line">SAFE-06 (openshell-prover) <span class="mute">not evaluated by Certify yet</span></p>`;
+  const runtime = `<div class="card">
+  <h3>Runtime</h3>
+  ${cliLine}
+  <p class="line">container runtime ${runtimeLine} <span class="mute">minimum ${esc(rt.minVersion)}</span></p>
+  ${proverLine}
+  ${safe06Line}
+</div>`;
+
+  return `<section class="panel" aria-label="OpenShell">
+  <h2>OpenShell</h2>
+  ${activity}
+  <h3>Sandboxes</h3>
+  ${sandboxTbl}
+  ${runtime}
 </section>`;
 }
 
@@ -2613,6 +2716,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       gatePanel(model.gate, nowMs),
       wiredHostsPanel(model.wiredHosts),
       sandboxesPanel(model.sandboxes, nowMs),
+      openshellPanel(model.openshell, nowMs),
       orrPanel(model.orr, nowMs),
       alertsPanel(model.alerts, nowMs, livePaged),
       otelPanel(model.otel, nowMs, livePaged),

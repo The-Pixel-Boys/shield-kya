@@ -34,4 +34,6 @@ Telemetry: KYA always sets `OPENSHELL_TELEMETRY_ENABLED=false` on the spawned en
 
 Records keep the OpenShell-side sandbox name (`kya-<sandboxId>`) in the `externalName` field of `.kya/sandboxes.json`, so `kya sandbox status` and `kya certify` correlate KYA ids with backend names.
 
+The live report (`kya receipt`, or `kya start` for the auto-refreshing dashboard) renders a dedicated OpenShell panel in the System tab once any OpenShell signal exists: policy activity (DENY vs ALLOW, `openshell.network` vs `openshell.http`, top destinations) rolled up from imported `openshell.*` trail events, openshell-backend sandbox rows with the on-disk `.kya/openshell/policy-<sandboxId>.yaml` status, and a runtime card probing the `openshell` CLI version (once per report build, cached), the container runtime, the pinned `OPENSHELL_MIN_VERSION` floor, and the `openshell-prover` binary, including the SAFE-06 certify outcome when the certify card already computed one. With no OpenShell data at all the panel is omitted; fresh installs never see it.
+
 Real-binary end-to-end tests are opt-in: `KYA_E2E_OPENSHELL=1 pnpm test` (skipped by default, mirroring the real-gate e2e pattern).
