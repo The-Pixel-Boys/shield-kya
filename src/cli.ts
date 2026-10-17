@@ -65,6 +65,7 @@ import {
   runReceipt,
   runReceiptShare,
 } from "./commands/receipt.js";
+import { formatShareLine, SHARE_HOSTED_HINT } from "./receipt/share.js";
 import { formatStartHuman, runStart } from "./commands/start.js";
 import {
   connectableHosts,
@@ -618,7 +619,12 @@ export async function runCli(
             io.error(shared.error);
             return 1;
           }
-          io.log(`Shared report: ${shared.url}`);
+          if (config.json) {
+            io.log(JSON.stringify({ url: shared.url, expiresAt: shared.expiresAt ?? null }));
+          } else {
+            io.log(formatShareLine(shared.url, shared.expiresAt));
+            io.log(SHARE_HOSTED_HINT);
+          }
           return 0;
         }
         const result = await runReceipt(config, input);

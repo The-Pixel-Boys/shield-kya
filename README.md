@@ -184,7 +184,7 @@ The report itself is a dashboard: a hero row on top (live **Certify** result, ve
 
 ### Sharing a report
 
-`kya receipt --share` publishes a **redacted summary** of the current window (aggregate verdict counts, product and reason-code rollups, and the Certify status - no paths, no tool arguments, no session IDs) to shield-agent.com and prints a public URL (`/r/<id>`, expires after 7 days) anyone can open - every shared page carries the one-line install so readers can audit their own agents. Point it at a different collector with `--share-url <base>` or `KYA_SHARE_URL`.
+`kya receipt --share` publishes a **redacted summary** of the current window (aggregate verdict counts, product and reason-code rollups, and the Certify status - no paths, no tool arguments, no session IDs) to shield-agent.com and prints a public URL (`/r/<id>`) with its expiry date (7 days) that anyone can open, plus one line suggesting you send it to your security lead. Every shared page carries the one-line install so readers can audit their own agents, and a button to start a hosted workspace for the team. The Certify status on the page is labelled as self-reported by the CLI, not verified by Shield Agent. With `--json` the command prints only `{"url", "expiresAt"}`. Point it at a different collector with `--share-url <base>` or `KYA_SHARE_URL`.
 
 Sharing is a single attempt by design (storm-proof: no silent retries against the collector); `--share-retries <n>` (max 3) opts into bounded retries on 429/5xx/network failures with exponential backoff + jitter, honoring the server's `Retry-After`.
 
@@ -252,7 +252,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.30.0", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.31.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -292,7 +292,7 @@ Offline evaluate by default (no network, no hosted plane); an explicit config ho
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.30.0 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.31.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -303,7 +303,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.30.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.31.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
