@@ -112,21 +112,25 @@ describe("runReportInvestigateAction", () => {
 });
 
 describe("runReportNotifyTestAction", () => {
-  it("fails with a config hint when no webhooks are configured", async () => {
-    const res = await runReportNotifyTestAction(cwdOf(), { KYA_HOME: home() });
+  it("delivers to an ephemeral loopback receiver when no webhooks are configured", async () => {
+    const homeDir = home();
+    const res = await runReportNotifyTestAction(cwdOf(), { KYA_HOME: homeDir });
     expect(res.status).toBe(200);
-    expect(res.body["ok"]).toBe(false);
-    expect(String(res.body["error"])).toContain("no webhooks configured");
-    expect(String(res.body["error"])).toContain("KYA_NOTIFY_WEBHOOK");
+    expect(res.body["ok"]).toBe(true);
+    expect(res.body["loopback"]).toBe(true);
+    expect(String(res.body["detail"])).toContain("temporary loopback receiver");
+    expect(String(res.body["detail"])).toContain("notify.webhooks");
   });
 });
 
 describe("runReportOtelTestAction", () => {
-  it("fails with a config hint when no endpoint is configured", async () => {
+  it("exports to an ephemeral loopback collector when no endpoint is configured", async () => {
     const res = await runReportOtelTestAction(cwdOf(), { KYA_HOME: home() });
     expect(res.status).toBe(200);
-    expect(res.body["ok"]).toBe(false);
-    expect(String(res.body["detail"])).toContain("otlpExport not configured");
+    expect(res.body["ok"]).toBe(true);
+    expect(res.body["loopback"]).toBe(true);
+    expect(String(res.body["detail"])).toContain("temporary loopback collector");
+    expect(String(res.body["detail"])).toContain("otlpExport.endpoint");
   });
 });
 

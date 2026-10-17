@@ -108,7 +108,9 @@ describe("receipt 3-day window", () => {
     expect(html).toContain("last 3 days");
     expect(html).toContain('aria-label="Activity feed"');
     expect(html).toContain("class=\"ev");
-    expect(html).not.toContain("<table");
+    // The always-on Capabilities index is the only table on a data-free model.
+    expect(html).toContain('aria-label="Capabilities"');
+    expect(html.match(/<table/g)).toHaveLength(1);
     expect(html).toContain("Cursor");
     expect(html).toContain("Claude Code");
     expect(html).toContain("blocked");

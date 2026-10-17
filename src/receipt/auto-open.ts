@@ -6,11 +6,12 @@
  * per cwd (always on DENY/never-event). Disable with KYA_RECEIPT_AUTO=0.
  * Force with KYA_RECEIPT_AUTO=1 (even non-TTY / CI).
  */
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import type { ResolvedConfig } from "../config.js";
 import { configDir } from "../config.js";
+import { ensureProjectDir, writeProjectFile } from "../fs-atomic.js";
 import { runReceipt } from "../commands/receipt.js";
 
 export function shouldAutoOpenReceipt(
@@ -33,8 +34,8 @@ function alreadyOpened(cwd: string): boolean {
 }
 
 function markOpened(cwd: string): void {
-  mkdirSync(configDir(cwd), { recursive: true });
-  writeFileSync(markerPath(cwd), `${new Date().toISOString()}\n`, "utf8");
+  ensureProjectDir(configDir(cwd), cwd);
+  writeProjectFile(markerPath(cwd), `${new Date().toISOString()}\n`, cwd);
 }
 
 function openBrowser(target: string): void {

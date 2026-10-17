@@ -1,6 +1,6 @@
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { mkdirSync } from "node:fs";
+import { ensureProjectDir, writeProjectFile } from "../fs-atomic.js";
 import type { Host } from "../config.js";
 import { configDir, writeFileConfig } from "../config.js";
 import { SAMPLE_TOOLS } from "../sample-tools.js";
@@ -26,7 +26,7 @@ export interface InitOptions {
 export function runInit(options: InitOptions = {}): InitResult {
   const cwd = options.cwd ?? process.cwd();
   const dir = configDir(cwd);
-  mkdirSync(dir, { recursive: true });
+  ensureProjectDir(dir, cwd);
 
   const created: string[] = [];
   const skipped: string[] = [];
@@ -46,10 +46,10 @@ export function runInit(options: InitOptions = {}): InitResult {
   }
 
   if (!existsSync(toolsPath) || options.force) {
-    writeFileSync(
+    writeProjectFile(
       toolsPath,
       `${JSON.stringify({ tools: SAMPLE_TOOLS, packsRequired: false }, null, 2)}\n`,
-      "utf8",
+      cwd,
     );
     created.push(toolsPath);
   } else {
@@ -57,7 +57,7 @@ export function runInit(options: InitOptions = {}): InitResult {
   }
 
   if (!existsSync(envExamplePath) || options.force) {
-    writeFileSync(envExamplePath, ENV_EXAMPLE, "utf8");
+    writeProjectFile(envExamplePath, ENV_EXAMPLE, cwd);
     created.push(envExamplePath);
   } else {
     skipped.push(envExamplePath);

@@ -4,10 +4,10 @@
  * DENYs, or blocks anything. Local-first: no network, no account, no key check.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { assertNoSecrets } from "../dash/render.js";
 import { UsageError } from "../errors.js";
+import { ensureOutDir, writeOutFile } from "../fs-atomic.js";
 import { flagBool, flagString, type ParsedArgs } from "../parse-args.js";
 import { loadCatalog } from "../certify/catalog.js";
 import { assembleEvidenceContext } from "../certify/context.js";
@@ -155,23 +155,23 @@ export function runCertify(options: CertifyOptions): CertifyResult {
   };
 
   const outDir = resolve(options.cwd, options.out);
-  mkdirSync(outDir, { recursive: true });
+  ensureOutDir(outDir, options.cwd);
   let jsonPath: string | undefined;
   let mdPath: string | undefined;
   if (options.formats.includes("json")) {
     jsonPath = join(outDir, "report.json");
     const json = `${JSON.stringify(report, null, 2)}\n`;
     assertNoSecrets(json);
-    writeFileSync(jsonPath, json, "utf8");
+    writeOutFile(jsonPath, json, options.cwd);
   }
   if (options.formats.includes("md")) {
     mdPath = join(outDir, "report.md");
-    writeFileSync(mdPath, formatCertifyMarkdown(report), "utf8");
+    writeOutFile(mdPath, formatCertifyMarkdown(report), options.cwd);
   }
   let htmlPath: string | undefined;
   if (options.formats.includes("html")) {
     htmlPath = join(outDir, "report.html");
-    writeFileSync(htmlPath, renderCertifyHtml(report), "utf8");
+    writeOutFile(htmlPath, renderCertifyHtml(report), options.cwd);
   }
 
   let bundlePath: string | undefined;
@@ -195,7 +195,7 @@ export function runCertify(options: CertifyOptions): CertifyResult {
       key,
     );
     bundlePath = join(outDir, "evidence-bundle.json");
-    writeFileSync(bundlePath, `${JSON.stringify(bundle, null, 2)}\n`, "utf8");
+    writeOutFile(bundlePath, `${JSON.stringify(bundle, null, 2)}\n`, options.cwd);
   }
 
   let exitCode = 0;

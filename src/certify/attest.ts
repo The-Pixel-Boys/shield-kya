@@ -3,12 +3,12 @@
  * cannot check. Local file only (<cwd>/.kya/attestations.json); never uploaded,
  * never a PEP. Latest attestation per requirement id wins.
  */
-import { chmodSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { configDir } from "../config.js";
 import { assertNoSecrets, stripEscapes } from "../dash/render.js";
 import { UsageError } from "../errors.js";
-import { atomicWriteSync } from "../fs-atomic.js";
+import { ensureProjectDir, writeProjectFile } from "../fs-atomic.js";
 
 export interface AttestationRecord {
   readonly requirementId: string;
@@ -100,11 +100,11 @@ export function recordAttestation(
     (r) => r.requirementId !== id,
   );
   const store = { version: 1, attestations: [...others, record] };
-  mkdirSync(configDir(cwd), { recursive: true, mode: 0o700 });
+  ensureProjectDir(configDir(cwd), cwd, 0o700);
   // Atomic tmp+rename: a crash or concurrent run must never truncate the
   // store - the fail-safe load would silently discard all attestation history.
   const path = attestationsPath(cwd);
-  atomicWriteSync(path, `${JSON.stringify(store, null, 2)}\n`);
+  writeProjectFile(path, `${JSON.stringify(store, null, 2)}\n`, cwd);
   try {
     chmodSync(path, 0o600); // operator statements are sensitive - evidence-bundle perms
   } catch {

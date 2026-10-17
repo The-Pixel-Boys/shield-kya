@@ -1,9 +1,9 @@
 /**
- * OpenShell report panel: the pure trail rollup, the conditional render
- * contract (panel omitted entirely on a fresh install), sandbox rows with
- * policy-file status against a temp .kya dir, runtime probes against stub
- * PATH binaries (same pattern as test/sandbox.test.ts), and the live-server
- * payload wiring.
+ * OpenShell report panel: the pure trail rollup, the always-render contract
+ * (panel shows self-service empty states on a fresh install), sandbox rows
+ * with policy-file status against a temp .kya dir, runtime probes against
+ * stub PATH binaries (same pattern as test/sandbox.test.ts), and the
+ * live-server payload wiring.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -119,12 +119,19 @@ describe("aggregateOpenshellEvents", () => {
 });
 
 describe("loadOpenshellCard + OpenShell panel", () => {
-  it("returns undefined and omits the panel when no openshell signal exists", () => {
+  it("always returns a card and renders the panel, even with no openshell signal", () => {
     const cwd = tmp();
     const card = loadOpenshellCard({ cwd, events: [], env: emptyPathEnv(tmp()) });
-    expect(card).toBeUndefined();
-    const html = renderReceiptHtml(buildWindowReceiptModel([], 3));
-    expect(html).not.toContain('aria-label="OpenShell"');
+    expect(card).toBeDefined();
+    expect(card?.activity).toBeUndefined();
+    expect(card?.sandboxes).toEqual([]);
+    expect(card?.runtime.cliFound).toBe(false);
+    const html = renderReceiptHtml(buildWindowReceiptModel([], 3, { openshell: card }));
+    expect(html).toContain('aria-label="OpenShell"');
+    // Self-service empty state names the activation command.
+    expect(html).toContain("kya import --from openshell FILE");
+    expect(html).toContain("KYA_SANDBOX=openshell kya sandbox spawn");
+    expect(html).toContain('openshell CLI <span class="pill">not detected</span>');
   });
 
   it("renders activity counts, deny/allow pills, and destinations", () => {
@@ -354,12 +361,13 @@ describe("live receipt server OpenShell payload", () => {
     return s;
   }
 
-  it("omits the panel on a fresh install and renders it once openshell events land", async () => {
+  it("renders the panel on a fresh install (empty state) and with data once openshell events land", async () => {
     const fresh = await start();
     const freshHtml = await (
       await fetch(`http://127.0.0.1:${fresh.port}/?t=${fresh.token}`)
     ).text();
-    expect(freshHtml).not.toContain('aria-label="OpenShell"');
+    expect(freshHtml).toContain('aria-label="OpenShell"');
+    expect(freshHtml).toContain("kya import --from openshell FILE");
     await fresh.close();
 
     appendTrail(dir, osEv({ summary: "dst: live.example.com:443" }));

@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/scripts/bootstrap.mjs\" @shield-agent/kya@0.29.0",
+            "command": "node \"${PLUGIN_ROOT}/scripts/bootstrap.mjs\" @shield-agent/kya@0.30.0",
             "timeout": 120,
             "statusMessage": "Shield KYA: checking the local kya install"
           }

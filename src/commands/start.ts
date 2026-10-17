@@ -14,12 +14,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { ResolvedConfig } from "../config.js";
+import { configDir, type ResolvedConfig } from "../config.js";
+import { projectWritePath } from "../fs-atomic.js";
 import { UsageError } from "../errors.js";
 import { runInit } from "./init.js";
 import { openPath, runReceipt } from "./receipt.js";
 import { ensureReceiptDaemon } from "../receipt/daemon.js";
-import { appendTrail, defaultSessionId, trailPath } from "../trail.js";
+import { appendTrail, defaultSessionId, receiptsDir, trailPath } from "../trail.js";
 import { hostReload, hostRunning, listProcessNames, reloadMessage } from "../host-reload.js";
 import {
   CONNECT_REGISTRY,
@@ -281,6 +282,10 @@ export async function runStart(
   const open = input.open !== false;
   const home = input.home?.trim() || process.env.KYA_HOME?.trim() || homedir();
 
+  // Refuse before writing anything when a project file or .kya leaves the project (ProjectPathError, exit 1).
+  projectWritePath(configDir(config.cwd), config.cwd, true);
+  projectWritePath(receiptsDir(config.cwd), config.cwd, true);
+  for (const f of [".mcp.json", "mcp.json", join(".cursor", "mcp.json")]) projectWritePath(join(config.cwd, f), config.cwd);
   const init = runInit({ cwd: config.cwd, force: false });
   const wired: string[] = [];
   const skipped: string[] = [...init.skipped];
@@ -302,6 +307,8 @@ export async function runStart(
         "mcpServers",
         standardServerBlock("generic"),
         force,
+        "shield-kya",
+        config.cwd,
       ),
     }),
     () => wireHost({ host: "cursor", scope: "project", force, home, cwd: config.cwd }),

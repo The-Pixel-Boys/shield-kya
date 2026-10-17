@@ -240,12 +240,34 @@ export interface LoadOpenshellCardInput {
 }
 
 /**
- * Build the OpenShell card. Returns undefined when nothing OpenShell-related
- * exists (no trail events, no openshell sandboxes, no openshell CLI or prover
- * on PATH): the report omits the panel entirely on fresh installs. Every probe
- * is defensive and never throws.
+ * An all-empty card: no activity, no sandboxes, every runtime probe negative.
+ * Used by the renderer when the model carries no card (static artifacts) so the
+ * panel can still render its self-service empty state.
  */
-export function loadOpenshellCard(input: LoadOpenshellCardInput): OpenshellCard | undefined {
+export function emptyOpenshellCard(): OpenshellCard {
+  return {
+    activity: undefined,
+    sandboxes: [],
+    runtime: {
+      cliFound: false,
+      cliVersion: undefined,
+      containerRuntime: undefined,
+      minVersion: OPENSHELL_MIN_VERSION,
+      proverFound: false,
+      safe06: undefined,
+    },
+  };
+}
+
+/**
+ * Build the OpenShell card. Always returns a card, even when nothing
+ * OpenShell-related exists yet (no trail events, no openshell sandboxes, no
+ * openshell CLI or prover on PATH): the report renders the panel with empty
+ * states so OpenShell support stays discoverable from the dashboard itself.
+ * See docs/report-design.md (the dashboard is self-explanatory at all times).
+ * Every probe is defensive and never throws.
+ */
+export function loadOpenshellCard(input: LoadOpenshellCardInput): OpenshellCard {
   const env = input.env ?? process.env;
   const activity = aggregateOpenshellEvents(input.events);
   const sandboxes = openshellSandboxRows(input.cwd);
@@ -259,8 +281,5 @@ export function loadOpenshellCard(input: LoadOpenshellCardInput): OpenshellCard 
     proverFound: resolveOpenshellProver(env) !== undefined,
     safe06: safe06Row ? { status: safe06Row.status, evidence: safe06Row.evidence } : undefined,
   };
-  if (!activity && sandboxes.length === 0 && !runtime.cliFound && !runtime.proverFound) {
-    return undefined;
-  }
   return { activity, sandboxes, runtime };
 }

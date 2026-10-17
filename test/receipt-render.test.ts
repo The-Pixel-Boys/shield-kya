@@ -336,7 +336,9 @@ describe("renderReceiptHtml sections", () => {
     expect(html).not.toContain('class="identity"');
     expect(html).not.toContain("Mode:");
     expect(html).not.toContain("class=\"modeb\"");
-    expect(html).not.toContain("<table");
+    // The Capabilities index is the one always-on table; no data tables render.
+    expect(html).toContain('aria-label="Capabilities"');
+    expect(html.match(/<table/g)).toHaveLength(1);
   });
 
   it("renders every section when the data is present", () => {

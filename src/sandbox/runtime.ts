@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
+import { writeProjectFile } from "../fs-atomic.js";
 import { join } from "node:path";
 import { UsageError } from "../errors.js";
 import { createFirecrackerDriver } from "./firecracker-driver.js";
@@ -46,11 +47,10 @@ export function loadSandboxState(root: string): SandboxRecord[] {
 
 export function saveSandboxState(root: string, rows: SandboxRecord[]): void {
   const jailed = jailRoot(root);
-  const dir = join(jailed, ".kya");
-  mkdirSync(dir, { recursive: true });
   const path = sandboxStatePath(jailed);
   assertInsideRoot(path, jailed, "sandbox state");
-  writeFileSync(path, JSON.stringify(rows, null, 2) + "\n");
+  // assertInsideRoot is lexical; writeProjectFile also refuses links out of the jail.
+  writeProjectFile(path, JSON.stringify(rows, null, 2) + "\n", jailed);
 }
 
 export async function spawnSandbox(input: {

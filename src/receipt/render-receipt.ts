@@ -52,7 +52,7 @@ import {
 } from "./gate-page.js";
 import { receiptCss } from "./receipt-css.js";
 import { applyChipFilters, rankEvents } from "./search.js";
-import { loadOpenshellCard, type OpenshellCard } from "./openshell-card.js";
+import { emptyOpenshellCard, loadOpenshellCard, type OpenshellCard } from "./openshell-card.js";
 
 export const PAGE_SIZE = 50;
 
@@ -928,6 +928,119 @@ function wiredHostsPanel(hosts: readonly WiredHostRow[] | undefined): string {
 }
 
 /**
+ * Always-on Capabilities panel: the index of everything this kya install
+ * supports, each row showing live status (green) or availability (neutral)
+ * plus the exact command or config that turns it on. This is the dashboard
+ * half of the self-service rule in docs/report-design.md: a capability a user
+ * cannot see is a capability that does not exist, so this panel renders even
+ * on a fresh install with zero data anywhere. Status is derived only from
+ * fields already on the model; it never triggers probes or IO of its own.
+ */
+function capabilitiesPanel(model: ReceiptModel): string {
+  type Row = { name: string; blurb: string; live: boolean; liveLabel: string; setup: string };
+  const os = model.openshell;
+  const osLive =
+    (os?.activity?.total ?? 0) > 0 || (os?.sandboxes.length ?? 0) > 0 || os?.runtime.cliFound === true || os?.runtime.proverFound === true;
+  const gateState = model.gate?.state;
+  const rows: Row[] = [
+    {
+      name: "MCP gateway",
+      blurb: "Govern and audit tool calls to any MCP server",
+      live: gateState === "running",
+      liveLabel: gateState === "configured-stopped" ? "configured" : "running",
+      setup: "<code>kya gate init</code>",
+    },
+    {
+      name: "OpenShell sandboxing",
+      blurb: "NVIDIA OpenShell policy-enforced agent sandboxes",
+      live: osLive,
+      liveLabel: "in use",
+      setup: '<code>kya import --from openshell FILE</code> or install the openshell CLI',
+    },
+    {
+      name: "Sandboxes",
+      blurb: "Firecracker or mock isolated execution for tool calls",
+      live: (model.sandboxes?.sandboxes.length ?? 0) > 0 || !!model.sandboxes?.backend,
+      liveLabel: "in use",
+      setup: "<code>KYA_SANDBOX=mock kya sandbox spawn</code>",
+    },
+    {
+      name: "Trace imports",
+      blurb: "LangSmith, Langfuse, Phoenix, OTel, AGT, ADR Sensor, OpenShell",
+      live: (model.imports?.total ?? 0) > 0,
+      liveLabel: `${model.imports?.total ?? 0} imported`,
+      setup: "<code>kya import --from langsmith FILE</code>",
+    },
+    {
+      name: "Endpoint discovery",
+      blurb: "Inventory AI agents, IDEs, runtimes and MCP servers on this machine",
+      live: !!model.discovery,
+      liveLabel: `${model.discovery?.total ?? 0} found`,
+      setup: "<code>kya discover</code>",
+    },
+    {
+      name: "Investigation",
+      blurb: "Deterministic trail analysis with grouped incidents",
+      live: !!model.investigate,
+      liveLabel: "ran",
+      setup: "<code>kya investigate</code>",
+    },
+    {
+      name: "Alerts",
+      blurb: "Webhooks on DENY and REQUIRE_APPROVE verdicts",
+      live: !!model.alerts,
+      liveLabel: "configured",
+      setup: '<code>notify.webhooks</code> in .kya/config.json',
+    },
+    {
+      name: "OTel export",
+      blurb: "Mirror verdict events to any OTLP/HTTP collector",
+      live: !!model.otel,
+      liveLabel: "exporting",
+      setup: '<code>otlpExport.endpoint</code> in .kya/config.json',
+    },
+    {
+      name: "Certify baseline",
+      blurb: "Agent Trust Baseline gap report from local evidence",
+      live: !!model.certify,
+      liveLabel: "evaluated",
+      setup: "<code>kya certify</code>",
+    },
+    {
+      name: "ORR board",
+      blurb: "Operational readiness review across producers",
+      live: !!model.orr,
+      liveLabel: "ran",
+      setup: "<code>kya orr run</code>",
+    },
+  ];
+  const body = rows
+    .map(
+      (r) => `      <tr>
+        <td><strong>${esc(r.name)}</strong></td>
+        <td>${esc(r.blurb)}</td>
+        <td>${
+          r.live
+            ? `<span class="pill ok">${esc(r.liveLabel)}</span>`
+            : '<span class="pill">available</span>'
+        }</td>
+        <td class="mute small">${r.setup}</td>
+      </tr>`,
+    )
+    .join("\n");
+  return `<section class="panel" id="capabilities" aria-label="Capabilities">
+  <h2>Capabilities</h2>
+  <p class="mute small">Everything this install supports. Rows turn green as each capability is used; <span class="pill">available</span> rows name the command that activates them.</p>
+  <table class="tbl">
+    <thead><tr><th>Capability</th><th>What it does</th><th>Status</th><th>Turn it on</th></tr></thead>
+    <tbody>
+${body}
+    </tbody>
+  </table>
+</section>`;
+}
+
+/**
  * System-tab gateway summary: a single status row that links to the dedicated
  * Gateway section. Detail lives in the Gateway pages so the System tab stays
  * focused on host/runtime state.
@@ -1339,45 +1452,47 @@ ${card.sandboxes
  * on-disk policy-file status, and a runtime card probing the openshell CLI
  * (version cached, probed once per report build), the container runtime, the
  * pinned version floor, the openshell-prover binary, and the SAFE-06 certify
- * outcome reused from the already-computed certify card. Rendered only when at
- * least one OpenShell signal exists; the loader (never this function) decides.
+ * outcome reused from the already-computed certify card. Always rendered: with
+ * no OpenShell signal yet the activity and sandbox blocks fall back to empty
+ * states that name the exact command to activate them, so the capability stays
+ * discoverable from the dashboard itself (docs/report-design.md).
  */
 function openshellPanel(card: OpenshellCard | undefined, nowMs: number): string {
-  if (!card) return "";
+  const c = card ?? emptyOpenshellCard();
 
-  const activity = card.activity
+  const activity = c.activity
     ? `<div class="card">
   <h3>Policy activity</h3>
   <div class="kpi-row">
-    ${kpiTile("Events", card.activity.total)}
-    ${kpiTile("Denied", card.activity.deny, "bad")}
-    ${kpiTile("Allowed", card.activity.allow)}
+    ${kpiTile("Events", c.activity.total)}
+    ${kpiTile("Denied", c.activity.deny, "bad")}
+    ${kpiTile("Allowed", c.activity.allow)}
   </div>
   <div class="orrline">
-    <span class="pill${card.activity.deny > 0 ? " bad" : ""}">DENY ${card.activity.deny}</span>
-    <span class="pill ok">ALLOW ${card.activity.allow}</span>
-    <span class="mute">network ${card.activity.network} · http ${card.activity.http}</span>
+    <span class="pill${c.activity.deny > 0 ? " bad" : ""}">DENY ${c.activity.deny}</span>
+    <span class="pill ok">ALLOW ${c.activity.allow}</span>
+    <span class="mute">network ${c.activity.network} · http ${c.activity.http}</span>
   </div>
   ${
-    card.activity.topDestinations.length === 0
+    c.activity.topDestinations.length === 0
       ? ""
       : `<div class="chiprow">
-    ${card.activity.topDestinations
+    ${c.activity.topDestinations
       .map((d) => `<span class="chip"><code>${esc(clip(d.dst, 60))}</code> × ${d.count}</span>`)
       .join("\n    ")}
   </div>`
   }
-  <p class="mute small">last event ${card.activity.lastTs ? esc(relativeTime(card.activity.lastTs, nowMs)) : "unknown"}</p>
+  <p class="mute small">last event ${c.activity.lastTs ? esc(relativeTime(c.activity.lastTs, nowMs)) : "unknown"}</p>
 </div>`
     : `<p class="empty small">No OpenShell policy events on the trail. Import an export with <code>kya import --from openshell FILE</code>.</p>`;
 
   const sandboxTbl =
-    card.sandboxes.length === 0
+    c.sandboxes.length === 0
       ? `<p class="empty small">No openshell-backend sandboxes recorded. Spawn one with <code>KYA_SANDBOX=openshell kya sandbox spawn</code>.</p>`
       : `<table class="tbl">
     <thead><tr><th>id</th><th>status</th><th>name</th><th>created</th><th>policy</th></tr></thead>
     <tbody>
-${card.sandboxes
+${c.sandboxes
   .map(
     (s) => `      <tr>
         <td><code title="${esc(s.sandboxId)}">${esc(clip(s.sandboxId, 20))}</code></td>
@@ -1391,7 +1506,7 @@ ${card.sandboxes
     </tbody>
   </table>`;
 
-  const rt = card.runtime;
+  const rt = c.runtime;
   const cliLine = rt.cliFound
     ? `<p class="line">openshell CLI <span class="pill ok">found</span>${
         rt.cliVersion
@@ -1926,7 +2041,7 @@ function alertsPanel(card: NotifyLogSummary | undefined, nowMs: number, live: bo
     return `<section class="panel" aria-label="Alerts">
   <h2>Alerts</h2>
   <p class="line">No alert deliveries yet. kya fires webhooks for DENY and REQUIRE_APPROVE verdicts; every delivery attempt is logged here per target.</p>
-  <p class="mute small">configure <code>notify.webhooks</code> in .kya/config.json or set <code>KYA_NOTIFY_WEBHOOK</code>, then send a test alert</p>
+  <p class="mute small">send a test alert to see the pipeline work (it uses a temporary loopback receiver until you configure <code>notify.webhooks</code> in .kya/config.json or set <code>KYA_NOTIFY_WEBHOOK</code>)</p>
   ${test}
 </section>`;
   }
@@ -1971,7 +2086,7 @@ function otelPanel(stats: OtelStats | undefined, nowMs: number, live: boolean): 
     return `<section class="panel" aria-label="OTel export">
   <h2>OTel export</h2>
   <p class="line">No spans exported yet. kya can mirror verdict events to any OTLP/HTTP collector; sent and failed counts are tracked here.</p>
-  <p class="mute small">configure <code>otlpExport.endpoint</code> in .kya/config.json or set <code>KYA_OTLP_EXPORT_ENDPOINT</code>, then test the export</p>
+  <p class="mute small">test the export now (it uses a temporary loopback collector until you configure <code>otlpExport.endpoint</code> in .kya/config.json or set <code>KYA_OTLP_EXPORT_ENDPOINT</code>)</p>
   ${test}
 </section>`;
   }
@@ -2621,7 +2736,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
               : action === 'discover'
                 ? 'Done: ' + data.total + ' item(s) discovered'
                 : action === 'notify-test'
-                  ? 'Test alert sent to ' + data.targets + ' target(s)'
+                  ? (data.detail ? String(data.detail) : 'Test alert sent to ' + data.targets + ' target(s)')
                   : String(data.detail || 'ok');
             setResult(resultEl, '<p>' + esc(msg) + '</p>', false);
             if (action === 'otel-test') {
@@ -2713,6 +2828,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   );
   const systemBody = zoneBody(
     [
+      capabilitiesPanel(model),
       gatePanel(model.gate, nowMs),
       wiredHostsPanel(model.wiredHosts),
       sandboxesPanel(model.sandboxes, nowMs),

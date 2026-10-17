@@ -108,6 +108,35 @@ const IMPORT_SOURCES: readonly ImportSource[] = ["langsmith", "langfuse", "phoen
 const OTEL_CONFIG_HINT =
   "configure otlpExport.endpoint in .kya/config.json or KYA_OTLP_EXPORT_ENDPOINT";
 
+/**
+ * Ephemeral 127.0.0.1 HTTP sink that answers 200 to every POST. Lets the
+ * zero-config self-tests (notify, otel) exercise the real delivery/export
+ * pipeline end to end instead of dead-ending with a config error; the sink
+ * closes as soon as the handler finishes.
+ */
+async function withLoopbackSink<T>(run: (url: string) => Promise<T>): Promise<T> {
+  const server = createServer((req, res) => {
+    if (req.method === "POST") {
+      req.resume();
+      req.on("end", () => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end("{}");
+      });
+    } else {
+      res.writeHead(405).end();
+    }
+  });
+  await new Promise<void>((resolve) => server.listen(0, LOOPBACK, resolve));
+  const addr = server.address();
+  const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+  try {
+    return await run(`http://127.0.0.1:${port}`);
+  } finally {
+    server.closeAllConnections?.();
+    server.close();
+  }
+}
+
 /** Merged global + project .kya/config.json, project wins (same as notify dispatch). */
 function mergedFileConfig(cwd: string, env: NodeJS.ProcessEnv): Record<string, unknown> {
   return { ...readFileConfig(kyaHome(env)), ...readFileConfig(cwd) } as Record<string, unknown>;
@@ -178,15 +207,6 @@ export async function runReportNotifyTestAction(
 ): Promise<ReportActionResult> {
   const config = mergedFileConfig(cwd, env) as NotifyFileConfig;
   const targets = resolveWebhooks(config, env);
-  if (targets.length === 0) {
-    return {
-      status: 200,
-      body: {
-        ok: false,
-        error: "no webhooks configured - set notify.webhooks in .kya/config.json or KYA_NOTIFY_WEBHOOK",
-      },
-    };
-  }
   const event: TrailEvent = {
     ts: new Date().toISOString(),
     sessionId: "kya-report-test",
@@ -196,6 +216,27 @@ export async function runReportNotifyTestAction(
     mode: "observe",
     summary: "test alert from the kya report",
   };
+  if (targets.length === 0) {
+    // Zero-config self-test: deliver through the real sender to an ephemeral
+    // loopback sink so the button proves the pipeline instead of dead-ending.
+    // The delivery lands in notify-log.jsonl and shows up in the Alerts panel.
+    return withLoopbackSink(async (url) => {
+      const loopbackConfig: NotifyFileConfig = {
+        notify: { webhooks: [{ url, events: ["DENY"], template: "generic" }] },
+      };
+      await notifyOnTrailEvent(event, loopbackConfig, env);
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          targets: 1,
+          loopback: true,
+          detail:
+            "test alert delivered to a temporary loopback receiver (delivery recorded in the Alerts panel). Set notify.webhooks in .kya/config.json or KYA_NOTIFY_WEBHOOK to alert a real target.",
+        },
+      };
+    });
+  }
   await notifyOnTrailEvent(event, config, env);
   return { status: 200, body: { ok: true, targets: targets.length } };
 }
@@ -206,6 +247,24 @@ export async function runReportOtelTestAction(
   env: NodeJS.ProcessEnv,
 ): Promise<ReportActionResult> {
   const config = resolveOtlpExportConfig(env, mergedFileConfig(cwd, env));
+  if (!config) {
+    // Zero-config self-test: stand up an ephemeral loopback collector and run
+    // the real exporter against it, so the button proves the export path
+    // instead of dead-ending with a config error.
+    return withLoopbackSink(async (url) => {
+      const result = await otlpExportSelfTest({ endpoint: url });
+      return {
+        status: 200,
+        body: {
+          ok: result.ok,
+          loopback: true,
+          detail: result.ok
+            ? `span accepted by a temporary loopback collector (${result.detail}). Set otlpExport.endpoint in .kya/config.json or KYA_OTLP_EXPORT_ENDPOINT to export for real.`
+            : `${result.detail} - ${OTEL_CONFIG_HINT}`,
+        },
+      };
+    });
+  }
   try {
     const result = await otlpExportSelfTest(config);
     return {
