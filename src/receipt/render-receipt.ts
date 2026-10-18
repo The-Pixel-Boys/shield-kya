@@ -1608,7 +1608,7 @@ function kpiTile(label: string, value: string | number, cls = ""): string {
  */
 function heroCertifyPanel(certify: CertifyCard | undefined): string {
   if (!certify) {
-    return `<section class="panel hero-certify none" aria-label="Certify">
+    return `<section class="panel hero-certify none" id="frag-hero-certify" aria-label="Certify">
   <h2>Certify - Agent Trust Baseline</h2>
   <div class="orrline">
     <span class="pill">not evaluated</span>
@@ -1669,7 +1669,7 @@ ${certify.topGaps
     <span class="mute small">or run <code>kya certify --open</code> for the signed bundle</span>
   </div>`;
   // Pill tones reuse the ORR palette: pass is green, gap is amber.
-  return `<section class="panel hero-certify ${state}" aria-label="Certify">
+  return `<section class="panel hero-certify ${state}" id="frag-hero-certify" aria-label="Certify">
   <h2>Certify - Agent Trust Baseline</h2>
   <div class="orrline">
     <span class="pill orr-${state === "pass" ? "green" : "amber"}">${esc(certify.result)}</span>
@@ -2222,6 +2222,79 @@ function paginationBar(total: number, page: number, pages: number): string {
   return `<div class="pagination-bar">\n  ${prev}\n  ${numbers.join("\n  ")}\n  ${next}\n  <span class="mute">Page ${page} of ${pages} · ${total} event${total === 1 ? "" : "s"}</span>\n</div>`;
 }
 
+/** Zones never render as bare whitespace: with no panels they get a hint. */
+const zoneBody = (parts: readonly string[], empty: string): string =>
+  parts.some((p) => p.length > 0)
+    ? parts.filter(Boolean).join("\n    ")
+    : `<p class="mute small zone-empty">${empty}</p>`;
+
+/** Inner markup of the Activity counts bar (verdict buttons + mode/plane chips). */
+function statCountsInner(c: ReturnType<typeof countVerdicts>, chips: ReturnType<typeof statChips>): string {
+  return `<button type="button" class="stat ok" data-fgroup="verdict" data-fvalue="ALLOW" aria-pressed="false" title="Filter: Allow">Allow<b>${c.allow}</b></button>
+        <button type="button" class="stat bad" data-fgroup="verdict" data-fvalue="DENY" aria-pressed="false" title="Filter: Deny">Deny<b>${c.deny}</b></button>
+        <button type="button" class="stat warn" data-fgroup="verdict" data-fvalue="REQUIRE_APPROVE" aria-pressed="false" title="Filter: Review">Review<b>${c.require}</b></button>
+        <button type="button" class="stat" data-fgroup="never" data-fvalue="1" aria-pressed="false" title="Filter: Never">Never<b>${c.never}</b></button>
+        ${chips.modes}${chips.planes}
+        <button type="button" class="stat clear-filters" id="clear-filters" hidden>Clear filters ×</button>`;
+}
+
+/**
+ * Live-refresh fragments: the containers POST /fragments re-renders so the
+ * report updates in place instead of reloading the whole page.
+ * renderReceiptHtml builds the initial page through the same helpers, so
+ * first paint and refreshes cannot drift apart.
+ */
+export function buildLiveFragments(
+  model: ReceiptModel,
+  livePaged: boolean,
+): {
+  fragments: Record<string, string>;
+  nav: Record<string, number | null>;
+} {
+  const nowMs = Date.now();
+  const events = normalizeTrailEvents(model.events);
+  const c = countVerdicts(events);
+  const agg = aggregateEvents(events);
+  const chips = statChips(agg);
+  const dashboard = computeDashboard(events);
+  const changes = buildChangesModel(events);
+  return {
+    fragments: {
+      statCounts: statCountsInner(c, chips),
+      chipProducts: chips.products,
+      chipProjects: chips.projects,
+      chipServers: chips.servers,
+      heroCertify: heroCertifyPanel(model.certify),
+      heroTiles: [
+        verdictsHeroCard(c, events.length),
+        activityHeroCard(agg, dashboard, events.length),
+        gatewayHeroCard(model.gate, nowMs),
+        importHeroCard(model.imports, nowMs, livePaged),
+        discoveryHeroCard(model.discovery, nowMs, livePaged),
+        investigateHeroCard(model.investigate, nowMs, livePaged),
+        showbackHeroCard(model.showback, events),
+      ].join("\n        "),
+      overviewPanels: zoneBody(
+        [dashboardPanel(dashboard), sessionsPanel(agg, nowMs, changes), reasonsPanel(agg)],
+        "No activity in this window yet - analytics appear once events land.",
+      ),
+      certifyBody: zoneBody(
+        [model.certify ? certifyDetailPanel(model.certify.requirements) : ""],
+        "No live evaluation yet - wrap tool calls and run kya certify to build the baseline.",
+      ),
+      orrPanel: orrPanel(model.orr, nowMs, livePaged),
+      changesList: changesPanel(changes, nowMs),
+    },
+    nav: {
+      overview: events.length,
+      activity: events.length,
+      changes: changes.fileCount,
+      certify: model.certify?.gap ?? null,
+      orr: model.orr ? model.orr.scorecards.fail : null,
+    },
+  };
+}
+
 export function renderReceiptHtml(model: ReceiptModel): string {
   const nowMs = Date.now();
   const events = normalizeTrailEvents(model.events);
@@ -2242,11 +2315,12 @@ export function renderReceiptHtml(model: ReceiptModel): string {
         pages: 1,
       };
 
-  const c = countVerdicts(events);
   const agg = aggregateEvents(events);
   const chips = statChips(agg);
-  const dashboard = computeDashboard(events);
   const changes = buildChangesModel(events);
+  // Live-refresh fragments render the initial page AND the POST /fragments
+  // refresh, so the two can never drift apart.
+  const fr = buildLiveFragments(model, livePaged);
   const blocked = events.filter((e) => e.neverEvent || e.reasonCode === "NEVER_EVENT");
   const tools =
     model.mcpSeen && model.mcpSeen.length > 0
@@ -2271,19 +2345,8 @@ export function renderReceiptHtml(model: ReceiptModel): string {
 
   // liveToken is minted base64url by the live server - safe in a JS string
   // literal; static renders omit it. No post-hoc html.replace (spoofable).
-  const eventsUrl = model.liveToken ? `/events?t=${encodeURIComponent(model.liveToken)}` : "/events";
-  const liveScript = model.live
-    ? `<script>
-(function(){
-  var pill = document.querySelector('.live');
-  var es = new EventSource('${eventsUrl}');
-  es.onmessage = function(){ location.reload(); };
-  es.onerror = function(){
-    if (pill) { pill.textContent = 'Offline'; pill.classList.add('off'); }
-  };
-})();
-</script>`
-    : "";
+  // Live updates ride the filter script's EventSource + /fragments refresh;
+  // there is deliberately no page-level reload-on-change script.
 
   // Client-side chip filters, pagination, and search: only emitted for live
   // reports (liveToken present). Static receipts render a separate BM25-only
@@ -2310,8 +2373,8 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   var page = 1;
   var q = '';
   var LIVE = !!(document.querySelectorAll && document.querySelectorAll('main[data-live-token]').length);
-  var clearBtn = document.getElementById('clear-filters');
-  var chips = document.querySelectorAll('[data-fgroup]');
+  var stopped = false;
+  var pill = null;
   function readToken(){
     var s = location.search;
     if (s.indexOf('?') !== 0) return '';
@@ -2322,6 +2385,24 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       }
     }
     return '';
+  }
+  // 401 on any live request means the report server restarted and this page's
+  // token is stale. Stop refreshing and tell the user how to get a fresh link
+  // instead of looping on a dead token.
+  function showRestartBanner(){
+    if (stopped) return;
+    stopped = true;
+    if (pill) { pill.textContent = 'Offline'; pill.classList.add('off'); }
+    try {
+      var main = document.querySelector('main');
+      if (!main || document.getElementById('kya-restart-banner') || !document.createElement) return;
+      var div = document.createElement('div');
+      div.id = 'kya-restart-banner';
+      div.className = 'alert';
+      div.setAttribute('role', 'status');
+      div.textContent = 'Report server restarted. Re-run kya receipt --open (or kya start) for a fresh link.';
+      main.insertBefore(div, main.firstChild);
+    } catch (e) { /* banner is best-effort */ }
   }
   function parse(){
     state = Object.create(null);
@@ -2425,11 +2506,12 @@ export function renderReceiptHtml(model: ReceiptModel): string {
         group.classList.toggle('filtered-out', on && !vis);
       });
     }
-    chips.forEach(function(chip){
+    document.querySelectorAll('[data-fgroup]').forEach(function(chip){
       var pressed = !!(state[chip.dataset.fgroup] && state[chip.dataset.fgroup][chip.dataset.fvalue]);
       chip.setAttribute('aria-pressed', pressed ? 'true' : 'false');
     });
-    if (clearBtn) clearBtn.hidden = !active();
+    var cb = document.getElementById('clear-filters');
+    if (cb) cb.hidden = !active();
   }
   function updateMeta(total){
     if (!searchMeta) return;
@@ -2452,7 +2534,10 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filters: serverFilters, page: page, q: q })
     })
-    .then(function(r){ return r.json(); })
+    .then(function(r){
+      if (r.status === 401) { showRestartBanner(); throw new Error('unauthorized'); }
+      return r.json();
+    })
     .then(function(data){
       if (feed && data.feedHtml) feed.innerHTML = data.feedHtml;
       if (bar && data.paginationHtml) bar.innerHTML = data.paginationHtml;
@@ -2460,19 +2545,31 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     })
     .catch(function(err){ console.error('KYA feed update failed', err); });
   }
-  chips.forEach(function(chip){
-    chip.addEventListener('click', function(){
-      var g = chip.dataset.fgroup, v = chip.dataset.fvalue;
-      if (state[g] && state[g][v]) {
-        delete state[g][v];
-        if (!Object.keys(state[g]).length) delete state[g];
-      } else {
-        (state[g] || (state[g] = Object.create(null)))[v] = true;
-      }
-      page = 1;
+  // Filter chips are delegated on document: live refresh swaps chip containers
+  // innerHTML, so per-element bindings would die on the first update. The
+  // pressed state is reapplied by apply() from the query-param state.
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest('#clear-filters')) {
+      state = Object.create(null); page = 1; q = '';
+      if (searchInput) searchInput.value = '';
       save(); apply();
       if (LIVE) feedUpdate();
-    });
+      return;
+    }
+    var chip = t.closest('[data-fgroup]');
+    if (!chip) return;
+    var g = chip.dataset.fgroup, v = chip.dataset.fvalue;
+    if (state[g] && state[g][v]) {
+      delete state[g][v];
+      if (!Object.keys(state[g]).length) delete state[g];
+    } else {
+      (state[g] || (state[g] = Object.create(null)))[v] = true;
+    }
+    page = 1;
+    save(); apply();
+    if (LIVE) feedUpdate();
   });
   if (LIVE && bar) {
     bar.addEventListener('click', function(e){
@@ -2499,10 +2596,123 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       if (LIVE) debounce = setTimeout(feedUpdate, 120);
     });
   }
-  if (clearBtn) clearBtn.addEventListener('click', function(){ state = Object.create(null); page = 1; q = ''; if (searchInput) searchInput.value = ''; save(); apply(); if (LIVE) feedUpdate(); });
   parse(); apply();
   if (searchInput) searchInput.value = q;
   if (LIVE && (active() || page !== 1)) feedUpdate();
+
+  // Live refresh: SSE says what changed, then only the affected containers
+  // re-render in place. No full-page reloads, so scroll, focus, and filter
+  // state survive and new rows stream into the feed on page 1.
+  if (LIVE) {
+    pill = document.querySelector('.live');
+    var dirty = false;
+    var lastFrag = 0;
+    var fragTimer = 0;
+    var sseDebounce = 0;
+    function flash(el){
+      el.classList.remove('frag-flash');
+      void el.offsetWidth;
+      el.classList.add('frag-flash');
+    }
+    function updateNavCounts(nav){
+      Object.keys(nav).forEach(function(k){
+        var link = document.getElementById('tab-' + k);
+        if (!link) return;
+        var span = link.querySelector('.nav-count');
+        if (nav[k] === null || nav[k] === undefined) {
+          if (span) span.parentNode.removeChild(span);
+          return;
+        }
+        if (!span) {
+          span = document.createElement('span');
+          span.className = 'nav-count';
+          link.appendChild(span);
+        }
+        span.textContent = String(nav[k]);
+      });
+    }
+    var FRAG_TARGETS = {
+      statCounts: 'stat-counts',
+      chipProducts: 'chip-products',
+      chipProjects: 'chip-projects',
+      chipServers: 'chip-servers',
+      heroCertify: 'frag-hero-certify',
+      heroTiles: 'frag-hero-tiles',
+      overviewPanels: 'frag-overview-panels',
+      certifyBody: 'frag-certify',
+      orrPanel: 'frag-orr',
+      changesList: 'changes-list'
+    };
+    function loadFragments(){
+      lastFrag = Date.now();
+      fetch('/fragments?t=' + encodeURIComponent(readToken()), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}'
+      })
+      .then(function(r){
+        if (r.status === 401) { showRestartBanner(); throw new Error('unauthorized'); }
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(data){
+        if (!data || !data.ok || !data.fragments) return;
+        Object.keys(FRAG_TARGETS).forEach(function(k){
+          var el = document.getElementById(FRAG_TARGETS[k]);
+          if (!el || typeof data.fragments[k] !== 'string') return;
+          if (el.innerHTML !== data.fragments[k]) {
+            el.innerHTML = data.fragments[k];
+            flash(el);
+          }
+        });
+        // Fresh chip HTML arrives unpressed: reapply from the query-param state.
+        apply();
+        if (data.nav) updateNavCounts(data.nav);
+      })
+      .catch(function(err){ if (!stopped) console.error('KYA fragments update failed', err); });
+    }
+    function scheduleFragments(){
+      if (fragTimer || stopped) return;
+      var wait = Math.max(0, 2000 - (Date.now() - lastFrag));
+      fragTimer = setTimeout(function(){
+        fragTimer = 0;
+        if (!dirty || document.hidden) return;
+        dirty = false;
+        loadFragments();
+      }, wait);
+    }
+    function refresh(){
+      if (stopped) return;
+      if (document.hidden) { dirty = true; return; }
+      dirty = false;
+      feedUpdate();
+      scheduleFragments();
+    }
+    // EventSource is absent in DOM shims and very old engines; the page still
+    // works, it just does not stream updates.
+    if (typeof EventSource === 'function') {
+      var es = new EventSource('/events?t=' + encodeURIComponent(readToken()));
+      es.onmessage = function(){
+        if (stopped) return;
+        dirty = true;
+        clearTimeout(sseDebounce);
+        sseDebounce = setTimeout(refresh, 300);
+      };
+      es.onerror = function(){
+        // EventSource retries on its own; the pill reflects the outage and a
+        // 401 on the next real request surfaces the restart banner.
+        if (pill) { pill.textContent = 'Offline'; pill.classList.add('off'); }
+      };
+    }
+    if (document.addEventListener) {
+      document.addEventListener('visibilitychange', function(){
+        if (!document.hidden && dirty && !stopped) {
+          clearTimeout(sseDebounce);
+          sseDebounce = setTimeout(refresh, 100);
+        }
+      });
+    }
+  }
 })();
 </script>`
     : "";
@@ -2682,7 +2892,15 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       body: JSON.stringify(body)
     });
   }
-  function parseJson(res){ return res.json(); }
+  function parseJson(res){
+    if (!res.ok) {
+      var msg = res.status === 401
+        ? 'Session expired or unauthorized (401). Reload the report from kya start, then try again.'
+        : 'Request failed with HTTP ' + res.status;
+      throw new Error(msg);
+    }
+    return res.json();
+  }
 
   var form = document.getElementById('gate-play-form');
   if (form) {
@@ -2741,6 +2959,23 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     });
   });
 
+  // Success feedback must survive the confirmation reload: the result div is
+  // server-rendered empty on the fresh page, so without this the user sees a
+  // blip for 800 ms and then an apparently unchanged page.
+  function persistResult(action, msg){
+    try { sessionStorage.setItem('kya:action-result', JSON.stringify({ a: action, m: msg })); } catch (e) {}
+  }
+  (function showPersistedResult(){
+    var raw;
+    try { raw = sessionStorage.getItem('kya:action-result'); sessionStorage.removeItem('kya:action-result'); } catch (e) { return; }
+    if (!raw) return;
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { return; }
+    var el = document.getElementById('report-action-result-' + data.a)
+      || (data.a === 'import' ? document.getElementById('import-result') : null);
+    if (el && typeof data.m === 'string') setResult(el, '<p>' + esc(data.m) + '</p>', false);
+  })();
+
   document.querySelectorAll('[data-report-action]').forEach(function(btn){
     btn.addEventListener('click', function(){
       var action = btn.getAttribute('data-report-action');
@@ -2762,7 +2997,8 @@ export function renderReceiptHtml(model: ReceiptModel): string {
             if (action === 'otel-test') {
               btn.disabled = false;
             } else {
-              setTimeout(function(){ location.reload(); }, 800);
+              persistResult(action, msg);
+              setTimeout(function(){ location.reload(); }, 1500);
             }
           } else {
             setResult(resultEl, '<p>Error: ' + esc(data && (data.error || data.detail) ? (data.error || data.detail) : 'unknown') + '</p>', true);
@@ -2791,8 +3027,10 @@ export function renderReceiptHtml(model: ReceiptModel): string {
         .then(function(data){
           if (data && data.ok) {
             var errs = data.errors && data.errors.length ? ' · ' + data.errors.length + ' error(s)' : '';
-            setResult(resultEl, '<p>Imported ' + data.imported + ' event(s)' + errs + ' - reloading...</p>', false);
-            setTimeout(function(){ location.reload(); }, 800);
+            var importMsg = 'Imported ' + data.imported + ' event(s)' + errs;
+            setResult(resultEl, '<p>' + esc(importMsg) + ' - reloading...</p>', false);
+            persistResult('import', importMsg);
+            setTimeout(function(){ location.reload(); }, 1500);
           } else {
             setResult(resultEl, '<p>Error: ' + esc(data && data.error ? data.error : 'unknown') + '</p>', true);
             if (btn) btn.disabled = false;
@@ -2833,19 +3071,8 @@ export function renderReceiptHtml(model: ReceiptModel): string {
 </script>`
     : "";
 
-  // Zones never render as bare whitespace: with no panels they get a hint.
-  const zoneBody = (parts: readonly string[], empty: string): string =>
-    parts.some((p) => p.length > 0)
-      ? parts.filter(Boolean).join("\n    ")
-      : `<p class="mute small zone-empty">${empty}</p>`;
-  const overviewBody = zoneBody(
-    [dashboardPanel(dashboard), sessionsPanel(agg, nowMs, changes), reasonsPanel(agg)],
-    "No activity in this window yet - analytics appear once events land.",
-  );
-  const certifyBody = zoneBody(
-    [model.certify ? certifyDetailPanel(model.certify.requirements) : ""],
-    "No live evaluation yet - wrap tool calls and run kya certify to build the baseline.",
-  );
+  // (zoneBody lives at module level; buildLiveFragments above produces the
+  // overview and certify bodies through the same helper.)
   const systemBody = zoneBody(
     [
       capabilitiesPanel(model),
@@ -2909,18 +3136,12 @@ ${model.liveToken ? '<main data-live-token="1">' : '<main>'}
   ${blockedBanner}
   <section class="zone" id="overview" aria-labelledby="tab-overview">
     <div class="hero">
-      ${heroCertifyPanel(model.certify)}
-      <div class="hero-tiles">
-        ${verdictsHeroCard(c, events.length)}
-        ${activityHeroCard(agg, dashboard, events.length)}
-        ${gatewayHeroCard(model.gate, nowMs)}
-        ${importHeroCard(model.imports, nowMs, livePaged)}
-        ${discoveryHeroCard(model.discovery, nowMs, livePaged)}
-        ${investigateHeroCard(model.investigate, nowMs, livePaged)}
-        ${showbackHeroCard(model.showback, model.events)}
+      ${fr.fragments.heroCertify}
+      <div class="hero-tiles" id="frag-hero-tiles">
+        ${fr.fragments.heroTiles}
       </div>
     </div>
-    ${overviewBody}
+    <div id="frag-overview-panels">${fr.fragments.overviewPanels}</div>
   </section>
   <section class="zone" id="activity" aria-labelledby="tab-activity">
     <div class="feed-search">
@@ -2929,17 +3150,10 @@ ${model.liveToken ? '<main data-live-token="1">' : '<main>'}
     </div>
     ${!model.liveToken && model.searchQuery ? '<p class="feed-search-note">Semantic ranking requires the live report server (<code>kya start</code>).</p>' : ""}
     <div class="feed-head">
-      <div class="stats" aria-label="Counts">
-        <button type="button" class="stat ok" data-fgroup="verdict" data-fvalue="ALLOW" aria-pressed="false" title="Filter: Allow">Allow<b>${c.allow}</b></button>
-        <button type="button" class="stat bad" data-fgroup="verdict" data-fvalue="DENY" aria-pressed="false" title="Filter: Deny">Deny<b>${c.deny}</b></button>
-        <button type="button" class="stat warn" data-fgroup="verdict" data-fvalue="REQUIRE_APPROVE" aria-pressed="false" title="Filter: Review">Review<b>${c.require}</b></button>
-        <button type="button" class="stat" data-fgroup="never" data-fvalue="1" aria-pressed="false" title="Filter: Never">Never<b>${c.never}</b></button>
-        ${chips.modes}${chips.planes}
-        <button type="button" class="stat clear-filters" id="clear-filters" hidden>Clear filters ×</button>
-      </div>
-      ${chips.products}
-      ${chips.projects}
-      ${chips.servers}
+      <div class="stats" aria-label="Counts" id="stat-counts">${fr.fragments.statCounts}</div>
+      <div id="chip-products">${chips.products}</div>
+      <div id="chip-projects">${chips.projects}</div>
+      <div id="chip-servers">${chips.servers}</div>
     </div>
     <section class="feed" id="feed" aria-label="Activity feed">
 ${initialFeed.feedHtml}
@@ -2950,14 +3164,14 @@ ${initialFeed.paginationHtml}
   </section>
   <section class="zone" id="changes" aria-labelledby="tab-changes">
     <section class="feed chg" id="changes-list" aria-label="Changes by session and file">
-${changesPanel(changes, nowMs)}
+${fr.fragments.changesList}
     </section>
   </section>
   <section class="zone" id="certify" aria-labelledby="tab-certify">
-    ${certifyBody}
+    <div id="frag-certify">${fr.fragments.certifyBody}</div>
   </section>
   <section class="zone" id="orr" aria-labelledby="tab-orr">
-    ${orrPanel(model.orr, nowMs, livePaged)}
+    <div id="frag-orr">${fr.fragments.orrPanel}</div>
   </section>
   ${gatePagePanel(model.gate, nowMs)}
   <section class="zone" id="system" aria-labelledby="tab-system">
@@ -2968,7 +3182,6 @@ ${filterScript}
 ${staticSearchScript}
 ${themeScript}
 ${gateScript}
-${liveScript}
 </body>
 </html>`;
 

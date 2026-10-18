@@ -355,8 +355,8 @@ describe("F4 - malformed trail lines are dropped, not fatal", () => {
 });
 
 describe("F5 - EventSource replace-anchor is not spoofable", () => {
-  it("embeds the token exactly once even when trail text contains the anchor", async () => {
-    const anchor = "EventSource('/events')";
+  it("never embeds the token in the HTML even when trail text contains the anchor", async () => {
+    const anchor = "EventSource('/events?t=' + encodeURIComponent(readToken()))";
     appendTrail(dir, {
       ts: new Date().toISOString(),
       sessionId: "live",
@@ -372,8 +372,11 @@ describe("F5 - EventSource replace-anchor is not spoofable", () => {
       const page = await fetch(live.url);
       const html = await page.text();
       expect(page.status).toBe(200);
-      expect(html.split(live.token).length - 1).toBe(1);
-      expect(html).toContain(`EventSource('/events?t=${live.token}')`);
+      // Stronger than the old exactly-once pin: the live report reads the
+      // token from its own URL at runtime, so the secret never appears in
+      // the HTML and there is no anchor to spoof.
+      expect(html.split(live.token).length - 1).toBe(0);
+      expect(html).toContain("EventSource('/events?t=' + encodeURIComponent(readToken()))");
       // Attacker text survives as inert, un-replaced page text.
       expect(html).toContain(`anchor ${anchor} here`);
     } finally {

@@ -1,6 +1,6 @@
 {
   "name": "shield-kya",
-  "version": "0.32.0",
+  "version": "0.32.3",
   "description": "Audit trail and traceability for AI agents. See what every coding agent did, with opt-in human approval and signed certify.",
   "author": {
     "name": "Shield Agent",

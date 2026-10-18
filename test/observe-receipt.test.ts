@@ -119,11 +119,11 @@ describe("receipt 3-day window", () => {
     expect(html).not.toContain("Codex"); // old event excluded
   });
 
-  it("live flag injects EventSource reload", () => {
+  it("live flag injects the live-update EventSource", () => {
     const html = renderReceiptHtml(
-      buildWindowReceiptModel([], 3, { live: true }),
+      buildWindowReceiptModel([], 3, { live: true, liveToken: "tok-abc123" }),
     );
-    expect(html).toContain("EventSource('/events')");
+    expect(html).toContain("EventSource('/events?t=' + encodeURIComponent(readToken()))");
     expect(html).toContain("Live");
     expect(html).toContain("this page will refresh");
   });
@@ -271,7 +271,7 @@ describe("receipt 3-day window", () => {
         const html = await page.text();
         expect(page.status).toBe(200);
         expect(html).toContain("Live");
-        expect(html).toContain(`EventSource('/events?t=${live.token}')`);
+        expect(html).toContain("EventSource('/events?t=' + encodeURIComponent(readToken()))");
         expect(html).toContain("Grok");
         expect(html).toContain("org.sample.safe.read");
 
@@ -304,7 +304,7 @@ describe("receipt 3-day window", () => {
           mode: "observe",
           summary: "write x.ts (1 chars)",
         });
-        expect(await readUntil("data: reload", 3000)).toBe(true);
+        expect(await readUntil('"source":"trail"', 3000)).toBe(true);
         ac.abort();
         await reader.cancel().catch(() => undefined);
       } finally {
