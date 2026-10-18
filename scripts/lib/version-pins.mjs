@@ -34,6 +34,9 @@ export const MANIFESTS = [
   { file: ".claude-plugin/marketplace.json", pointers: ["plugins[*].version", "metadata.version"] },
   { file: ".claude-plugin/plugin.json", pointers: ["version"] },
   { file: ".codex-plugin/plugin.json", pointers: ["version"] },
+  // Agent Plugins v1 manifest at the plugin root (GitHub Copilot CLI). Exact path: a bare `plugin.json`
+  // suffix would also match unrelated files under the scan roots.
+  { file: "plugins/kya-copilot/plugin.json", pointers: ["version"] },
   { file: ".agents/plugins/marketplace.json", pointers: ["plugins[*].version", "metadata.version"] },
   { file: "gemini-extension.json", pointers: ["version"] },
   { file: ".cursor-plugin/plugin.json", pointers: ["version"] },

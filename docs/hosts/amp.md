@@ -38,7 +38,7 @@ Connect merges. Your other Amp settings stay as they were. If the existing file 
    kya wrap --offline --tool-id Write --irreversible --args '{"path":"x.ts","content":"hi"}'
    ```
 
-   Expect a Deny row on the trail (`--irreversible` without a policy never auto-allows).
+   Expect a `REQUIRE_APPROVE` row on the trail (`--irreversible` without a policy never auto-allows).
 
 ## Uninstall
 

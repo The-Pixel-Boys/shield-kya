@@ -65,6 +65,8 @@ function fixture(): void {
   );
   put("plugins/kya/.claude-plugin/plugin.json", JSON.stringify({ description: COPY.variants.plugin }));
   put("plugins/kya/.codex-plugin/plugin.json", JSON.stringify({ description: COPY.variants.plugin }));
+  put("plugins/kya-copilot/plugin.json", JSON.stringify({ description: COPY.variants.plugin }));
+  put(".plugin/marketplace.json", JSON.stringify({ description: COPY.variants.plugin, plugins: [{ description: COPY.variants.plugin }] }));
   put("gemini-extension.json", JSON.stringify({ name: "x", description: COPY.variants.plugin }));
   put(".cursor-plugin/plugin.json", JSON.stringify({ description: COPY.long }));
   put("../kya-python/pyproject.toml", `[project]\nname = "x"\ndescription = ${JSON.stringify(COPY.variants.python)}\n`);
@@ -109,6 +111,8 @@ const DRIFT: Array<[string, string, string]> = [
   [".claude-plugin/marketplace.json", `"name": "a", "description": ${JSON.stringify(COPY.variants.plugin)}`, ".claude-plugin/marketplace.json: Claude marketplace plugin (plugins[0].description):"],
   ["plugins/kya/.claude-plugin/plugin.json", COPY.variants.plugin, "plugins/kya/.claude-plugin/plugin.json: Claude Code plugin:"],
   ["plugins/kya/.codex-plugin/plugin.json", COPY.variants.plugin, "plugins/kya/.codex-plugin/plugin.json: Codex plugin:"],
+  ["plugins/kya-copilot/plugin.json", COPY.variants.plugin, "plugins/kya-copilot/plugin.json: Copilot CLI plugin:"],
+  [".plugin/marketplace.json", COPY.variants.plugin, ".plugin/marketplace.json: Copilot marketplace:"],
   ["gemini-extension.json", COPY.variants.plugin, "gemini-extension.json: Gemini CLI extension:"],
   [".cursor-plugin/plugin.json", COPY.long, ".cursor-plugin/plugin.json: Cursor plugin:"],
   ["../kya-python/pyproject.toml", COPY.variants.python, "../kya-python/pyproject.toml: kya-python pyproject (monorepo copy, not the PyPI source):"],

@@ -9,7 +9,7 @@
  * both schemes share one rule set.
  *
  * Zone switching is pure CSS: nav links point at
- * #overview/#activity/#changes/#certify/#gateway/#system and :target shows the
+ * #overview/#activity/#changes/#certify/#orr/#gateway-<sub>/#system and :target shows the
  * matching zone. The hide rules are gated behind
  * `@supports selector(body:has(*))`, so a browser without :has() simply shows
  * every zone stacked - degraded, but nothing is ever hidden unreachable.
@@ -361,16 +361,17 @@ export function receiptCss(): string {
   .zone { scroll-margin-top: 6.4rem; }
   .zone-empty { margin: 0.25rem 0 0.5rem; }
   @supports selector(body:has(*)) {
-    #activity, #changes, #certify,
+    #activity, #changes, #certify, #orr,
     #gateway-home, #gateway-listeners, #gateway-routes, #gateway-backends, #gateway-policies, #gateway-playground,
     #system { display: none; }
     #overview:target,
-    #activity:target, #changes:target, #certify:target,
+    #activity:target, #changes:target, #certify:target, #orr:target,
     #gateway-home:target, #gateway-listeners:target, #gateway-routes:target, #gateway-backends:target, #gateway-policies:target, #gateway-playground:target,
     #system:target { display: block; }
     body:has(#activity:target) #overview,
     body:has(#changes:target) #overview,
     body:has(#certify:target) #overview,
+    body:has(#orr:target) #overview,
     body:has(#gateway-home:target) #overview,
     body:has(#gateway-listeners:target) #overview,
     body:has(#gateway-routes:target) #overview,
@@ -383,6 +384,7 @@ export function receiptCss(): string {
     body:has(#activity:target) .nav-link[href="#activity"],
     body:has(#changes:target) .nav-link[href="#changes"],
     body:has(#certify:target) .nav-link[href="#certify"],
+    body:has(#orr:target) .nav-link[href="#orr"],
     body:has(#system:target) .nav-link[href="#system"],
     body:has(#gateway-home:target) .nav-link[href="#gateway-home"],
     body:has(#gateway-listeners:target) .nav-link[href="#gateway-listeners"],

@@ -32,7 +32,7 @@ None. Wrap writes trail rows under `.kya/` in the project where you run it; Muse
 kya wrap --offline --tool-id Write --irreversible --args '{"path":"x.ts","content":"hi"}'
 ```
 
-Expect a Deny row - an irreversible write with no policy never auto-allows. Then wrap a trivial Allow-path call and see both rows on the receipt. This exact trail-row check runs in CI against the recipe.
+Expect a `REQUIRE_APPROVE` row - an irreversible write with no policy never auto-allows. Then wrap a trivial Allow-path call and see both rows on the receipt. This exact trail-row check runs in CI against the recipe.
 
 ## Uninstall
 

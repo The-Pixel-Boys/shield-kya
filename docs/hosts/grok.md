@@ -63,7 +63,7 @@ Connect appends and never rewrites unrelated TOML. An inline `shield-kya = …` 
    kya wrap --offline --tool-id Write --irreversible --args '{"path":"x.ts","content":"hi"}'
    ```
 
-   Expect a Deny row.
+   Expect a `REQUIRE_APPROVE` row on the trail.
 
 ## Uninstall
 

@@ -168,6 +168,9 @@ export function channels(root, copy) {
     { path: ".claude-plugin/marketplace.json", channel: "Claude marketplace plugin", key: "variants.plugin", field: jsonField("plugins[*].description"), many: true },
     { path: "plugins/kya/.claude-plugin/plugin.json", channel: "Claude Code plugin", key: "variants.plugin", field: jsonField("description") },
     { path: "plugins/kya/.codex-plugin/plugin.json", channel: "Codex plugin", key: "variants.plugin", field: jsonField("description") },
+    { path: "plugins/kya-copilot/plugin.json", channel: "Copilot CLI plugin", key: "variants.plugin", field: jsonField("description") },
+    { path: ".plugin/marketplace.json", channel: "Copilot marketplace", key: "variants.plugin", field: jsonField("description") },
+    { path: ".plugin/marketplace.json", channel: "Copilot marketplace plugin", key: "variants.plugin", field: jsonField("plugins[*].description"), many: true },
     { path: "gemini-extension.json", channel: "Gemini CLI extension", key: "variants.plugin", field: jsonField("description") },
     { path: ".cursor-plugin/plugin.json", channel: "Cursor plugin", key: "long", field: jsonField("description") },
     // Monorepo copy of the Python shim. PyPI publishes from the public repo's own kya-python/, which is

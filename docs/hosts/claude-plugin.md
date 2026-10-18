@@ -1,4 +1,4 @@
-# Claude Code plugin (also GitHub Copilot CLI)
+# Claude Code plugin
 
 Audit trail and traceability for AI agents. See what every coding agent did.
 
@@ -110,7 +110,7 @@ The plugin hook above is local only. For the hosted-plane hook, wire it per user
 
 ## GitHub Copilot CLI
 
-Copilot CLI looks for `.claude-plugin/marketplace.json` too, so `copilot plugin marketplace add The-Pixel-Boys/shield-kya` finds this marketplace. Whether Copilot CLI runs the Claude-format hooks and `${CLAUDE_PLUGIN_DATA}` substitution is not verified; its documented MCP expansion uses `${PLUGIN_ROOT}` and `${PLUGIN_DATA}`. For a verified Copilot setup, use [`kya connect copilot`](copilot.md).
+Do not install this plugin in Copilot CLI. Copilot CLI 1.0.98 runs its hooks in a way that fails, and then denies every tool call ("hook errored"). In every release before the one that ships `plugins/kya-copilot`, that is what `copilot plugin install kya@shield-kya` gives you, because Copilot reads `.claude-plugin/marketplace.json` when nothing else is there. Releases that ship `plugins/kya-copilot` add `.plugin/marketplace.json`, which Copilot reads first, so the same command gives a Copilot-specific plugin. See [copilot.md](copilot.md#plugin). Until then, use `kya connect copilot`.
 
 ## Uninstall
 

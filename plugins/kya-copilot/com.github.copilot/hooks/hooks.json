@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "exec": "node",
+        "args": ["${PLUGIN_ROOT}/scripts/bootstrap.mjs", "@shield-agent/kya@0.32.0"],
+        "timeoutSec": 120
+      }
+    ],
+    "PreToolUse": [
+      {
+        "type": "command",
+        "matcher": "*",
+        "bash": "command -v node >/dev/null 2>&1 || exit 0; node \"$PLUGIN_ROOT/scripts/copilot-hook.mjs\"; [ $? -eq 2 ] && exit 2; exit 0",
+        "timeoutSec": 5
+      }
+    ]
+  }
+}

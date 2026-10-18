@@ -7,7 +7,7 @@ Wire KYA into [Factory's Droid](https://factory.ai) so tool calls routed through
 ## Setup - preferred: `droid mcp add`
 
 ```bash
-droid mcp add shield-kya "npx --no-install @shield-agent/kya@0.31.0 serve-mcp --stdio" \
+droid mcp add shield-kya "npx --no-install @shield-agent/kya@0.32.0 serve-mcp --stdio" \
   --env KYA_BASE_URL=https://shield-agent.com \
   --env KYA_API_KEY=$KYA_API_KEY \
   --env KYA_HOST=ide
@@ -37,7 +37,7 @@ Three tools: `kya.policy_evaluate` (Allow / Deny / Hold), `kya.session_ingest`, 
    kya wrap --offline --tool-id Write --irreversible --args '{"path":"x.ts","content":"hi"}'
    ```
 
-   Expect a Deny row.
+   Expect a `REQUIRE_APPROVE` row on the trail.
 
 ## Uninstall
 
