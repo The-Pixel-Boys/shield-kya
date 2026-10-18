@@ -32,7 +32,7 @@ None. Wrap writes trail rows under `.kya/` in the project where you run it; Pi's
 kya wrap --offline --tool-id Write --irreversible --args '{"path":"x.ts","content":"hi"}'
 ```
 
-Expect a Deny row - an irreversible write with no policy never auto-allows. Then wrap a trivial Allow-path call and see both rows on the receipt.
+Expect a `REQUIRE_APPROVE` row - an irreversible write with no policy never auto-allows. Then wrap a trivial Allow-path call and see both rows on the receipt.
 
 ## Uninstall
 

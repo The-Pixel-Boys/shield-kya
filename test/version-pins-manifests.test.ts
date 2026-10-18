@@ -40,6 +40,8 @@ const MANIFEST_FILES: Record<string, string> = {
   ".claude-plugin/marketplace.json": `{\n\t"name": "m",\n\t"metadata": { "version": "${WRONG}" },\n\t"plugins": [\n\t\t{ "name": "a", "version": "${WRONG}", "tags": ["x", "y"] },\n\t\t{ "name": "b", "version": "${WRONG}" }\n\t]\n}`,
   "claude/.claude-plugin/plugin.json": `{\n  "name": "p",\n  "version": "${WRONG}",\n  "dependencies": { "z": { "version": "9.9.9" } }\n}\n`,
   ".codex-plugin/plugin.json": `{ "name": "c", "version": "${WRONG}" }\n`,
+  // Copilot (Agent Plugins v1): the exact path only; the $schema URL carries "1.0.0" and must stay untouched.
+  "plugins/kya-copilot/plugin.json": `{\n  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",\n  "name": "kya",\n  "version": "${WRONG}"\n}\n`,
   ".agents/plugins/marketplace.json": `{\n  "plugins": [{ "name": "a", "version": "${WRONG}" }]\n}\n`,
   "gemini/gemini-extension.json": `{\n  "name": "g",\n  "version": "${WRONG}"\n}\n`,
   ".cursor-plugin/plugin.json": `{\n  "name": "k",\n  "version": "${WRONG}",\n  "keywords": ["a", "b"]\n}\n`,
@@ -58,6 +60,9 @@ describe("manifest version drift", () => {
   it("reports every wrong manifest version, then sync fixes them all in place", () => {
     fixture("1.2.3");
     for (const [rel, body] of Object.entries(MANIFEST_FILES)) put(rel, body);
+    // A plugin.json anywhere else is not a manifest: never reported, never rewritten.
+    const stray = `{ "version": "${WRONG}" }\n`;
+    put("vendor/thing/plugin.json", stray);
     const before = Object.fromEntries(Object.keys(MANIFEST_FILES).map((rel) => [rel, read(rel)]));
 
     expect([...findVersionDrift(dir)].sort()).toEqual([
@@ -69,6 +74,7 @@ describe("manifest version drift", () => {
       ".cursor-plugin/plugin.json: version 0.0.1 (package.json is 1.2.3)",
       "claude/.claude-plugin/plugin.json: version 0.0.1 (package.json is 1.2.3)",
       "gemini/gemini-extension.json: version 0.0.1 (package.json is 1.2.3)",
+      "plugins/kya-copilot/plugin.json: version 0.0.1 (package.json is 1.2.3)",
     ].sort());
 
     const changed = syncTree(dir, "1.2.3");
@@ -81,6 +87,7 @@ describe("manifest version drift", () => {
     }
     expect(read("claude/.claude-plugin/plugin.json")).toContain('"z": { "version": "9.9.9" }');
     expect(syncTree(dir, "1.2.3")).toEqual([]);
+    expect(read("vendor/thing/plugin.json")).toBe(stray);
   });
 
   it("skips absent manifests, absent optional fields and absent extra roots", () => {

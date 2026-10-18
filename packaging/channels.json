@@ -79,6 +79,25 @@
       "grace_hours": 3
     },
     {
+      "id": "copilot-plugin",
+      "kind": "GitHub Copilot CLI plugin marketplace (Agent Plugins v1)",
+      "where": "public main plugins/kya-copilot/plugin.json (marketplace .plugin/marketplace.json, which Copilot reads before .claude-plugin/; hooks com.github.copilot/hooks/hooks.json)",
+      "update": "not-built",
+      "by": "maintainers' release pipeline: public repo sync step (from the first kya-v* tag after it was added)",
+      "files": ["sdks/kya/.plugin/marketplace.json", "sdks/kya/plugins/kya-copilot/plugin.json"],
+      "probe": { "type": "json", "url": "https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/plugins/kya-copilot/plugin.json", "path": "version" },
+      "action": "Not on public main yet: the next kya-v* tag mirrors .plugin/marketplace.json and plugins/kya-copilot/plugin.json (version bumped by pnpm sync:version like the other plugin manifests). Once that tag is live and the probe reads its version, set update to auto-mirror with grace_hours 3."
+    },
+    {
+      "id": "awesome-copilot",
+      "kind": "github/awesome-copilot external plugin listing (pins ref + sha + version)",
+      "where": "github/awesome-copilot plugins/external.json entry kya (not listed yet)",
+      "update": "manual-owner",
+      "by": "owner, through the awesome-copilot external plugin issue form",
+      "files": [],
+      "action": "Not listed yet. Submit once with a public tag vX.Y.Z whose plugins/kya-copilot/plugin.json exists (ref vX.Y.Z, its 40-char sha, version X.Y.Z, path plugins/kya-copilot). The entry pins that ref, so later releases stay listed at the old version until the owner sends an update through the same form; their re-review runs every 6 months."
+    },
+    {
       "id": "gemini-extension",
       "kind": "Gemini CLI extension",
       "where": "public gemini-extension.json (installed from the latest Release)",

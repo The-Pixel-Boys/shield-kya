@@ -58,6 +58,13 @@ Corollaries for anyone changing this report:
 
 - Sidebar nav lists zones and major panels; every `id`-ed panel is reachable
   by anchor.
+- Zone switching is pure CSS in `receipt-css.ts` (`:target` + `body:has()`).
+  Adding a zone or nav item means wiring all four rule groups: the default
+  `display: none` hide list, the `#id:target` display rule, the
+  `body:has(#id:target) #overview` override, and the nav highlight rule. A nav
+  link without CSS wiring clicks to a no-op. `test/receipt-nav-css.test.ts`
+  enforces this for every rendered nav link and zone, so the suite fails
+  loudly when wiring is missed.
 - Overview zone: Certify hero + KPI tiles + analytics. System zone:
   Capabilities first, then gateway, wired hosts, sandboxes, OpenShell, ORR,
   alerts, OTel export, tools.

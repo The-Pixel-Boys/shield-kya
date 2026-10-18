@@ -52,7 +52,7 @@ Project files are different: `kya connect --project`, `kya start`, `kya init`, `
    kya wrap --offline --tool-id Write --irreversible --args '{"path":"x.ts","content":"hi"}'
    ```
 
-   Expect a Deny row on the trail.
+   Expect a `REQUIRE_APPROVE` row on the trail.
 
 ## Uninstall
 

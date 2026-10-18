@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "shield-kya": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${PLUGIN_DATA}/node_modules/@shield-agent/kya/dist/cli.js", "serve-mcp", "--stdio"],
+      "env": { "KYA_OFFLINE": "1", "KYA_HOST": "ide", "KYA_BASE_URL": "http://127.0.0.1:1", "KYA_API_KEY": "" }
+    }
+  }
+}

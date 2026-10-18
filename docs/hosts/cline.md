@@ -2,6 +2,8 @@
 
 Wire KYA into [Cline](https://cline.bot) (the VS Code extension) so tool calls it routes through MCP pass Shield's evaluate first. Allow runs, Deny stops, Hold waits for a person.
 
+Fastest path: [`llms-install.md`](../../llms-install.md) at the repo root: global install, two absolute paths, one settings block, verify, with the keyless offline config. It is written so Cline can follow it; a run where Cline sets it up from that file alone has not been tested yet. `node scripts/cline-install-check.mjs` checks everything except Cline itself.
+
 There's no `kya connect cline` - Cline's config lives inside VS Code's globalStorage, which is not safe to rewrite programmatically while VS Code is running. Copy the example by hand instead.
 
 ## Setup
@@ -38,7 +40,7 @@ You write one file by hand: the `cline_mcp_settings.json` for your VS Code varia
    kya wrap --offline --tool-id Write --irreversible --args '{"path":"x.ts","content":"hi"}'
    ```
 
-   Expect a Deny row on the trail.
+   Expect a `REQUIRE_APPROVE` row on the trail (`--irreversible` without a policy never auto-allows).
 
 ## Uninstall
 
