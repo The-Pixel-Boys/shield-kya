@@ -157,6 +157,15 @@ describe("ORR zone rendering", () => {
           generatedAt: "2026-10-17T12:00:00.000Z",
           targetName: "demo",
           scorecards: { pass: 2, fail: 1, partial: 0, notEvaluated: 3 },
+          findings: [
+            {
+              id: "sa.probe.no_evaluate_path",
+              severity: "critical",
+              title: "No fail-closed evaluate/wrap path detected",
+              detail: "Tree lacks policy evaluate signals.",
+              evidence: "src/agent.ts:42",
+            },
+          ],
         },
       }),
     );
@@ -166,5 +175,7 @@ describe("ORR zone rendering", () => {
     expect(html).toContain("wire wrapTool");
     expect(html).toContain("2 pass · 1 fail");
     expect(html).toContain("auto-refreshes every 30 min");
+    expect(html).toContain("No fail-closed evaluate/wrap path detected");
+    expect(html).toContain("src/agent.ts:42");
   });
 });

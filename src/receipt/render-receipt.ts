@@ -1574,6 +1574,19 @@ function orrPanel(orr: OrrCard | undefined, nowMs: number, live: boolean): strin
     ? `<p class="line">Most urgent fix: ${esc(clip(orr.mostUrgentFix, 200))}</p>`
     : "";
   const when = orr.generatedAt ? ` · ${esc(relativeTime(orr.generatedAt, nowMs))}` : "";
+  const findings = orr.findings.length
+    ? `<ul class="orrfindings">${orr.findings
+        .map((f) => {
+          const evidence = f.evidence
+            ? ` <span class="mute">- ${esc(clip(f.evidence, 160))}</span>`
+            : "";
+          const detail = f.detail
+            ? `<br><span class="mute small">${esc(clip(f.detail, 200))}</span>`
+            : "";
+          return `<li><span class="pill ${esc(severityCls(f.severity))}">${esc(f.severity)}</span> ${esc(clip(f.title, 120))}${evidence}${detail}</li>`;
+        })
+        .join("")}</ul>`
+    : "";
   return `<section class="panel" aria-label="ORR">
   <h2>Operational readiness</h2>
   <div class="orrline">
@@ -1583,9 +1596,16 @@ function orrPanel(orr: OrrCard | undefined, nowMs: number, live: boolean): strin
   </div>
   ${failure}
   ${fix}
+  ${findings}
   <p class="mute small">scorecards: ${orr.scorecards.pass} pass · ${orr.scorecards.fail} fail · ${orr.scorecards.partial} partial · ${orr.scorecards.notEvaluated} n/e${when} · auto-refreshes every 30 min while the report runs</p>
   ${run}
 </section>`;
+}
+
+function severityCls(severity: string): string {
+  if (severity === "critical" || severity === "high") return "orr-red";
+  if (severity === "medium") return "orr-amber";
+  return "";
 }
 
 function usdText(usd: number | null): string {

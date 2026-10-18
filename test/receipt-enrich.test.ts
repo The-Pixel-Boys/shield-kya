@@ -64,6 +64,24 @@ const ORR_REPORT = {
     { category: "engineering_craft", name: "d", result: "partial", hardness: "soft" },
     { category: "scale_operations", name: "e", result: "not_evaluated", hardness: "soft" },
   ],
+  findings: [
+    {
+      id: "sa.probe.no_in_loop_ceilings",
+      category: "cost_budget_gates",
+      severity: "info",
+      title: "No in-loop ceilings",
+      detail: "Add max steps.",
+      evidence: "sa.first_party text probe",
+    },
+    {
+      id: "sa.probe.secrets_in_tree",
+      category: "security_platform",
+      severity: "critical",
+      title: "Possible hardcoded secrets",
+      detail: "Rotate credentials.",
+      evidence: "src/config.ts:12",
+    },
+  ],
 };
 
 describe("loadIdentity", () => {
@@ -147,6 +165,22 @@ describe("loadOrrCard", () => {
       generatedAt: "2026-09-14T00:00:00.000Z",
       targetName: "demo-target",
       scorecards: { pass: 2, fail: 1, partial: 1, notEvaluated: 1 },
+      findings: [
+        {
+          id: "sa.probe.secrets_in_tree",
+          severity: "critical",
+          title: "Possible hardcoded secrets",
+          detail: "Rotate credentials.",
+          evidence: "src/config.ts:12",
+        },
+        {
+          id: "sa.probe.no_in_loop_ceilings",
+          severity: "info",
+          title: "No in-loop ceilings",
+          detail: "Add max steps.",
+          evidence: "sa.first_party text probe",
+        },
+      ],
     });
   });
 

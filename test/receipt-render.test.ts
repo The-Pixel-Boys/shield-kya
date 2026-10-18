@@ -295,6 +295,15 @@ function richModel(): ReceiptModel {
         generatedAt: "2026-09-14T00:00:00.000Z",
         targetName: "demo-target",
         scorecards: { pass: 1, fail: 1, partial: 1, notEvaluated: 0 },
+        findings: [
+          {
+            id: "sa.probe.secrets_in_tree",
+            severity: "critical",
+            title: "Possible hardcoded secrets",
+            detail: "Rotate credentials.",
+            evidence: "src/config.ts:12",
+          },
+        ],
       },
       showback: {
         billingMeter: false,

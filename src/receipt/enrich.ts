@@ -117,6 +117,14 @@ export interface OrrScorecardCounts {
   readonly notEvaluated: number;
 }
 
+export interface OrrFindingRow {
+  readonly id: string;
+  readonly severity: string;
+  readonly title: string;
+  readonly detail: string;
+  readonly evidence: string;
+}
+
 export interface OrrCard {
   readonly overall: OrrRating;
   readonly disposition: OrrDisposition;
@@ -125,6 +133,7 @@ export interface OrrCard {
   readonly generatedAt: string;
   readonly targetName: string | undefined;
   readonly scorecards: OrrScorecardCounts;
+  readonly findings: readonly OrrFindingRow[];
 }
 
 const ORR_RATINGS = new Set<string>(["green", "amber", "red"]);
@@ -174,6 +183,22 @@ export function loadOrrCard(cwd: string): OrrCard | undefined {
     report.target && typeof report.target.name === "string"
       ? report.target.name.slice(0, MAX_ORR_TEXT_CHARS)
       : undefined;
+  const findings: OrrFindingRow[] = [];
+  if (Array.isArray(report.findings)) {
+    for (const f of report.findings) {
+      if (findings.length >= 5) break;
+      if (!f || typeof f !== "object") continue;
+      const row = f as Record<string, unknown>;
+      findings.push({
+        id: strOr(row.id).slice(0, MAX_ORR_TEXT_CHARS),
+        severity: strOr(row.severity).slice(0, MAX_ORR_TEXT_CHARS),
+        title: strOr(row.title).slice(0, MAX_ORR_TEXT_CHARS),
+        detail: strOr(row.detail).slice(0, MAX_ORR_TEXT_CHARS),
+        evidence: strOr(row.evidence).slice(0, MAX_ORR_TEXT_CHARS),
+      });
+    }
+  }
+  findings.sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
   return {
     overall: report.overall,
     disposition: report.disposition,
@@ -182,7 +207,23 @@ export function loadOrrCard(cwd: string): OrrCard | undefined {
     generatedAt: strOr(report.generated_at),
     targetName,
     scorecards: counts,
+    findings,
   };
+}
+
+function severityRank(severity: string): number {
+  switch (severity) {
+    case "critical":
+      return 0;
+    case "high":
+      return 1;
+    case "medium":
+      return 2;
+    case "low":
+      return 3;
+    default:
+      return 4;
+  }
 }
 
 /**

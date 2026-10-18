@@ -1,5 +1,6 @@
 /**
- * Local live receipt: serve HTML + SSE on loopback only, watch trail.jsonl, reload on change.
+ * Local live receipt: serve HTML + SSE on loopback only, watch trail.jsonl,
+ * push typed change events so the page refreshes containers in place.
  * Requires a minted token (?t=) - same pattern as HTTP MCP shared secret.
  */
 import { randomBytes } from "node:crypto";
@@ -17,6 +18,7 @@ import { runGateDoctor, runGateRun, runGateStop } from "../commands/gate.js";
 import { runInvestigate } from "../commands/investigate.js";
 import { runOrr } from "../commands/orr.js";
 import { loadInvestigateLastRun } from "../investigate/last-run.js";
+import { loadOrrCard, type OrrCard } from "./enrich.js";
 import {
   defaultAgtAuditPath,
   importTraces,
@@ -190,13 +192,49 @@ export function runOrrBoard(cwd: string): { ok: boolean; detail: string } {
 
 /** POST /action/orr-run: regenerate the ORR board on demand. */
 export async function runReportOrrAction(cwd: string): Promise<ReportActionResult> {
+  const before = loadOrrCard(cwd);
   const ran = runOrrBoard(cwd);
-  return {
-    status: 200,
-    body: ran.ok
-      ? { ok: true, detail: `ORR board regenerated: ${ran.detail}` }
-      : { ok: false, error: `ORR run failed: ${ran.detail}` },
-  };
+  if (!ran.ok) {
+    return { status: 200, body: { ok: false, error: `ORR run failed: ${ran.detail}` } };
+  }
+  const after = loadOrrCard(cwd);
+  return { status: 200, body: { ok: true, detail: orrDeltaDetail(before, after, ran.detail) } };
+}
+
+/**
+ * Compose the confirmation for a manual ORR re-run. An unchanged board is a
+ * valid outcome; the message says so plainly (with a timestamp) instead of
+ * repeating what is already on screen.
+ */
+export function orrDeltaDetail(
+  before: OrrCard | undefined,
+  after: OrrCard | undefined,
+  ranDetail: string,
+): string {
+  const time = new Date().toLocaleTimeString("en-GB", { hour12: false });
+  if (!before || !after) {
+    return `ORR board regenerated at ${time}: ${ranDetail}`;
+  }
+  const beforeIds = new Set(before.findings.map((f) => f.id));
+  const afterIds = new Set(after.findings.map((f) => f.id));
+  const resolved = [...beforeIds].filter((id) => !afterIds.has(id)).length;
+  const added = [...afterIds].filter((id) => !beforeIds.has(id)).length;
+  const moved =
+    before.overall !== after.overall || before.disposition !== after.disposition;
+  const parts: string[] = [];
+  if (moved) {
+    parts.push(
+      `${before.overall} → ${after.overall} · ${after.disposition.replace(/_/g, " ")}`,
+    );
+  } else {
+    parts.push(
+      `no change · still ${after.overall} · ${after.disposition.replace(/_/g, " ")}`,
+    );
+  }
+  if (resolved > 0) parts.push(`${resolved} finding${resolved === 1 ? "" : "s"} resolved`);
+  if (added > 0) parts.push(`${added} new finding${added === 1 ? "" : "s"}`);
+  if (!moved && resolved === 0 && added === 0) parts.push("same primary failure");
+  return `ORR re-run at ${time}: ${parts.join(" · ")}`;
 }
 
 /**

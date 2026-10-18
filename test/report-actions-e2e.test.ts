@@ -109,20 +109,25 @@ describe("live report actions e2e (real server, every page action)", () => {
     }
   });
 
-  it("orr-run regenerates the board end to end", async () => {
+  it("orr-run regenerates the board end to end and reports the delta", async () => {
     const s = await start();
-    const res = await fetch(
-      `http://127.0.0.1:${s.port}/action/orr-run?t=${s.token}`,
-      {
+    const post = () =>
+      fetch(`http://127.0.0.1:${s.port}/action/orr-run?t=${s.token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
-      },
-    );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok?: boolean; detail?: string };
-    expect(body.ok).toBe(true);
-    expect(String(body.detail)).toContain("overall");
+      });
+    const first = (await (await post()).json()) as {
+      ok?: boolean;
+      detail?: string;
+    };
+    expect(first.ok).toBe(true);
+    expect(String(first.detail)).toContain("overall");
+    const secondRes = await post();
+    expect(secondRes.status).toBe(200);
+    const second = (await secondRes.json()) as { ok?: boolean; detail?: string };
+    expect(second.ok).toBe(true);
+    expect(String(second.detail)).toContain("no change");
   });
 
   it("enforces the token contract: missing and wrong tokens get 401", async () => {
