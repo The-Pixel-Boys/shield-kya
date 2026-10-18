@@ -2682,7 +2682,15 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       body: JSON.stringify(body)
     });
   }
-  function parseJson(res){ return res.json(); }
+  function parseJson(res){
+    if (!res.ok) {
+      var msg = res.status === 401
+        ? 'Session expired or unauthorized (401). Reload the report from kya start, then try again.'
+        : 'Request failed with HTTP ' + res.status;
+      throw new Error(msg);
+    }
+    return res.json();
+  }
 
   var form = document.getElementById('gate-play-form');
   if (form) {

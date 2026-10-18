@@ -5,7 +5,7 @@
       {
         "type": "command",
         "exec": "node",
-        "args": ["${PLUGIN_ROOT}/scripts/bootstrap.mjs", "@shield-agent/kya@0.32.0"],
+        "args": ["${PLUGIN_ROOT}/scripts/bootstrap.mjs", "@shield-agent/kya@0.32.1"],
         "timeoutSec": 120
       }
     ],
