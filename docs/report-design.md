@@ -2,7 +2,7 @@
 
 Design rules for the OSS report (the HTML rendered by `kya receipt`, `kya start`,
 and `kya certify --open`). The hosted console has its own direction doc
-(`docs/product/frontend-design-direction.md`); this file governs the local
+(`docs/product/frontend-design-direction.md`); this file covers the local
 report.
 
 ## The dashboard is the documentation
@@ -28,7 +28,7 @@ install can do. Two rules follow:
    paginated feeds), which has nothing meaningful to say until the parent
    dataset exists.
 
-Corollaries for anyone changing this report:
+Rules that follow for anyone changing this report:
 
 - Adding an integration, backend, exporter, or detector: add the Capabilities
   row, give the feature panel an always-on empty state with the activation
@@ -50,19 +50,34 @@ Corollaries for anyone changing this report:
   when the live report starts and refreshes on a fixed cadence while it runs,
   so the menu item is populated on first open. The underlying CLI command
   stays the escape hatch, and a "run now" action covers the impatient case.
-- A "run now" action must report the delta, not repeat the screen. The ORR
+- A "run now" action must report what changed, not repeat the screen. The ORR
   re-run confirmation compares the new board against the previous one and says
   what moved ("red → green · 2 findings resolved") or states plainly "no
   change · still red · no go" with a timestamp, so an identical board is
   understood as the correct result, never as a broken button.
-- Findings must be falsifiable. Every finding rendered in the report names
+- Findings must be falsifiable (a reader must be able to check them). Every
+  finding rendered in the report names
   its evidence (file:line, never the secret value), and heuristic probes
   exclude their own output directory, docs, tests, fixtures, and
-  *.example/*.sample files (the ORR secrets probe is the contract: an
-  unfalsifiable "rotate credentials" is worse than no finding).
+  *.example/*.sample files (the ORR secrets probe is the contract: a
+  "rotate credentials" finding nobody can check is worse than no finding).
 - Conditional rendering on data *inside* a panel (hide a table with zero
   rows, show counts only when non-zero) stays fine; conditional rendering of
   the feature itself does not.
+
+## Copy contract (ASD-STE100)
+
+- All user-facing text follows Simplified Technical English: short sentences,
+  one idea per sentence, active voice, simple approved words.
+- No jargon without a plain explanation in place: "spending limit", not "cost
+  budget gate"; "warning, not a block", not "soft gate"; "record" for trail,
+  "decision" for verdict (ALLOW/DENY/REQUIRE_APPROVE stay, they are product
+  terms).
+- Every finding or status answers three questions in plain words: what is
+  wrong, why it matters, what to do.
+- This rule also covers README, docs, npmjs/GitHub descriptions, and the
+  hosted website. The persisted owner rule lives in
+  ~/dev/.remember/kya-public-style.md.
 
 ## Layout contract
 
@@ -84,7 +99,8 @@ Corollaries for anyone changing this report:
 
 ## Live-update contract
 
-- The report never reloads the page on trail activity. SSE announces typed
+- The report never reloads the page on record (trail) activity. SSE
+  (server-sent events) announces typed
   changes (`{"source":"trail"|"orr"|"action"}`); the client then refreshes in
   place: `POST /feed` swaps the feed + pagination for the current
   filter/page/search state, `POST /fragments` swaps only the containers whose

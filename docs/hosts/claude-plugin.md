@@ -6,7 +6,7 @@ This repo is also a Claude Code plugin marketplace named `shield-kya`. It ships 
 
 ## What the plugin does, and does not do
 
-- It records every tool call on the local trail (`~/.kya/trail.jsonl`).
+- It records every tool call in the local record (trail) (`~/.kya/trail.jsonl`).
 - It blocks only the small never-list (for example `mcp__postgres__drop_table`). Everything else is allowed and recorded.
 - It is advisory and fails open: if kya is missing, crashes or times out, the tool call proceeds and nothing is recorded.
 - The hook evaluates locally. It makes no hosted-plane calls, so it has no Hold tickets and no human sign-off.
@@ -27,7 +27,7 @@ The plugin ships three things:
 2. **PreToolUse** (every tool) runs `node ${CLAUDE_PLUGIN_DATA}/node_modules/@shield-agent/kya/dist/cli.js hook --host claude`. No npx and no npm or registry traffic at hook time. The hook costs about 0.2 s per tool call.
 3. **MCP server** `shield-kya`, started from the same installed copy (`serve-mcp --stdio`).
 
-The MCP server in this plugin sets `KYA_OFFLINE=1`, `KYA_BASE_URL=http://127.0.0.1:1` and an empty `KYA_API_KEY`. What that guarantees: neither the hook nor the server makes hosted-plane calls, because the only control-plane URL they know is an unroutable loopback port and they have no credential. `kya.session_ingest` and the Hold-request tool still try that URL and fail locally; they do not stay offline by themselves (making `--offline` refuse them in `serve-mcp` is a CLI follow-up). What it does not guarantee: no network at all. A notify webhook in the user config or in a project's `.kya/config.json` receives trail fields (tool id, verdict, reason, session) when a call is denied, from both the hook and the MCP server; OTLP export and opt-in telemetry can also send. Review `.kya/config.json` in repositories you open, and see [telemetry.md](../telemetry.md) and [otlp.md](../otlp.md). For the hosted plane, connect it yourself (see [claude.md](claude.md)).
+The MCP server in this plugin sets `KYA_OFFLINE=1`, `KYA_BASE_URL=http://127.0.0.1:1` and an empty `KYA_API_KEY`. What that guarantees: neither the hook nor the server makes hosted-plane calls, because the only control-plane URL they know is an unroutable loopback port and they have no credential. `kya.session_ingest` and the Hold-request tool still try that URL and fail locally; they do not stay offline by themselves (making `--offline` refuse them in `serve-mcp` is a CLI follow-up). What it does not guarantee: no network at all. A notify webhook in the user config or in a project's `.kya/config.json` receives record fields (tool id, decision, reason, session) when a call is denied, from both the hook and the MCP server; OTLP export and opt-in telemetry can also send. Review `.kya/config.json` in repositories you open, and see [telemetry.md](../telemetry.md) and [otlp.md](../otlp.md). For the hosted plane, connect it yourself (see [claude.md](claude.md)).
 
 Every pin and manifest `version` follows `package.json`; `pnpm sync:version` rewrites them and `node scripts/check-version-pins.mjs` checks them.
 
@@ -61,7 +61,7 @@ Run `kya team init` at the repository root and commit the `.claude/settings.json
 }
 ```
 
-`vX.Y.Z` is the release tag that matches the kya you ran (needs the first kya release that includes `kya team`; `kya --help` lists `team init` when yours has it). Write a tag here, never a branch: this file decides what runs on every teammate's machine. A tag is still not immutable: anyone with write access to the public repository can move it, Claude Code's GitHub marketplace source has no commit `sha` pin, and the public repository has no tag protection rule today (a `v*` tag ruleset is recommended). The command makes no network call; check the tag exists with `git ls-remote https://github.com/The-Pixel-Boys/shield-kya refs/tags/vX.Y.Z` (if it does not, the plugin is skipped, not reported as an error).
+`vX.Y.Z` is the release tag that matches the kya you ran (needs the first kya release that includes `kya team`; `kya --help` lists `team init` when yours has it). Write a tag here, never a branch: this file decides what runs on every teammate's machine. A tag is still not fixed: anyone with write access to the public repository can move it, Claude Code's GitHub marketplace source has no commit `sha` pin, and the public repository has no tag protection rule today (a `v*` tag ruleset is recommended). The command makes no network call; check the tag exists with `git ls-remote https://github.com/The-Pixel-Boys/shield-kya refs/tags/vX.Y.Z` (if it does not, the plugin is skipped, not reported as an error).
 
 What a teammate sees:
 
@@ -106,7 +106,7 @@ The plugin hook above is local only. For the hosted-plane hook, wire it per user
 
 ## Already ran `kya start`?
 
-`kya start` writes a user-level hook. With the plugin enabled too, Claude Code runs both copies for each tool call. kya 0.23.2 and later write one trail row per `tool_use_id` (a marker under `~/.kya/hook-seen/`), so you get one row. Known limit: a global kya at 0.23.1 or older never creates the marker, so you get two trail rows per call until you update it (`npm i -g @shield-agent/kya`). Verdicts are identical, so a deny is never lost.
+`kya start` writes a user-level hook. With the plugin enabled too, Claude Code runs both copies for each tool call. kya 0.23.2 and later write one record row per `tool_use_id` (a marker under `~/.kya/hook-seen/`), so you get one row. Known limit: a global kya at 0.23.1 or older never creates the marker, so you get two rows per call until you update it (`npm i -g @shield-agent/kya`). Decisions are identical, so a deny is never lost.
 
 ## GitHub Copilot CLI
 
@@ -119,10 +119,10 @@ Do not install this plugin in Copilot CLI. Copilot CLI 1.0.98 runs its hooks in 
 /plugin marketplace remove shield-kya
 ```
 
-Uninstalling from the last scope deletes `${CLAUDE_PLUGIN_DATA}` (the installed kya copy). Your local trail under `~/.kya/` stays; delete it if you want it gone. A repository that lists the plugin in `.claude/settings.json` re-enables it for teammates until the entry is removed there.
+Uninstalling from the last scope deletes `${CLAUDE_PLUGIN_DATA}` (the installed kya copy). Your local record under `~/.kya/` stays; delete it if you want it gone. A repository that lists the plugin in `.claude/settings.json` re-enables it for teammates until the entry is removed there.
 
 ## Troubleshooting
 
 - `/plugin` shows the plugin enabled but nothing is recorded: look for the `Shield KYA is NOT recording` message at session start; check `node --version` (22+) and that `npm` is on PATH, then restart the session.
 - First session after install: bootstrap runs at session start. If the MCP server shows as failed in that very first session, run `/reload-plugins` or start a new session.
-- Check the trail: `kya receipt --q Read --json`, or open `~/.kya/trail.jsonl`.
+- Check the record: `kya receipt --q Read --json`, or open `~/.kya/trail.jsonl`.

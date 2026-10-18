@@ -16,58 +16,58 @@ kya start              # wires ./.mcp.json (plus user-level configs for every in
 # or: kya connect claude --project
 ```
 
-`kya start` also inits `.kya/` and opens the live activity report - it runs in the background, so your terminal returns immediately (`kya stop` stops it). Claude Code loads MCP servers at process start; if a session is open, relaunch with `claude --resume` - it keeps the conversation. `kya start --no-open` wires without the report; `--force` rewrites the existing shield-kya entry.
+`kya start` also inits `.kya/` and opens the live activity report. It runs in the background, so your terminal returns immediately (`kya stop` stops it). Claude Code loads MCP servers at process start; if a session is open, relaunch with `claude --resume`; it keeps the conversation. `kya start --no-open` wires without the report; `--force` rewrites the existing shield-kya entry.
 
 ## Setup - Claude Desktop
 
-Copy [`claude/claude_desktop_config.example.json`](../../claude/claude_desktop_config.example.json) into Claude Desktop's MCP settings and restart the app. To ship it as a Desktop extension instead, pack with `npx @anthropic-ai/mcpb pack` (see `manifest.json`) - that pack runs the bundled `dist/cli.js`, not `npx -y`.
+Copy [`claude/claude_desktop_config.example.json`](../../claude/claude_desktop_config.example.json) into Claude Desktop's MCP settings and restart the app. To ship it as a Desktop extension instead, pack with `npx @anthropic-ai/mcpb pack` (see `manifest.json`). That pack runs the bundled `dist/cli.js`, not `npx -y`.
 
 ## Setup - claude.ai / Cowork (hosted)
 
-Add a custom connector at `https://shield-agent.com/mcp` with request header `Authorization: Bearer <KYA_API_KEY>` (or `X-API-Key`). Not Directory-listed yet - API-key auth, no OAuth DCR.
+Add a custom connector at `https://shield-agent.com/mcp` with request header `Authorization: Bearer <KYA_API_KEY>` (or `X-API-Key`). Not Directory-listed yet: API-key auth, no OAuth DCR.
 
 ## What KYA reports
 
-Three MCP tools: `kya.policy_evaluate` (Allow / Deny / Hold), `kya.session_ingest` (observe / raise-only risk), `kya.request_approval` (opens a human Hold - it does not execute the side effect). Every call lands on the receipt with a clipped, redacted change preview: `kya receipt --open`.
+Three MCP tools: `kya.policy_evaluate` (Allow / Deny / Hold), `kya.session_ingest` (observe / raise-only risk), `kya.request_approval` (opens a human Hold; it does not execute the side effect). Every call lands on the receipt with a clipped, redacted change preview: `kya receipt --open`.
 
 ## Files written
 
 | Setup | Path |
 |-------|------|
-| Claude Code (user) | `~/.claude.json` - `mcpServers` merged, all other keys untouched |
+| Claude Code (user) | `~/.claude.json` (`mcpServers` merged, all other keys untouched) |
 | Claude Code (project) | `.mcp.json`, `.kya/` in your repo |
 | Claude Desktop | the app's own MCP settings file (you paste it) |
 
-Connect and `kya start` merge - existing servers and keys stay. A symlinked `~/.claude.json` (dotfiles setups) is written through to the real file it resolves to.
+Connect and `kya start` merge. Existing servers and keys stay. A symlinked `~/.claude.json` (dotfiles setups) is written through to the real file it resolves to.
 
 Project files are different: `kya connect --project`, `kya start`, `kya init`, `kya certify`, `kya orr run`, `kya receipt` and the sandbox state under `.kya/` never write outside the project. If `.mcp.json`, `mcp.json`, `.cursor/`, `.kya/`, a report directory inside the project (such as `.kya/certify` or `./orr-report`) or any other project path is a symlink that resolves outside the project, is a dangling symlink, or is a file with other hard links (the other name may be anywhere, including inside the repo), kya refuses, writes nothing and exits 1 with `PROJECT_PATH_REFUSED`. An output directory you name outside the project (`--out`, `--out-dir`) is used as given, but a link planted at a report file name there is replaced, not followed. A cloned repo cannot use a planted link to make kya edit a file elsewhere on your machine. A symlink that stays inside the project is followed. To fix a refusal, replace the link with a regular file (remove the link, or copy the real content in its place) and run the command again.
 
 ## Verify
 
 1. Restart the host after wiring.
-2. In Claude Code, run `/mcp` - `shield-kya` should list as connected with the three tools.
+2. In Claude Code, run `/mcp`. `shield-kya` should list as connected with the three tools.
 3. Offline smoke:
 
    ```bash
    kya wrap --offline --tool-id Write --irreversible --args '{"path":"x.ts","content":"hi"}'
    ```
 
-   Expect a `REQUIRE_APPROVE` row on the trail.
+   Expect a `REQUIRE_APPROVE` row in the record (trail).
 
 ## Uninstall
 
-Delete the `shield-kya` block from `.mcp.json` (or the Desktop settings file) and restart. Remove `.kya/` if you don't want the local trail.
+Delete the `shield-kya` block from `.mcp.json` (or the Desktop settings file) and restart. Remove `.kya/` if you don't want the local record.
 
 ## Troubleshooting
 
-- **`/mcp` shows shield-kya failed.** The wired block runs `npx --no-install @shield-agent/kya@…` - install it first (`npm i -g @shield-agent/kya`) or run `kya start --force` from a machine where it's installed. `--no-install` is deliberate: no silent registry fetch at startup.
-- **Tool calls error with `KYA_API_KEY is required`.** `kya start` wires `KYA_OFFLINE=1` for keyless sample evaluation. Pointing at an authenticated plane without a key fails closed - set `KYA_API_KEY` in the block's `env`.
-- **Receipt shows nothing.** Only calls through MCP (or `kya wrap`) produce rows. Built-in tools Claude runs natively are outside the gate - see the honesty note.
+- **`/mcp` shows shield-kya failed.** The wired block runs `npx --no-install @shield-agent/kya@…`. Install it first (`npm i -g @shield-agent/kya`) or run `kya start --force` from a machine where it's installed. `--no-install` is deliberate: no silent registry fetch at startup.
+- **Tool calls error with `KYA_API_KEY is required`.** `kya start` wires `KYA_OFFLINE=1` for keyless sample evaluation. Pointing at an authenticated plane without a key fails closed (the call is denied). Set `KYA_API_KEY` in the block's `env`.
+- **Receipt shows nothing.** Only calls through MCP (or `kya wrap`) produce rows. Built-in tools Claude runs natively are outside the gate; see the honesty note.
 - **Desktop: changes ignored.** Claude Desktop reads MCP config at launch. Quit fully (not just close the window) and reopen.
 
 ## Honesty note
 
-Claude Code's built-in tools don't all route through MCP. KYA governs the MCP path completely; what the host executes natively never reaches evaluate. For shell-level coverage of any command, use the wrap fallback below.
+Claude Code's built-in tools don't all route through MCP. KYA gates the MCP path completely; what the host executes natively never reaches evaluate. For shell-level coverage of any command, use the wrap fallback below.
 
 ## Wrap fallback
 
@@ -75,4 +75,4 @@ Claude Code's built-in tools don't all route through MCP. KYA governs the MCP pa
 kya wrap --offline -- claude "refactor src/"
 ```
 
-Wrap evaluates the command itself before it runs and records a trail row. Exit `0` Allow, `4` Hold, `1` Deny - so `kya wrap … && next-step` can't skip the gate.
+Wrap evaluates the command itself before it runs and records a row in the record. Exit `0` Allow, `4` Hold, `1` Deny, so `kya wrap … && next-step` can't skip the gate.

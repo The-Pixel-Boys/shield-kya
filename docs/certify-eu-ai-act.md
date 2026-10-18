@@ -57,13 +57,13 @@ not replace the provider's documentation file.
 ## Art. 12 - Record-keeping
 
 Automatic logging over the system's lifetime, with traceability of events.
-This is the baseline's strongest article: the trail exists to satisfy it.
+This is the baseline's strongest article: the record (trail) exists to satisfy it.
 
 | Requirement | Rationale |
 |---|---|
 | DP-01 | Intercepted, recorded tool calls are the automatic event log Art. 12 requires. |
 | DP-05 | A known retention window addresses Art. 12(2) appropriate retention of logs. |
-| REL-01 | Recent trail activity proves the recording pipeline is live, not configured-but-dead. |
+| REL-01 | Recent record activity proves the recording pipeline is live, not configured-but-dead. |
 | REL-05 | Activity receipts are the per-run record outputs of the log. |
 | ACC-01 | Session identity on every event makes the log traceable to an operator or run. |
 | ACC-02 | Project attribution ties log events to the deployment context. |
@@ -103,12 +103,12 @@ covers the cybersecurity and resilience slice for agent tool use.
 | Requirement | Rationale |
 |---|---|
 | DP-03 | Not silently allowing shell execution reduces the attack surface. |
-| DP-04 | Never persisting secrets to evidence stores is a cybersecurity control on the tooling itself. |
+| DP-04 | Never storing secrets in evidence stores is a cybersecurity control on the tooling itself. |
 | SEC-01 | An enforcing gate is the active cybersecurity control for agent actions. |
 | SEC-02 | An exercised deny path proves the control works against real traffic. |
 | SEC-04 | A green or amber security posture tracks cybersecurity weaknesses over time. |
 | SEC-05 | Fail-closed on unknown tools is resilience against unclassified behavior. |
-| SAFE-02 | Sandbox isolation limits blast radius of high-risk execution. |
+| SAFE-02 | Sandbox isolation limits how much damage high-risk execution can do. |
 | SAFE-06 | A formally verified sandbox boundary is a cybersecurity control on the isolation layer. |
 | REL-02 | A bounded unknown-tool rate is an accuracy measure of classification. |
 | REL-04 | A supervised evidence pipeline keeps security-relevant logging resilient to failure. |
@@ -123,7 +123,7 @@ requirements land here.
 |---|---|
 | DP-01 | Retained tool-call records support the deployer's duty to keep logs under their control. |
 | ACC-04 | Cost showback supports the deployer's operational monitoring of the system. |
-| ACC-05 | A named policy owner operationalizes the deployer's oversight responsibility. |
+| ACC-05 | A named policy owner makes the deployer's oversight responsibility concrete. |
 | SOC-01 | An acceptable-use policy is the deployer defining instructed use. |
 | SOC-02 | An incident runbook is the deployer's side of monitoring and reacting to malfunction. |
 | SOC-04 | Data-processing terms are the deployer's governance of input data under their control. |
@@ -180,7 +180,7 @@ baseline's freshness and continuity checks map here.
 
 ## Scope note
 
-- KYA supplies **technical evidence and logging**: trail events, receipts,
+- KYA supplies **technical evidence and logging**: record events, receipts,
   ORR reports, attestations, signed evidence bundles. That is input to a
   conformity assessment, not the assessment itself.
 - Whether your agent system is **high-risk** under Annex III is the

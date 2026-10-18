@@ -2,21 +2,21 @@
 
 `kya import --from agt` reads the audit log written by the Claude Code plugin of Microsoft's
 [Agent Governance Toolkit](https://github.com/microsoft/agent-governance-toolkit) (AGT) and
-adds it to the KYA trail. AGT enforces; KYA reports and proves. After an import, `kya receipt`,
+adds it to the KYA record (trail). AGT enforces; KYA reports and proves. After an import, `kya receipt`,
 `kya certify` and `kya investigate` see AGT's allow, review and deny decisions next to everything
-else on the trail.
+else in the record.
 
 ```bash
 kya import --from agt                          # ~/.claude/agt/audit-log.json (or $AGT_CLAUDE_AUDIT_PATH)
 kya import --from agt --file ./audit-log.json  # a copy, e.g. from another machine or CI
 ```
 
-## What lands on the trail
+## What lands in the record
 
 AGT logs `{timestamp, agentId, action, decision, previousHash, hash}` per decision and never
 records tool arguments, so neither does the import: no args, no `argsHash`, no diff, no target path.
 
-| AGT field | KYA trail field |
+| AGT field | KYA event field |
 |-----------|-----------------|
 | `decision: allow` | `verdict: ALLOW`, `reasonCode: IMPORTED_AGT_ALLOW` |
 | `decision: deny` | `verdict: DENY`, `reasonCode: IMPORTED_AGT_DENY` |
@@ -24,7 +24,7 @@ records tool arguments, so neither does the import: no args, no `argsHash`, no d
 | `action: tool.Bash` | `toolId: Bash` (the `tool.` prefix is stripped; `prompt.submit` stays as is) |
 | `agentId: claude-code:<session>` | `sessionId: <session>` |
 | `timestamp` | `ts` |
-| recomputed SHA-256 of the entry | `sourceHash` (dedupe key; never the stored `hash` field) |
+| recomputed SHA-256 of the entry | `sourceHash` (used to skip duplicates; never the stored `hash` field) |
 
 Every row is `host: import`, `mode: observe`, `summary: "AGT decision for <tool>"`,
 `importedFrom: "agt"` and carries `chainVerified`. Text fields have control characters (newlines, ESC, NUL) replaced by spaces and whitespace collapsed.
@@ -35,7 +35,7 @@ a `hash` that is not 64 lowercase hex characters, or a timestamp that is not ISO
 
 ## Hash-chain verification
 
-AGT chains its entries with an unkeyed SHA-256 over `{timestamp, agentId, action, decision,
+AGT chains its entries with an unkeyed SHA-256 (a checksum with no secret key) over `{timestamp, agentId, action, decision,
 previousHash}`. The import re-checks that chain exactly as AGT does (bare array anchored to a
 zero genesis hash, or `{seamHash, entries}` after AGT rolled over its 10,000-entry cap).
 
@@ -65,7 +65,7 @@ undetectable by design of AGT's format: cutting entries off the tail, and cuttin
 
 ## Re-importing
 
-Imports are idempotent. Rows are matched by the AGT entry hash (`sourceHash`), so importing the same
+Imports are idempotent (no duplicates). Rows are matched by the AGT entry hash (`sourceHash`), so importing the same
 file twice, or a log that has grown since the last import, adds only the new entries. The summary
 shows `already imported: N record(s)` for the rest.
 

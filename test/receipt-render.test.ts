@@ -389,7 +389,7 @@ describe("renderReceiptHtml sections", () => {
     expect(html).toContain("Configured backend");
     // ORR pill class + disposition + counts.
     expect(html).toContain('class="pill orr-amber"');
-    expect(html).toContain("conditional");
+    expect(html).toContain("fix before production");
     expect(html).toContain("1 pass · 1 fail · 1 partial");
     // Showback hero tiles + disclaimer.
     expect(html).toContain('<span class="kpi-num">1000</span><span class="kpi-lab">Tokens in</span>');
@@ -553,24 +553,24 @@ describe("renderReceiptMarkdown sections", () => {
     expect(md).toContain("refund-bot/agt-1 · ide · http://127.0.0.1:8090");
     expect(md).toContain("## Products");
     expect(md).toContain("## Sessions");
-    expect(md).toContain("## Reasons");
-    expect(md).toContain("## Wired hosts");
+    expect(md).toContain("## Why calls were allowed, held, or blocked");
+    expect(md).toContain("## Connected tools");
     expect(md).toContain("Cursor (IDE + Agent CLI) - wired (global) · auto · running");
     expect(md).toContain("## Sandboxes");
-    expect(md).toContain("## Operational readiness");
+    expect(md).toContain("## Readiness check");
     expect(md).toContain("overall: amber · disposition: conditional");
-    expect(md).toContain("## Showback (observe only)");
+    expect(md).toContain("## Token use and cost (information only)");
     expect(md).toContain(SHOWBACK_DISCLAIMER);
   });
 
   it("omits enrichment sections on an empty model", () => {
     const md = renderReceiptMarkdown(buildWindowReceiptModel([], 3));
     expect(md).not.toContain("## Sessions");
-    expect(md).not.toContain("## Reasons");
-    expect(md).not.toContain("## Wired hosts");
+    expect(md).not.toContain("## Why calls were allowed, held, or blocked");
+    expect(md).not.toContain("## Connected tools");
     expect(md).not.toContain("## Sandboxes");
-    expect(md).not.toContain("## Operational readiness");
-    expect(md).not.toContain("## Showback");
+    expect(md).not.toContain("## Readiness check");
+    expect(md).not.toContain("## Token use and cost");
   });
 });
 

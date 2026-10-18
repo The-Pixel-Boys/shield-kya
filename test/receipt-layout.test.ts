@@ -192,7 +192,7 @@ describe("receipt dashboard layout (hero grid + sidebar)", () => {
     expect(html).toContain('href="#overview"');
     // Fail-closed: a neutral Certify state, NEVER a green/pass pill.
     expect(html).toContain('aria-label="Certify"');
-    expect(html).toContain('<span class="pill">not evaluated</span>');
+    expect(html).toContain('<span class="pill">not checked yet</span>');
     expect(html).not.toContain('class="pill orr-green"');
     expect(html).not.toContain('>pass</span>');
   });
@@ -204,7 +204,7 @@ describe("receipt dashboard layout (hero grid + sidebar)", () => {
     // states, so it no longer needs the hint.
     expect(html.match(/class="mute small zone-empty"/g)).toHaveLength(3);
     expect(html).toContain("No activity in this window yet");
-    expect(html).toContain("No live evaluation yet");
+    expect(html).toContain("No check yet");
     expect(html).toContain('aria-label="Alerts"');
     expect(html).toContain('aria-label="OTel export"');
     expect(html).toContain("Gateway details will appear here after setup.");

@@ -2,8 +2,9 @@
 
 `kya certify` answers one question with local data: **which requirements of the
 Agent Trust Baseline does this machine's agent setup currently meet, and which
-have gaps?** It is evidence-only - never a policy decision point, never a
-certificate. The sole PEP remains Shield KYA.
+have gaps?** It is evidence-only: never a policy decision point, never a
+certificate. The sole PEP (policy enforcement point: the component that can
+block a call) remains Shield KYA.
 
 ## Quick start
 
@@ -18,13 +19,13 @@ Exit codes: `0` no gaps · `1` gaps (default `--fail-on gap`, CI-friendly) ·
 `2` usage error. `--fail-on never` always exits 0. Fail-closed: with
 `--fail-on gap`, a run where every requirement is `insufficient_evidence`
 (zero certifiable evidence) also exits `1`, even though it has zero gap
-rows - see "Overall result" below.
+rows. See "Overall result" below.
 
 ## Flags
 
 | flag | default | meaning |
 |---|---|---|
-| `--window <n>` | 30 | report window in days (1–366); trail stats and the bundle digest cover this window |
+| `--window <n>` | 30 | report window in days (1 to 366); record (trail) stats and the bundle digest cover this window |
 | `--catalog <path>` | bundled v0 | evaluate a custom catalog JSON (same schema, validated) |
 | `--out <dir>` | `.kya/certify` | output directory (resolved against cwd) |
 | `--format json,md,html` | all three | artifact formats to write |
@@ -41,7 +42,7 @@ rows - see "Overall result" below.
 |---|---|
 | `pass` | machine check found satisfying evidence |
 | `gap` | machine check found contradicting evidence, or an attest requirement has no attestation |
-| `insufficient_evidence` | the evidence source is absent (empty trail window, no ORR report) - never counted as pass |
+| `insufficient_evidence` | the evidence source is absent (empty record window, no ORR report); never counted as pass |
 | `attested` | an operator attestation is recorded (unverified statement) |
 
 ## The catalog
@@ -70,27 +71,29 @@ Check kinds v0: `config_mode` (`not:"observe"`), `hooks_wired` (`min`),
 `orr_overall` / `orr_category` (`max:"green"|"amber"`), `orr_fresh`
 (`maxAgeDays`), `sandbox_inventory` (`min`), `openshell_prover` (no params,
 see below), `receipts_present` (`min`),
-`showback_present`, `attest` (`prompt`). Trail checks read the merged trail:
+`showback_present`, `attest` (`prompt`). Trail checks read the merged record:
 the global `~/.kya/trail.jsonl` merged with the legacy per-project
 `.kya/trail.jsonl` (pre-0.3.0 location, still honored on read). An empty
-evidence window yields `insufficient_evidence`, never a vacuous pass.
+evidence window yields `insufficient_evidence`, never an automatic pass.
 
 The gate mode for `config_mode` resolves through the **same resolver the
 gate itself uses** (`resolveGateMode` in `src/config.ts`), so a certify
 "pass" is never a paper claim: flags (`--offline` / `--hold`) > env
 (`KYA_OFFLINE=1` → offline, `KYA_HOLD=1` → hold) > `"gateMode"` in
-`.kya/config.json` (honored only when exactly `"hold"` or `"offline"` - any
+`.kya/config.json` (honored only when exactly `"hold"` or `"offline"`; any
 other value is ignored) > `observe` default. Setting
 `{"gateMode": "hold"}` in `.kya/config.json` genuinely puts wrap / hook /
 eval into hold mode, not just the report.
 
 ## OpenShell prover evidence (SAFE-06)
 
-SAFE-06 is optional formal-verification evidence. NVIDIA OpenShell ships
-`openshell-prover`, a standalone SMT-based verifier (deterministic, never
-LLM-as-judge) as release artifacts for linux amd64/arm64 and macOS arm64.
+SAFE-06 is optional formal-verification evidence (a machine-checked proof
+that a policy holds). NVIDIA OpenShell ships
+`openshell-prover`, a standalone SMT-based verifier (a solver that proves
+properties mathematically; deterministic, never LLM-as-judge) as release
+artifacts for linux amd64/arm64 and macOS arm64.
 When the binary is present, `kya certify` runs it against the OpenShell
-boundary policy and reports the verdict:
+boundary policy and reports the result:
 
 - the policy of the newest running `openshell` sandbox is proved when one
   exists; otherwise a default-deny policy is rendered on the fly (same
@@ -111,7 +114,7 @@ on the spawned process, same as the sandbox driver.
 
 `overall.result` is fail-closed: `gap` whenever any requirement is a gap;
 else `pass` when at least one requirement passed **or is attested**
-(attestations count toward the result); else `gap` - a run with zero
+(attestations count toward the result); else `gap`. A run with zero
 certifiable evidence (everything `insufficient_evidence`) never headlines
 as pass, so `--fail-on gap` exits `1` for it even with zero gap rows.
 
@@ -123,7 +126,7 @@ kya certify --attest SOC-01 --text "Acceptable-use policy: https://example.com/a
 
 Recorded in `.kya/attestations.json` (latest per requirement wins), attached
 to subsequent reports, and included in signed bundles. Attestations are
-**unverified operator statements** - they are labeled as such in every
+**unverified operator statements**. They are labeled as such in every
 artifact. Secret-shaped text is refused.
 
 ## Signed evidence bundles (`--sign`)
@@ -153,18 +156,18 @@ artifact. Secret-shaped text is refused.
 
 canonicalJson semantics: UTF-8, no insignificant whitespace, object keys
 sorted recursively in UTF-16 code-unit order (JavaScript's default string
-sort - not Unicode codepoint order), arrays in order, shortest round-trip
-numbers, minimal string escaping - exactly `canonicalJson` in `src/hash.ts`.
+sort, not Unicode codepoint order), arrays in order, shortest round-trip
+numbers, minimal string escaping. It is exactly `canonicalJson` in `src/hash.ts`.
 
 **Key management:** the signing key lives at
 `~/.kya/keys/evidence-ed25519.json` (mode 0600), auto-generated on first
 `--sign`. Fingerprint = first 16 hex chars of `sha256(SPKI DER)`. Rotate by
 deleting the file (old bundles stay verifiable only with the old pubkey).
 Every `--sign` run prints the signing key fingerprint; when the key was just
-created the CLI flags it (`new key created, continuity resets here`) -
-previous bundles remain verifiable only under the old pubkey.
+created the CLI flags it (`new key created, continuity resets here`).
+Previous bundles remain verifiable only under the old pubkey.
 
-**Trust model - read this before relying on a bundle:** the key is
+**Trust model: read this before relying on a bundle.** The key is
 self-signed and local. A valid signature proves the bundle was produced by
 someone holding this key and was not modified (integrity), and repeat
 bundles with the same `pubkey` prove continuity of a key across time. It
@@ -174,12 +177,12 @@ verification product; the format above is the open, documented seam for it.
 Third parties can verify integrity offline today with the embedded `pubkey`.
 
 **Privacy:** the bundle contains requirement results, counts, and a sha256
-digest of the window's trail events - never raw tool arguments, diffs, or
+digest of the window's record events, never raw tool arguments, diffs, or
 secrets. `baseUrl` is never exported.
 
 ## Live report panel
 
-The receipt report (`kya receipt`, and the live daemon from `kya start`) carries a **Certify** panel that recomputes the baseline evaluation on every render - result pill, counts, top-5 gaps. The dashboard also has a dedicated **Certify** tab with the full live requirement table - all requirements, grouped by domain, recomputed per render. It is the same engine and the same honesty rules as `kya certify` (fail-closed on zero certifiable evidence), evaluated in memory with no files written. Static exports show a snapshot; the live daemon updates it as trail events stream in.
+The receipt report (`kya receipt`, and the live daemon from `kya start`) carries a **Certify** panel that recomputes the baseline evaluation on every render: result pill, counts, top-5 gaps. The dashboard also has a dedicated **Certify** tab with the full live requirement table: all requirements, grouped by domain, recomputed per render. It is the same engine and the same honesty rules as `kya certify` (fail-closed on zero certifiable evidence), evaluated in memory with no files written. Static exports show a snapshot; the live daemon updates it as record events stream in.
 
 ## CI
 

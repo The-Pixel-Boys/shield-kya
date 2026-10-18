@@ -121,15 +121,15 @@ export interface OrrRunOptions {
 }
 
 const CATEGORY_META: readonly { id: string; label: string }[] = [
-  { id: "engineering_craft", label: "Engineering craft" },
-  { id: "security_platform", label: "Security and platform" },
-  { id: "enterprise_readiness", label: "Enterprise readiness" },
-  { id: "agent_control_plane", label: "Agent control plane" },
-  { id: "product_architecture", label: "Product / architecture" },
-  { id: "scale_operations", label: "Scale and operations" },
-  { id: "cost_budget_gates", label: "Cost and budget gates" },
-  { id: "packaging_supply_chain", label: "Packaging / supply chain" },
-  { id: "agent_factory_lifecycle", label: "Agent factory / lifecycle" },
+  { id: "engineering_craft", label: "Code quality" },
+  { id: "security_platform", label: "Security basics" },
+  { id: "enterprise_readiness", label: "Ready for company use" },
+  { id: "agent_control_plane", label: "Control of the agent" },
+  { id: "product_architecture", label: "Product design" },
+  { id: "scale_operations", label: "Running at scale" },
+  { id: "cost_budget_gates", label: "Spending limits" },
+  { id: "packaging_supply_chain", label: "Dependencies and packaging" },
+  { id: "agent_factory_lifecycle", label: "Creating new agents" },
 ];
 
 const ALL_CATEGORY_IDS = new Set(CATEGORY_META.map((c) => c.id));
@@ -344,7 +344,7 @@ export function readScorecardEvidence(scorecardPath: string): OrrFinding[] {
         severity: "info",
         title: "Scorecard file not found",
         detail:
-          `${scorecardPath} was requested as an optional producer. Evidence only - not a PEP.`,
+          `${scorecardPath} does not exist. This is information only; it does not change the result.`,
         evidence: abs,
         source_tool: "openssf.scorecard",
       },
@@ -359,8 +359,8 @@ export function readScorecardEvidence(scorecardPath: string): OrrFinding[] {
         id: "sa.scorecard.unreadable",
         category: "enterprise_readiness",
         severity: "low",
-        title: "Scorecard JSON unreadable",
-        detail: "Could not parse --scorecard file. ORR stays observational.",
+        title: "Scorecard file unreadable",
+        detail: "The file is not valid JSON. This is information only; it does not change the result.",
         evidence: abs,
         source_tool: "openssf.scorecard",
       },
@@ -416,9 +416,9 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
       id: "sa.probe.no_evaluate_path",
       category: "agent_control_plane",
       severity: "critical",
-      title: "No fail-closed evaluate/wrap path detected",
+      title: "No policy check found before tools run",
       detail:
-        "Tree lacks policy evaluate / wrapTool / PolicyEngine signals. Irreversible tools may run without Shield PEP.",
+        "Nothing in this code asks the policy engine before a tool runs. Dangerous tools can run with no control. Add a check before every tool call (for example kya wrap or evaluatePolicy).",
       evidence: "sa.first_party text probe",
     });
   }
@@ -427,9 +427,9 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
       id: "sa.probe.no_require_approve",
       category: "agent_control_plane",
       severity: "high",
-      title: "REQUIRE_APPROVE not detected",
+      title: "No human approval step found",
       detail:
-        "High-stakes irreversible tools should map to REQUIRE_APPROVE (or DENY), never silent ALLOW.",
+        "No code path asks a human before a risky action. A human should approve actions that cannot be undone. Add REQUIRE_APPROVE for those tools.",
       evidence: "sa.first_party text probe",
     });
   }
@@ -438,8 +438,9 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
       id: "sa.probe.no_dual_plane",
       category: "product_architecture",
       severity: "medium",
-      title: "Dual-plane host labels not detected",
-      detail: "Tag sessions host=ide (authoring) vs host=runtime (production).",
+      title: "Sessions are not labeled by where they run",
+      detail:
+        "Label each session as ide (a person coding) or runtime (production). This keeps test work and live work apart.",
       evidence: "sa.first_party text probe",
     });
   }
@@ -448,8 +449,9 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
       id: "sa.probe.no_trail",
       category: "agent_control_plane",
       severity: "medium",
-      title: "Policy/tool trail signals weak or missing",
-      detail: "Prefer hash-linked trail for evaluate and approval create (AT-20).",
+      title: "No record of tool calls found",
+      detail:
+        "There is no log of what the agent did. Keep a tamper-proof record of each tool call and each approval.",
       evidence: "sa.first_party text probe",
     });
   }
@@ -458,8 +460,9 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
       id: "sa.probe.no_custom_toolid",
       category: "engineering_craft",
       severity: "low",
-      title: "Custom toolId / descriptor patterns not found",
-      detail: "Custom tools should be first-class via stable toolId + metadata (packs optional).",
+      title: "No custom tools found",
+      detail:
+        "No custom tools found in this code. If you add your own tools, give each one a stable name (toolId).",
       evidence: "sa.first_party text probe",
     });
   }
@@ -468,9 +471,9 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
       id: "sa.probe.dual_pep_smell",
       category: "agent_control_plane",
       severity: "critical",
-      title: "Dual-PEP smell in tree",
+      title: "More than one component seems to approve actions",
       detail:
-        "Evidence suggests scanner/edge might ALLOW high-stakes actions. Sole PEP must remain Shield KYA.",
+        "Two parts of the code seem to approve risky actions. Only one gate should approve. Make Shield KYA the only gate.",
       evidence: "sa.first_party text probe",
     });
   }
@@ -479,8 +482,9 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
       id: "sa.probe.secrets_in_tree",
       category: "security_platform",
       severity: "critical",
-      title: "Possible hardcoded secrets",
-      detail: "Rotate credentials; load secrets from env or a secret manager.",
+      title: "Possible password or API key written in a file",
+      detail:
+        "A file may contain a real password or API key. Move it to an environment variable or a secret manager, then change the key.",
       evidence: secretHits.slice(0, 3).join(", ") +
         (secretHits.length > 3 ? ` (+${secretHits.length - 3} more)` : ""),
     });
@@ -490,9 +494,9 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
       id: "sa.probe.factory_not_gated",
       category: "agent_factory_lifecycle",
       severity: "high",
-      title: "Agent create path may be scope-auth only",
+      title: "New agents can be created without a policy check",
       detail:
-        "Factory doctrine: principal mint should be policy-gated (APPROVED). ORR reports only - does not mint.",
+        "The code that creates agents does not ask the policy engine first. Add an approval step before a new agent is created.",
       evidence: "sa.first_party text probe",
     });
   }
@@ -515,9 +519,9 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
       id: "sa.probe.no_in_loop_ceilings",
       category: "cost_budget_gates",
       severity: "info",
-      title: "No in-loop step/token/retry ceilings detected",
+      title: "The agent has no spending limits",
       detail:
-        "Look for max_steps, max_tokens, max_retries, or maxCost in the agent loop. Soft gate only - ORR does not kill spend.",
+        "Nothing limits how many steps or tokens the agent can use in one run. This is a warning, not a block. Set a limit (for example max_steps or max_tokens) so a loop cannot burn budget.",
       evidence: "sa.first_party text probe",
     });
   }
@@ -563,9 +567,9 @@ function scoreCategories(
     );
     if (rating === "green" && softPartial) rating = "amber";
     const top = catFindings[0];
-    let tldr = top ? top.title : "No findings from SA first-party probes";
+    let tldr = top ? top.title : "No problems found";
     if (!top && softPartial) {
-      tldr = "Soft gate partial: in-loop ceilings not detected";
+      tldr = "No spending limit found (warning only)";
     }
     return {
       id: c.id,
@@ -595,7 +599,7 @@ function buildScorecards(
         name: "fail_closed_tool_path",
         result: hasEval ? "pass" : "fail",
         hardness: "hard",
-        note: hasEval ? "evaluate/wrap signals present" : "missing evaluate path",
+        note: hasEval ? "policy check found" : "no policy check found",
       },
       {
         category: "agent_control_plane",
@@ -608,7 +612,7 @@ function buildScorecards(
         name: "sole_pep",
         result: dualPep ? "fail" : "pass",
         hardness: "hard",
-        note: dualPep ? "dual-PEP smell" : "no dual-PEP evidence",
+        note: dualPep ? "two components approve actions" : "only one gate approves",
       },
     );
   }
@@ -619,8 +623,8 @@ function buildScorecards(
       result: factory ? "fail" : "partial",
       hardness: "hard",
       note: factory
-        ? "create path looks scope-auth only"
-        : "no clear factory gap or no create path",
+        ? "agent creation has no policy check"
+        : "no agent creation path found, or it is gated",
     });
   }
   if (!disabled.has("security_platform")) {
@@ -629,7 +633,7 @@ function buildScorecards(
       name: "secrets_in_tree",
       result: secrets ? "fail" : "pass",
       hardness: "hard",
-      note: `scanned sample under ${basename(root)}`,
+      note: `checked files under ${basename(root)}`,
     });
   }
   if (!disabled.has("cost_budget_gates")) {
@@ -642,8 +646,8 @@ function buildScorecards(
       result: hasCeilings ? "pass" : "partial",
       hardness: "soft",
       note: hasCeilings
-        ? "step/token/retry or run-budget signal present"
-        : "no in-loop ceilings detected (soft)",
+        ? "a spending limit was found"
+        : "no spending limit found (warning only)",
     });
   }
   return cards;
@@ -695,15 +699,15 @@ export function formatOrrMarkdown(report: OrrReport): string {
 - **Path:** ${report.target.path}
 - **Commit:** ${report.target.commit_sha ?? "n/a"}
 
-## Primary failure mode
+## Main problem
 ${report.primary_failure_mode}
 
-## Most urgent fix
+## First fix to make
 ${report.most_urgent_fix}
 
 ## Categories
-| Category | Rating | TL;DR |
-|----------|--------|-------|
+| Category | Rating | Summary |
+|----------|--------|---------|
 ${cats}
 
 ## Scorecards

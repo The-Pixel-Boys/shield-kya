@@ -15,7 +15,7 @@ copilot plugin marketplace add The-Pixel-Boys/shield-kya
 copilot plugin install kya@shield-kya
 ```
 
-The plugin is advisory and fails open: it records tool calls on the local trail (`~/.kya/trail.jsonl`) and blocks nothing beyond the never-list. It evaluates offline, with no hosted plane, no key and no Hold.
+The plugin is advisory and fails open: it records tool calls in the local record (trail) (`~/.kya/trail.jsonl`) and blocks nothing beyond the never-list. It evaluates offline, with no hosted plane, no key and no Hold.
 
 Which plugin Copilot gets: Copilot looks for the marketplace file in `marketplace.json`, `.plugin/marketplace.json`, `.github/plugin/marketplace.json`, then `.claude-plugin/marketplace.json` (its documented order). This repo ships `.plugin/marketplace.json`, which points `kya` at `plugins/kya-copilot`. Claude Code reads `.claude-plugin/marketplace.json` and Codex `.agents/plugins/marketplace.json`; both keep loading `plugins/kya`, which has no Copilot files.
 
@@ -37,9 +37,9 @@ Things to know:
 - The never-list does not match Copilot's MCP tool names yet. Copilot sends them as `<server>-<tool>` with dots turned into dashes (observed in 1.0.98: `shield-kya-kya-policy_evaluate`; a Postgres `drop_table` would arrive as `postgres-drop_table`). They are recorded, not blocked. Copilot's own tools arrive under Claude names (`bash` as `Bash`, `create` as `Write`).
 - First session: the MCP server starts before `SessionStart` has installed kya, so it fails once. From the second session on it starts normally.
 - Copilot does not show `SessionStart` messages, so a failed bootstrap is silent: tool calls proceed and nothing is recorded. Check that `~/.copilot/plugin-data/shield-kya/kya/node_modules/@shield-agent/kya/package.json` exists.
-- Trail rows from the plugin show the product as `other`, not `Copilot`.
+- Record rows from the plugin show the product as `other`, not `Copilot`.
 - **Do not install it on Windows yet.** The pre-tool hook has only a `bash` form and has not been run on Windows; use `kya connect copilot` there.
-- `copilot plugin uninstall kya@shield-kya` removes it (a plugin from a local marketplace path is only turned off). Your trail under `~/.kya/` stays.
+- `copilot plugin uninstall kya@shield-kya` removes it (a plugin from a local marketplace path is only turned off). Your record under `~/.kya/` stays.
 
 Trust: the plugin runs scripts from this repo and installs the pinned kya from npm. Copilot 1.0.98 asked no trust question before running plugin hooks (observed). Whether it updates marketplaces on its own is not verified; review changes before `copilot plugin update`.
 
@@ -57,13 +57,13 @@ That writes a `shield-kya` entry into `~/.copilot/mcp-config.json` under `mcpSer
 
 There's no project-scope target in the registry, so `kya connect copilot --project` exits with a usage error. Global scope only today.
 
-Restart Copilot CLI after connecting - MCP servers load at startup.
+Restart Copilot CLI after connecting. MCP servers load at startup.
 
 Prefer editing by hand? Copy [`copilot/mcp-config.example.json`](../../copilot/mcp-config.example.json) into place and merge the `mcpServers` section yourself.
 
 ## What KYA reports
 
-Every tool call Copilot routes through MCP lands on the receipt: tool id, verdict (Allow / Deny / Hold), timestamp, and a clipped, redacted preview of what would change. Open it with `kya receipt --open`.
+Every tool call Copilot routes through MCP lands on the receipt: tool id, decision (Allow / Deny / Hold), timestamp, and a clipped, redacted preview of what would change. Open it with `kya receipt --open`.
 
 ## Files written
 
@@ -71,34 +71,34 @@ Every tool call Copilot routes through MCP lands on the receipt: tool id, verdic
 |-------|------|
 | Global | `~/.copilot/mcp-config.json` |
 
-Connect merges. Your other MCP servers stay as they were. If the existing file doesn't parse as JSON, connect stops and tells you - it never overwrites a config it can't read.
+Connect merges. Your other MCP servers stay as they were. If the existing file doesn't parse as JSON, connect stops and tells you. It never overwrites a config it cannot read.
 
 ## Verify
 
 1. Restart Copilot CLI.
-2. Ask the agent to list its MCP tools - `kya.policy_evaluate`, `kya.session_ingest`, `kya.request_approval` should appear.
+2. Ask the agent to list its MCP tools. `kya.policy_evaluate`, `kya.session_ingest`, `kya.request_approval` should appear.
 3. Offline smoke, no cloud needed:
 
    ```bash
    kya wrap --offline --tool-id Write --irreversible --args '{"path":"x.ts","content":"hi"}'
    ```
 
-   Expect a `REQUIRE_APPROVE` row on the trail (`--irreversible` without a policy never auto-allows).
+   Expect a `REQUIRE_APPROVE` row in the record (`--irreversible` without a policy never auto-allows).
 
 ## Uninstall
 
-Edit `~/.copilot/mcp-config.json` and delete the `shield-kya` entry under `mcpServers`. Nothing else is installed - no daemon, no background process. (`kya connect copilot --force` rewires the entry if you only want to refresh it.)
+Edit `~/.copilot/mcp-config.json` and delete the `shield-kya` entry under `mcpServers`. Nothing else is installed: no daemon, no background process. (`kya connect copilot --force` rewires the entry if you only want to refresh it.)
 
 ## Troubleshooting
 
 - **Server not listed in Copilot.** Restart the CLI. MCP servers load at startup, not hot.
 - **`command not found` errors.** Connect wires `node …/cli.js serve-mcp --stdio` from the install you ran it from. If you connected via a temp `npx` cache and later cleared it, rerun `kya connect copilot --force` from a real install (`npm i -g @shield-agent/kya`).
-- **`--project` fails.** Expected - no project-scope config is wired for Copilot. Use the global file.
-- **Verdicts require a key.** The wired env sets `KYA_OFFLINE=1`, so the server starts keyless and sample-evaluates. Against an authenticated control plane, set `KYA_API_KEY` in the entry's `env` block.
+- **`--project` fails.** Expected: no project-scope config is wired for Copilot. Use the global file.
+- **Decisions need a key.** The wired env sets `KYA_OFFLINE=1`, so the server starts keyless and sample-evaluates. Against an authenticated control plane, set `KYA_API_KEY` in the entry's `env` block.
 
 ## Honesty note
 
-Copilot decides which tools go through MCP. KYA governs the ones that do. A tool Copilot executes outside MCP is outside the gate - don't treat this setup as full coverage of the agent.
+Copilot decides which tools go through MCP. KYA gates the ones that do. A tool Copilot executes outside MCP is outside the gate. Do not treat this setup as full coverage of the agent.
 
 ## Wrap fallback
 
@@ -108,4 +108,4 @@ Works with or without MCP:
 kya wrap --offline -- copilot suggest "write the test"
 ```
 
-Wrap evaluates the command itself before it runs and records a trail row. Use it for hosts, shells, or scripts that never speak MCP.
+Wrap evaluates the command itself before it runs and records a row in the record. Use it for hosts, shells, or scripts that never speak MCP.

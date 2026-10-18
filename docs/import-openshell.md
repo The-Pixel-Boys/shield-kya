@@ -2,9 +2,9 @@
 
 `kya import --from openshell` reads the structured OCSF JSON logs emitted by
 NVIDIA OpenShell (github.com/NVIDIA/OpenShell), a sandboxed agent runtime, and
-adds them to the Shield KYA trail. After an import, `kya receipt`, `kya certify`
-and `kya investigate` see OpenShell policy decisions next to everything else on
-the trail.
+adds them to the Shield KYA record (trail). After an import, `kya receipt`, `kya certify`
+and `kya investigate` see OpenShell policy decisions next to everything else in
+the record.
 
 ```bash
 kya import --from openshell ./openshell-events.jsonl
@@ -17,27 +17,27 @@ cat ./openshell-export.txt | kya import --from openshell /dev/stdin
 An export is raw JSONL (one OCSF record per line), a whole-file JSON array, a
 single JSON object, or text lines prefixed with `[ocsf]` (for example
 `[ocsf] NET:OPEN ... DENIED ...`); on those lines the JSON document starts at
-the first `{`. Bad lines and malformed records are skipped and counted in the
+the first `{`. Bad lines and broken records are skipped and counted in the
 `errors:` line, the rest still import.
 
-## What lands on the trail
+## What lands in the record
 
 OpenShell emits one OCSF record per decision. The importer maps one record to
 one `TrailEvent`:
 
-| OCSF field | KYA trail field |
+| OCSF field | KYA event field |
 |------------|-----------------|
 | `time_dt` (or `time`, epoch ms) | `ts` |
 | `session_id` (or `metadata.session_id`) | `sessionId` (fallback: `import-openshell-<date>`) |
-| class / category | `toolId`: `openshell.http` for L7 events, else `openshell.network` |
+| class / category | `toolId`: `openshell.http` for HTTP (L7) events, else `openshell.network` |
 | `disposition` / `status` | `verdict`: `DENY` when it signals a denial, else `ALLOW` (audit mode) |
 | `dst_endpoint` / `src_endpoint` | `summary` (`dst: host:port`, redacted key names only) |
-| `uid` | `sourceHash` (dedupe key) |
+| `uid` | `sourceHash` (used to skip duplicates) |
 
 Every row is `host: import`, `mode: observe`, `importFormat: "openshell"`,
 `importedFrom: "openshell"` and `reasonCode: OPENSHELL_POLICY`. Endpoint
 summaries are redacted through `redactTrailText`; raw request or response
-payloads never reach the trail. Text fields have control characters (newlines,
+payloads never reach the record. Text fields have control characters (newlines,
 ESC, NUL) replaced by spaces and whitespace collapsed.
 
 Records are skipped and counted in the `errors:` line (the rest import) when
@@ -47,8 +47,8 @@ timestamp outside 2000-01-01 .. now + 1 day.
 ## Network vs HTTP events
 
 `toolId` is `openshell.network` for network-level events (NET:OPEN and
-friends) and `openshell.http` for L7 events. The importer treats a record as
-L7 when the `[ocsf]` line tag mentions HTTP, when the record carries an
+friends) and `openshell.http` for HTTP events. The importer treats a record as
+HTTP when the `[ocsf]` line tag mentions HTTP, when the record carries an
 `http_request` or `http_response` block, or when its class or category name
 mentions HTTP.
 
@@ -65,7 +65,7 @@ fresh installs do not see it. See `docs/sandbox.md` for the runtime probes.
 
 ## Re-importing
 
-Imports are idempotent. Rows are matched by the OCSF `uid` (`sourceHash`), so
+Imports are idempotent (no duplicates). Rows are matched by the OCSF `uid` (`sourceHash`), so
 importing the same file twice, or a file that has grown since the last import,
 adds only the new events. The summary shows `already imported: N record(s)`
 for the rest.

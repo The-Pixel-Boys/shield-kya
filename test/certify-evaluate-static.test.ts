@@ -41,7 +41,7 @@ describe("hooks_wired", () => {
     expect(evaluateRequirement(req(check), ctx({ wiredHostCount: 0 })).status).toBe("gap");
     const ok = evaluateRequirement(req(check), ctx({ wiredHostCount: 2 }));
     expect(ok.status).toBe("pass");
-    expect(ok.evidence).toContain("2 wired host(s)");
+    expect(ok.evidence).toContain("2 coding tool(s)");
   });
 });
 

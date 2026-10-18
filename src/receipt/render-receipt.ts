@@ -768,7 +768,7 @@ function reasonsPanel(agg: EventAggregates): string {
     .map((r) => `<span class="chip"><code>${esc(clip(r.label, 60))}</code> × ${r.count}</span>`)
     .join("\n    ");
   return `<section class="panel" aria-label="Reasons">
-  <h2>Reasons</h2>
+  <h2>Why calls were allowed, held, or blocked</h2>
   <div class="chiprow">
     ${chips}
   </div>
@@ -920,7 +920,7 @@ function wiredHostsPanel(hosts: readonly WiredHostRow[] | undefined): string {
     })
     .join("\n    ");
   return `<section class="panel" aria-label="Wired hosts">
-  <h2>Wired hosts</h2>
+  <h2>Connected tools</h2>
   <ul class="rows">
     ${rows}
   </ul>
@@ -1008,7 +1008,7 @@ function capabilitiesPanel(model: ReceiptModel): string {
     },
     {
       name: "ORR board",
-      blurb: "Operational readiness review across producers",
+      blurb: "Checks if your agent setup is safe to run",
       live: !!model.orr,
       liveLabel: "ran",
       setup: "runs automatically at <code>kya start</code>; refresh with <code>kya orr run</code>",
@@ -1558,20 +1558,20 @@ function orrPanel(orr: OrrCard | undefined, nowMs: number, live: boolean): strin
     : "";
   if (!orr) {
     return `<section class="panel" aria-label="ORR">
-  <h2>Operational readiness</h2>
-  <p class="line">No ORR board yet. kya runs one automatically when the report starts and refreshes it every 30 minutes; the board rates operational readiness across producers.</p>
+  <h2>Readiness check</h2>
+  <p class="line">No readiness board yet. kya runs one when the report starts and refreshes it every 30 minutes. The board checks if your agent setup is safe to run.</p>
   <p class="mute small">CLI: <code>kya orr run --path .</code></p>
   ${run}
 </section>`;
   }
   const target = orr.targetName
-    ? `<span class="mute">target ${esc(clip(orr.targetName, 60))}</span>`
+    ? `<span class="mute">checked ${esc(clip(orr.targetName, 60))}</span>`
     : "";
   const failure = orr.primaryFailureMode
-    ? `<p class="line">Primary failure mode: ${esc(clip(orr.primaryFailureMode, 200))}</p>`
+    ? `<p class="line">Main problem: ${esc(clip(orr.primaryFailureMode, 200))}</p>`
     : "";
   const fix = orr.mostUrgentFix
-    ? `<p class="line">Most urgent fix: ${esc(clip(orr.mostUrgentFix, 200))}</p>`
+    ? `<p class="line">First fix to make: ${esc(clip(orr.mostUrgentFix, 200))}</p>`
     : "";
   const when = orr.generatedAt ? ` · ${esc(relativeTime(orr.generatedAt, nowMs))}` : "";
   const findings = orr.findings.length
@@ -1588,18 +1588,31 @@ function orrPanel(orr: OrrCard | undefined, nowMs: number, live: boolean): strin
         .join("")}</ul>`
     : "";
   return `<section class="panel" aria-label="ORR">
-  <h2>Operational readiness</h2>
+  <h2>Readiness check</h2>
   <div class="orrline">
     <span class="pill orr-${esc(orr.overall)}">${esc(orr.overall)}</span>
-    <span class="disp">${esc(orr.disposition.replace(/_/g, " "))}</span>
+    <span class="disp">${esc(dispositionWord(orr.disposition))}</span>
     ${target}
   </div>
   ${failure}
   ${fix}
   ${findings}
-  <p class="mute small">scorecards: ${orr.scorecards.pass} pass · ${orr.scorecards.fail} fail · ${orr.scorecards.partial} partial · ${orr.scorecards.notEvaluated} n/e${when} · auto-refreshes every 30 min while the report runs</p>
+  <p class="mute small">checks: ${orr.scorecards.pass} pass · ${orr.scorecards.fail} fail · ${orr.scorecards.partial} partial · ${orr.scorecards.notEvaluated} n/e${when} · refreshes every 30 min while the report runs</p>
   ${run}
 </section>`;
+}
+
+function dispositionWord(disposition: string): string {
+  switch (disposition) {
+    case "go":
+      return "safe to run";
+    case "conditional":
+      return "fix before production";
+    case "no_go":
+      return "not safe to run";
+    default:
+      return disposition.replace(/_/g, " ");
+  }
 }
 
 function severityCls(severity: string): string {
@@ -1629,20 +1642,20 @@ function kpiTile(label: string, value: string | number, cls = ""): string {
 function heroCertifyPanel(certify: CertifyCard | undefined): string {
   if (!certify) {
     return `<section class="panel hero-certify none" id="frag-hero-certify" aria-label="Certify">
-  <h2>Certify - Agent Trust Baseline</h2>
+  <h2>Certify - trust checklist for your agent</h2>
   <div class="orrline">
-    <span class="pill">not evaluated</span>
+    <span class="pill">not checked yet</span>
   </div>
-  <p class="mute small">No live evaluation available - wrap tool calls and run kya certify to build the baseline.</p>
+  <p class="mute small">No check yet - use your coding tools with kya connected, then run kya certify.</p>
 </section>`;
   }
   const state = certify.result === "pass" ? "pass" : "gap";
   // Status legend as a definition list so each counter is explained on first
   // glance, not hidden in a dense sentence.
   const legend = `<dl class="cert-legend">
-    <div><dt>Gap</dt><dd>requirement is failing - this is your work plan</dd></div>
-    <div><dt>Insufficient</dt><dd>not enough local evidence to evaluate (never counts as a pass)</dd></div>
-    <div><dt>Attested</dt><dd>your signed statement, unverified until audited</dd></div>
+    <div><dt>Failing</dt><dd>these rules fail right now - do these first</dd></div>
+    <div><dt>No data</dt><dd>not enough local data to decide (never counts as a pass)</dd></div>
+    <div><dt>Attested</dt><dd>your written statement, not verified</dd></div>
   </dl>`;
   // Attested summary: the hero's gap rows are gap-status only, so attestations
   // surface as one line naming the first attested requirement (+N more) with
@@ -1659,7 +1672,7 @@ function heroCertifyPanel(certify: CertifyCard | undefined): string {
             firstAttested.attestation?.text ?? firstAttested.evidence,
             100,
           )}"</div>`
-        : `<p class="att-line">attested: ${certify.attested} - your signed statement, unverified</p>`;
+        : `<p class="att-line">attested: ${certify.attested} - your written statement, not verified</p>`;
   // topGaps arrives severity-ordered from the loader; cap defensively at 5.
   // Each gap is an expandable <details> row: summary stays compact, the body
   // reveals the full requirement title, what the status means, the unclipped
@@ -1675,9 +1688,9 @@ ${certify.topGaps
     return `    <details class="req-row">
       <summary><code>${esc(g.id)}</code> - ${esc(g.title)} <span class="sev ${esc(g.severity)}">${esc(g.severity)}</span></summary>
       <div class="req-body">
-        <p class="req-mean">Gap means this requirement is currently failing against the local evidence in the ${certify.windowDays}-day window.</p>
-        ${g.evidence ? `<p class="req-evi"><strong>Evidence:</strong> ${esc(g.evidence)}</p>` : ""}
-        <p class="req-cta"><strong>Close it:</strong> <code>${esc(cmd)}</code> <span class="req-hint">(replace "…" with your accountable statement or fix the underlying control)</span></p>
+        <p class="req-mean">This rule is failing right now, based on activity in the last ${certify.windowDays} days.</p>
+        ${g.evidence ? `<p class="req-evi"><strong>Why:</strong> ${esc(g.evidence)}</p>` : ""}
+        <p class="req-cta"><strong>Fix it:</strong> <code>${esc(cmd)}</code> <span class="req-hint">(replace "…" with your answer, or fix the problem itself)</span></p>
       </div>
     </details>`;
   })
@@ -1685,26 +1698,26 @@ ${certify.topGaps
   </div>`;
   // Call-to-action: one primary command and one secondary link to the detail tab.
   const cta = `<div class="cert-cta">
-    <a class="btn" href="#certify">Open full requirement table</a>
-    <span class="mute small">or run <code>kya certify --open</code> for the signed bundle</span>
+    <a class="btn" href="#certify">See all rules</a>
+    <span class="mute small">or run <code>kya certify --open</code> for the signed proof file</span>
   </div>`;
   // Pill tones reuse the ORR palette: pass is green, gap is amber.
   return `<section class="panel hero-certify ${state}" id="frag-hero-certify" aria-label="Certify">
-  <h2>Certify - Agent Trust Baseline</h2>
+  <h2>Certify - trust checklist for your agent</h2>
   <div class="orrline">
-    <span class="pill orr-${state === "pass" ? "green" : "amber"}">${esc(certify.result)}</span>
+    <span class="pill orr-${state === "pass" ? "green" : "amber"}">${esc(certify.result === "pass" ? "pass" : "has gaps")}</span>
   </div>
   <div class="kpi-row">
     ${kpiTile("Pass", certify.pass, "ok")}
-    ${kpiTile("Gap", certify.gap, "warn")}
-    ${kpiTile("Insufficient", certify.insufficientEvidence, "mute")}
+    ${kpiTile("Failing", certify.gap, "warn")}
+    ${kpiTile("No data", certify.insufficientEvidence, "mute")}
     ${kpiTile("Attested", certify.attested, "mute")}
   </div>
   ${legend}
   ${attestedLine}
   ${gaps}
   ${cta}
-  <p class="mute small">live evaluation - window ${certify.windowDays}d, ${certify.trailEvents} trail events · the Certify tab has the complete gap report · <code>kya certify</code> writes the signed evidence bundle</p>
+  <p class="mute small">checked live - last ${certify.windowDays} days, ${certify.trailEvents} recorded events · the Certify tab lists every rule · <code>kya certify</code> writes the signed proof file</p>
 </section>`;
 }
 
@@ -1781,7 +1794,7 @@ ${items}
     })
     .join("\n");
   return `<section class="panel certify-detail" aria-label="Certify detail">
-  <h2>Every requirement - live evaluation</h2>
+  <h2>Every rule, checked live</h2>
 ${sections}
 </section>`;
 }
@@ -1805,7 +1818,7 @@ function verdictsHeroCard(
   const mixRow = (label: string, n: number, fill: "ok" | "warn" | "bad"): string =>
     `<div class="mix-row"><span class="mix-lab">${label}</span><span class="mix-bar"><span class="mix-fill ${fill}" style="width:${pct(n)}%"></span></span><span class="mix-num">${n}</span></div>`;
   return `<section class="panel" aria-label="Verdicts">
-  <h2>Verdicts</h2>
+  <h2>Decisions</h2>
   <div class="mix">
     ${mixRow("Allow", c.allow, "ok")}
     ${mixRow("Deny", c.deny, "bad")}
@@ -1876,7 +1889,7 @@ ${topRuns
   .join("\n")}
   </ul>`;
   return `<section class="panel" aria-label="Showback">
-  <h2>Showback (observe only)</h2>
+  <h2>Token use and cost (information only)</h2>
   <div class="kpi-row">
     ${kpiTile("Tokens in", report.totalTokensIn)}
     ${kpiTile("Tokens out", report.totalTokensOut)}
@@ -1955,7 +1968,7 @@ function importHeroCard(card: ImportCard | undefined, nowMs: number, live: boole
       : "";
     return `<section class="panel" aria-label="Import">
   <h2>Import</h2>
-  <p class="line">Nothing imported yet. Bring existing LangSmith, Langfuse, Phoenix, OTel, AGT, ADR Sensor, or OpenShell traces into the trail so they show up in this report and feed Certify.</p>
+  <p class="line">Nothing imported yet. Import records from LangSmith, Langfuse, Phoenix, OTel, AGT, ADR Sensor, or OpenShell so they appear in this report and feed Certify.</p>
   <p class="mute small">CLI: <code>kya import --from langsmith|langfuse|phoenix|otel|adr-sensor|openshell FILE</code> · <code>kya import --from agt</code> reads the AGT audit log</p>
   ${form}
 </section>`;
@@ -1993,7 +2006,7 @@ function discoveryHeroCard(card: DiscoveryCard | undefined, nowMs: number, live:
       : "";
     return `<section class="panel" aria-label="Discovery">
   <h2>Discovery</h2>
-  <p class="line">No endpoint scan yet. Discovery inventories AI agents, IDE extensions, desktop apps, model runtimes, and MCP servers on this workstation. Home-directory paths are redacted.</p>
+  <p class="line">No scan yet. Discovery lists the AI agents, IDE extensions, desktop apps, model runtimes, and MCP servers on this computer. Home folder paths are hidden.</p>
   <p class="mute small">CLI: <code>kya discover</code></p>
   ${scan}
 </section>`;
@@ -2035,7 +2048,7 @@ function investigateHeroCard(card: InvestigateLastRun | undefined, nowMs: number
       : "";
     return `<section class="panel" aria-label="Investigations">
   <h2>Investigations</h2>
-  <p class="line">No investigation has run yet. Deterministic detectors scan the trail for deny spikes, incidents, and risky patterns, then write fix briefs for your coding agent.</p>
+  <p class="line">No investigation yet. Detectors scan the record for repeated blocks, incidents, and risky patterns, then write fix notes for your coding agent.</p>
   <p class="mute small">CLI: <code>kya investigate</code></p>
   ${run}
 </section>`;
@@ -2043,7 +2056,7 @@ function investigateHeroCard(card: InvestigateLastRun | undefined, nowMs: number
   const findingCount = card.findings.reduce((n, f) => n + f.count, 0);
   const rows =
     card.findings.length === 0
-      ? `<p class="line">No findings - the trail looks clean for all detectors.</p>`
+      ? `<p class="line">No problems found - the record looks clean for all detectors.</p>`
       : `<ul class="rows">
 ${card.findings
   .map(
@@ -2080,7 +2093,7 @@ function alertsPanel(card: NotifyLogSummary | undefined, nowMs: number, live: bo
       : "";
     return `<section class="panel" aria-label="Alerts">
   <h2>Alerts</h2>
-  <p class="line">No alert deliveries yet. kya fires webhooks for DENY and REQUIRE_APPROVE verdicts; every delivery attempt is logged here per target.</p>
+  <p class="line">No alerts sent yet. kya sends a webhook when a call is blocked or needs approval. Every attempt is logged here.</p>
   <p class="mute small">send a test alert to see the pipeline work (it uses a temporary loopback receiver until you configure <code>notify.webhooks</code> in .kya/config.json or set <code>KYA_NOTIFY_WEBHOOK</code>)</p>
   ${test}
 </section>`;
@@ -2124,8 +2137,8 @@ function otelPanel(stats: OtelStats | undefined, nowMs: number, live: boolean): 
   <div id="report-action-result-otel-test"></div>`
       : "";
     return `<section class="panel" aria-label="OTel export">
-  <h2>OTel export</h2>
-  <p class="line">No spans exported yet. kya can mirror verdict events to any OTLP/HTTP collector; sent and failed counts are tracked here.</p>
+  <h2>Export to your monitoring (OTel)</h2>
+  <p class="line">Nothing exported yet. kya can send decision events to your monitoring system (any OTLP/HTTP collector). Sent and failed counts appear here.</p>
   <p class="mute small">test the export now (it uses a temporary loopback collector until you configure <code>otlpExport.endpoint</code> in .kya/config.json or set <code>KYA_OTLP_EXPORT_ENDPOINT</code>)</p>
   ${test}
 </section>`;
@@ -2135,7 +2148,7 @@ function otelPanel(stats: OtelStats | undefined, nowMs: number, live: boolean): 
     ? `last export ${esc(relativeTime(stats.lastExportAt, nowMs))} · `
     : "";
   return `<section class="panel" aria-label="OTel export">
-  <h2>OTel export</h2>
+  <h2>Export to your monitoring (OTel)</h2>
   <div class="orrline">${endpoint}</div>
   <div class="kpi-row">
     ${kpiTile("Spans sent", stats.spansSent)}
@@ -2300,7 +2313,7 @@ export function buildLiveFragments(
       ),
       certifyBody: zoneBody(
         [model.certify ? certifyDetailPanel(model.certify.requirements) : ""],
-        "No live evaluation yet - wrap tool calls and run kya certify to build the baseline.",
+        "No check yet - use your coding tools with kya connected, then run kya certify.",
       ),
       orrPanel: orrPanel(model.orr, nowMs, livePaged),
       changesList: changesPanel(changes, nowMs),
@@ -3279,7 +3292,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
       }
     }
     lines.push(
-      `live evaluation - window ${c.windowDays}d, ${c.trailEvents} trail events · the Certify tab has the full live requirement table · kya certify for the gap report + signed bundle`,
+      `checked live - last ${c.windowDays} days, ${c.trailEvents} recorded events · the Certify tab lists every rule · kya certify writes the gap report and signed proof file`,
       "",
     );
   }
@@ -3391,7 +3404,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
 
   if (agg.reasons.length > 0) {
     lines.push(
-      "## Reasons",
+      "## Why calls were allowed, held, or blocked",
       ...agg.reasons.map((r) => `- ${mdText(r.label)} × ${r.count}`),
       "",
     );
@@ -3425,7 +3438,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
 
   const hosts = model.wiredHosts ?? [];
   if (hosts.some((h) => h.wired !== "none")) {
-    lines.push("## Wired hosts");
+    lines.push("## Connected tools");
     for (const h of hosts) {
       if (h.recipeOnly) {
         lines.push(`- ${mdText(h.label)} - manual setup (docs recipe)`);
@@ -3456,13 +3469,13 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
   if (model.orr) {
     const orr = model.orr;
     lines.push(
-      "## Operational readiness",
-      `overall: ${orr.overall} · disposition: ${orr.disposition.replace(/_/g, " ")}${orr.targetName ? ` · target ${mdText(orr.targetName)}` : ""}`,
+      "## Readiness check",
+      `overall: ${orr.overall} · disposition: ${orr.disposition.replace(/_/g, " ")}${orr.targetName ? ` · checked ${mdText(orr.targetName)}` : ""}`,
     );
-    if (orr.primaryFailureMode) lines.push(`Primary failure mode: ${mdText(orr.primaryFailureMode)}`);
-    if (orr.mostUrgentFix) lines.push(`Most urgent fix: ${mdText(orr.mostUrgentFix)}`);
+    if (orr.primaryFailureMode) lines.push(`Main problem: ${mdText(orr.primaryFailureMode)}`);
+    if (orr.mostUrgentFix) lines.push(`First fix to make: ${mdText(orr.mostUrgentFix)}`);
     lines.push(
-      `scorecards: ${orr.scorecards.pass} pass · ${orr.scorecards.fail} fail · ${orr.scorecards.partial} partial · ${orr.scorecards.notEvaluated} n/e${orr.generatedAt ? ` · ${relativeTime(orr.generatedAt, nowMs)}` : ""}`,
+      `checks: ${orr.scorecards.pass} pass · ${orr.scorecards.fail} fail · ${orr.scorecards.partial} partial · ${orr.scorecards.notEvaluated} n/e${orr.generatedAt ? ` · ${relativeTime(orr.generatedAt, nowMs)}` : ""}`,
       "",
     );
   }
@@ -3470,7 +3483,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
   if (model.showback) {
     const sb = model.showback;
     lines.push(
-      "## Showback (observe only)",
+      "## Token use and cost (information only)",
       `${sb.totalTokensIn} tokens in · ${sb.totalTokensOut} tokens out · ${usdText(sb.estimatedUsd)}`,
     );
     const topRuns = [...sb.perRun]
@@ -3528,7 +3541,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
   if (model.otel) {
     const ot = model.otel;
     lines.push(
-      "## OTel export",
+      "## Export to your monitoring (OTel)",
       `${ot.endpoint ? `\`${mdInline(ot.endpoint)}\` · ` : ""}${ot.spansSent} sent · ${ot.spansFailed} failed${ot.lastExportAt ? ` · last export ${relativeTime(ot.lastExportAt, nowMs)}` : ""}`,
       "",
     );

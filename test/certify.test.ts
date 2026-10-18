@@ -444,7 +444,7 @@ describe("runCertify", () => {
     const home = tmp();
     const result = runCertify(baseOptions(cwd, home));
     const s = formatCertifySummary(result.report);
-    expect(s).toContain("agent-trust-baseline v0.1.0");
+    expect(s).toContain("agent-trust-baseline v0.1.1");
     expect(s).toMatch(/\d+ pass · \d+ gap · \d+ insufficient evidence · \d+ attested/);
     expect(s).toContain("GAP");
   });

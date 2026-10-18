@@ -6,7 +6,7 @@ Know Your Agent OSS (`@shield-agent/kya`) is the runtime gate (Allow / Deny / Ho
 
 Console roles on hosted: `OWNER` / `ADMIN` / `OPERATOR` / `READ_ONLY`. SSO manage is OWNER-only. Hold approve / kill needs operator capability (`OPERATOR` yes, `READ_ONLY` no).
 
-Humans are created via invite or SCIM on hosted. SSO login links existing accounts - it does not JIT-create operators.
+Humans are created via invite or SCIM on hosted. SSO login links existing accounts. It does not JIT-create operators (create them automatically on first login).
 
 ## Where to read more (hosted product)
 
@@ -20,8 +20,8 @@ Hosted SSO/SCIM is exercised against local Keycloak in the Shield Agent product 
 
 ## Policy enforcement vs SSO
 
-Operator SSO/SCIM is the **human** plane (who may approve Holds). Runtime policy enforcement (Allow / Hold / Deny before tool writes) is a separate PEP on the control plane. Optional hosted OPA packs and IdP group→tool maps may further DENY or raise to Hold only. Neither SSO, maps, nor OPA replaces Shield `APPROVED`.
+Operator SSO/SCIM is the **human** plane (who may approve Holds). Runtime policy enforcement (Allow / Hold / Deny before tool writes) is a separate PEP (policy enforcement point: the component that can block a call) on the control plane. Optional hosted OPA packs and IdP group→tool maps may further DENY or raise to Hold only. Neither SSO, maps, nor OPA replaces Shield `APPROVED`.
 
 ## OSS stays
 
-`register-agent`, `wrap`, `evaluate`, trail, MCP gate.
+`register-agent`, `wrap`, `evaluate`, the record (trail), MCP gate.

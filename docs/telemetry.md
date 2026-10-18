@@ -84,8 +84,8 @@ described above, only after you opted in and under the same switches. The in-pro
 
 ## Reliability and safety
 
-- Short timeout (3 s), no redirects, errors swallowed: a failed send can never change what KYA does.
-- Three consecutive failures stop the beacon for the rest of that process.
+- Short timeout (3 s), no redirects, errors ignored: a failed send can never change what KYA does.
+- Three consecutive failures stop the heartbeat for the rest of that process.
 - It prints nothing to stdout or stderr while running.
 
 ## Retention and erasure
@@ -110,4 +110,4 @@ erase call goes to the same URL plus `/erase`, with the install ID in the reques
 - Only installs that said yes are counted, so the numbers are a sample, not a census.
 - A hook-only install shows up as active (at most once a day) but not as a live session, and the
   ping says nothing about how much the hook was used.
-- Anyone can send fake heartbeats to a public endpoint; treat the numbers as indicative.
+- Anyone can send fake heartbeats to a public endpoint; treat the numbers as estimates.

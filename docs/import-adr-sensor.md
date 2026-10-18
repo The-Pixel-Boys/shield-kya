@@ -1,35 +1,35 @@
 # Import ADR Sensor events
 
 `kya import --from adr-sensor` reads the unified `AgentEvent` export written by the
-ADR Sensor Python package (`adr-sensor` on PyPI) and adds it to the Shield KYA trail.
-After an import, `kya receipt`, `kya certify` and `kya investigate` see ADR Sensor
-tool calls and sessions next to everything else on the trail.
+ADR Sensor Python package (`adr-sensor` on PyPI) and adds it to the Shield KYA record
+(trail). After an import, `kya receipt`, `kya certify` and `kya investigate` see ADR Sensor
+tool calls and sessions next to everything else in the record.
 
 ```bash
 kya import --from adr-sensor ./adr-sensor-events.jsonl
 kya import --from adr-sensor ./adr-sensor-events.json   # single event or array
 ```
 
-## What lands on the trail
+## What lands in the record
 
 ADR Sensor exports `AgentEvent` records with `uuid`, `timestamp`, `session_id`,
 `chat_history` and optional `token_usage`. The importer maps one `AgentEvent` to one
 or more `TrailEvent`s:
 
-| ADR Sensor field | KYA trail field |
+| ADR Sensor field | KYA event field |
 |------------------|-----------------|
 | `timestamp` | `ts` |
 | `session_id` | `sessionId` (fallback: `import-adr-sensor-<date>`) |
 | `chat_history[].tools[].tool_name` | `toolId` (one event per tool call) |
 | `token_usage.prompt_tokens` | `tokensIn` |
 | `token_usage.completion_tokens` | `tokensOut` |
-| `uuid` | `sourceHash` (dedupe key) |
+| `uuid` | `sourceHash` (used to skip duplicates) |
 
 Every row is `host: import`, `mode: observe`, `importFormat: "adr-sensor"`,
 `importedFrom: "adr-sensor"` and `reasonCode: IMPORTED` (or `IMPORTED_ERROR` when the
 event or tool result signals an error). Tool summaries contain input argument key
 names only (`input: path, target`) and are redacted through `redactTrailText`; raw
-argument values never reach the trail. Text fields have control characters
+argument values never reach the record. Text fields have control characters
 (newlines, ESC, NUL) replaced by spaces and whitespace collapsed.
 
 Records are skipped and counted in the `errors:` line (the rest import) when they
@@ -58,7 +58,7 @@ Otherwise the event is `ALLOW`.
 
 ## Re-importing
 
-Imports are idempotent. Rows are matched by the ADR Sensor `uuid` (`sourceHash`), so
+Imports are idempotent (no duplicates). Rows are matched by the ADR Sensor `uuid` (`sourceHash`), so
 importing the same file twice, or a file that has grown since the last import, adds
 only the new events. The summary shows `already imported: N record(s)` for the rest.
 

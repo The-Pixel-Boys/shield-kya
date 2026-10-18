@@ -9,7 +9,7 @@ Two ways to spread the `kya` plugin (see [hosts/claude-plugin.md](hosts/claude-p
 
 Requires the first kya release that includes `kya team`. To check yours, run `kya --help`: versions that have it list `team init`; older ones answer `Unknown command: team`.
 
-This is OSS advisory mode. The plugin records every tool call on the local trail, blocks only the small never-list, and fails open (if kya is missing or broken, the tool call proceeds unrecorded). Rolling it out does not change that. Hosted enforcement is a separate product and is not configured by these commands.
+This is OSS advisory mode. The plugin records every tool call on the local record (trail), blocks only the small never-list, and fails open (if kya is missing or broken, the tool call proceeds unrecorded). Rolling it out does not change that. Hosted enforcement is a separate product and is not configured by these commands.
 
 ## Per repository: `kya team init`
 
@@ -78,12 +78,12 @@ See the [organization guide](https://code.claude.com/docs/en/plugins/org) for bo
 
 A committed settings file that enables a plugin decides what code runs on every teammate's machine. Treat it like a dependency.
 
-- The pin is a release tag, which is safer than a branch, but **it is not immutable**. A git tag can be moved or deleted by anyone with write access to the repository. Claude Code's GitHub marketplace source accepts a `ref` (branch or tag) and no commit `sha`, so there is no stronger pin today.
+- The pin is a release tag, which is safer than a branch, but **it is not fixed**: anyone with write access to the repository can move or delete a git tag. Claude Code's GitHub marketplace source accepts a `ref` (branch or tag) and no commit `sha`, so there is no stronger pin today.
 - Today the public repository `The-Pixel-Boys/shield-kya` has no tag protection rule (its only ruleset protects the `main` branch). We recommend a `v*` tag ruleset that blocks updates and deletion. Until then, a moved tag would change what runs on your machines at the next marketplace refresh.
 - If you need a pin nobody else can move, mirror the repository into your own organization, tag it there, and point `repo` and `ref` at your mirror.
 - The plugin's SessionStart step installs the exact `@shield-agent/kya` version named in that release from the public npm registry; see "Install hardening and limits" in [hosts/claude-plugin.md](hosts/claude-plugin.md) for what is and is not verified.
 - No secrets go into either file. Keep API keys in the environment, never in `.claude/settings.json`.
-- Review changes to `.claude/settings.json` and to `.kya/config.json` in pull requests like any other code: a changed `ref` or `repo` changes what runs. A `.kya/config.json` notify webhook receives trail fields on denied calls.
+- Review changes to `.claude/settings.json` and to `.kya/config.json` in pull requests like any other code: a changed `ref` or `repo` changes what runs. A `.kya/config.json` notify webhook receives record fields on denied calls.
 
 ## No `.kya/config.json` is written
 

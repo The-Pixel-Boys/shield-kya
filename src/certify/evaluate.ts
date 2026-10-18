@@ -288,27 +288,27 @@ export function evaluateRequirement(
       if (ctx.gateMode === check.not) {
         return result(
           "gap",
-          `gate mode is ${ctx.gateMode} - set KYA_HOLD=1 / KYA_OFFLINE=1 or "gateMode" in .kya/config.json`,
+          `the gate is in ${ctx.gateMode} mode (watch only, blocks nothing) - to make it block, set KYA_HOLD=1 or KYA_OFFLINE=1, or "gateMode" in .kya/config.json`,
         );
       }
-      return result("pass", `gate mode is ${ctx.gateMode}`);
+      return result("pass", `the gate is in ${ctx.gateMode} mode`);
     }
     case "hooks_wired": {
       if (ctx.wiredHostCount >= check.min) {
-        return result("pass", `${ctx.wiredHostCount} wired host(s) (need ${check.min})`);
+        return result("pass", `${ctx.wiredHostCount} coding tool(s) connected (need ${check.min})`);
       }
       return result(
         "gap",
-        `${ctx.wiredHostCount} wired host(s), need ${check.min} - kya connect <host> --hooks`,
+        `${ctx.wiredHostCount} coding tool(s) connected, need ${check.min} - run kya connect <host> --hooks`,
       );
     }
     case "sandbox_inventory": {
       if (ctx.sandboxCount >= check.min) {
-        return result("pass", `${ctx.sandboxCount} sandbox record(s)`);
+        return result("pass", `${ctx.sandboxCount} sandbox(es) available`);
       }
       return result(
         "gap",
-        `no sandbox inventory - KYA_SANDBOX=mock kya sandbox spawn`,
+        `no sandbox found - run KYA_SANDBOX=mock kya sandbox spawn`,
       );
     }
     case "openshell_prover": {
@@ -323,71 +323,71 @@ export function evaluateRequirement(
     }
     case "receipts_present": {
       if (ctx.receiptCount >= check.min) {
-        return result("pass", `${ctx.receiptCount} receipt file(s) in .kya/receipts`);
+        return result("pass", `${ctx.receiptCount} report file(s) in .kya/receipts`);
       }
-      return result("gap", `no receipts yet - run kya receipt`);
+      return result("gap", `no reports yet - run kya receipt`);
     }
     case "showback_present": {
       return ctx.showbackPresent
-        ? result("pass", "showback card present (.kya/usage.json)")
-        : result("gap", "no showback card - add .kya/usage.json or run orr with --usage");
+        ? result("pass", "usage file present (.kya/usage.json)")
+        : result("gap", "no usage file - add .kya/usage.json or run kya orr with --usage");
     }
     case "attest": {
       if (attestation) return result("attested", `attested ${attestation.at}`);
       return result(
         "gap",
-        `no attestation recorded - kya certify --attest ${req.id} --text "…" (${check.prompt})`,
+        `no statement recorded - run kya certify --attest ${req.id} --text "…" to answer: ${check.prompt}`,
       );
     }
     case "orr_overall": {
       if (!ctx.orr) {
-        return result("insufficient_evidence", "no ORR report - kya orr run --path .");
+        return result("insufficient_evidence", "no readiness check yet - run kya orr run --path .");
       }
       if (RATING_RANK[ctx.orr.overall] <= RATING_RANK[check.max]) {
-        return result("pass", `ORR overall ${ctx.orr.overall} (max ${check.max})`);
+        return result("pass", `readiness check is ${ctx.orr.overall} (must be ${check.max} or better)`);
       }
-      return result("gap", `ORR overall ${ctx.orr.overall} exceeds max ${check.max}`);
+      return result("gap", `readiness check is ${ctx.orr.overall}, which is worse than ${check.max}`);
     }
     case "orr_category": {
       if (!ctx.orrCategories) {
-        return result("insufficient_evidence", "no ORR report - kya orr run --path .");
+        return result("insufficient_evidence", "no readiness check yet - run kya orr run --path .");
       }
       const rating = ctx.orrCategories[check.id];
       if (!rating) {
         return result(
           "insufficient_evidence",
-          `ORR category ${check.id} not present in latest report`,
+          `readiness check has no ${check.id} section`,
         );
       }
       if (RATING_RANK[rating] <= RATING_RANK[check.max]) {
-        return result("pass", `ORR ${check.id} ${rating} (max ${check.max})`);
+        return result("pass", `readiness check section ${check.id} is ${rating} (must be ${check.max} or better)`);
       }
-      return result("gap", `ORR ${check.id} ${rating} exceeds max ${check.max}`);
+      return result("gap", `readiness check section ${check.id} is ${rating}, which is worse than ${check.max}`);
     }
     case "orr_fresh": {
       if (!ctx.orr || !ctx.orr.generatedAt) {
-        return result("insufficient_evidence", "no ORR report - kya orr run --path .");
+        return result("insufficient_evidence", "no readiness check yet - run kya orr run --path .");
       }
       const t = Date.parse(ctx.orr.generatedAt);
       if (Number.isNaN(t)) {
-        return result("insufficient_evidence", "ORR generatedAt unparseable");
+        return result("insufficient_evidence", "readiness check date is unreadable");
       }
       const nowMs = ctx.now.getTime();
       if (t > nowMs) {
         return result(
           "insufficient_evidence",
-          "ORR generatedAt is in the future - clock skew, re-run kya orr run",
+          "readiness check date is in the future (clock skew) - re-run kya orr run",
         );
       }
       const ageMs = nowMs - t;
       // Exact ms comparison decides; the floored day count is display-only.
       const ageDays = Math.floor(ageMs / DAY_MS);
       if (ageMs <= check.maxAgeDays * DAY_MS) {
-        return result("pass", `ORR is ${ageDays}d old (max ${check.maxAgeDays}d)`);
+        return result("pass", `readiness check is ${ageDays}d old (max ${check.maxAgeDays}d)`);
       }
       return result(
         "gap",
-        `ORR is ${ageDays}d old (max ${check.maxAgeDays}d) - re-run kya orr run`,
+        `readiness check is ${ageDays}d old (max ${check.maxAgeDays}d) - re-run kya orr run`,
       );
     }
   }
