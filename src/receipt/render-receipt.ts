@@ -2682,7 +2682,15 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       body: JSON.stringify(body)
     });
   }
-  function parseJson(res){ return res.json(); }
+  function parseJson(res){
+    if (!res.ok) {
+      var msg = res.status === 401
+        ? 'Session expired or unauthorized (401). Reload the report from kya start, then try again.'
+        : 'Request failed with HTTP ' + res.status;
+      throw new Error(msg);
+    }
+    return res.json();
+  }
 
   var form = document.getElementById('gate-play-form');
   if (form) {
@@ -2741,6 +2749,23 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     });
   });
 
+  // Success feedback must survive the confirmation reload: the result div is
+  // server-rendered empty on the fresh page, so without this the user sees a
+  // blip for 800 ms and then an apparently unchanged page.
+  function persistResult(action, msg){
+    try { sessionStorage.setItem('kya:action-result', JSON.stringify({ a: action, m: msg })); } catch (e) {}
+  }
+  (function showPersistedResult(){
+    var raw;
+    try { raw = sessionStorage.getItem('kya:action-result'); sessionStorage.removeItem('kya:action-result'); } catch (e) { return; }
+    if (!raw) return;
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { return; }
+    var el = document.getElementById('report-action-result-' + data.a)
+      || (data.a === 'import' ? document.getElementById('import-result') : null);
+    if (el && typeof data.m === 'string') setResult(el, '<p>' + esc(data.m) + '</p>', false);
+  })();
+
   document.querySelectorAll('[data-report-action]').forEach(function(btn){
     btn.addEventListener('click', function(){
       var action = btn.getAttribute('data-report-action');
@@ -2762,7 +2787,8 @@ export function renderReceiptHtml(model: ReceiptModel): string {
             if (action === 'otel-test') {
               btn.disabled = false;
             } else {
-              setTimeout(function(){ location.reload(); }, 800);
+              persistResult(action, msg);
+              setTimeout(function(){ location.reload(); }, 1500);
             }
           } else {
             setResult(resultEl, '<p>Error: ' + esc(data && (data.error || data.detail) ? (data.error || data.detail) : 'unknown') + '</p>', true);
@@ -2791,8 +2817,10 @@ export function renderReceiptHtml(model: ReceiptModel): string {
         .then(function(data){
           if (data && data.ok) {
             var errs = data.errors && data.errors.length ? ' · ' + data.errors.length + ' error(s)' : '';
-            setResult(resultEl, '<p>Imported ' + data.imported + ' event(s)' + errs + ' - reloading...</p>', false);
-            setTimeout(function(){ location.reload(); }, 800);
+            var importMsg = 'Imported ' + data.imported + ' event(s)' + errs;
+            setResult(resultEl, '<p>' + esc(importMsg) + ' - reloading...</p>', false);
+            persistResult('import', importMsg);
+            setTimeout(function(){ location.reload(); }, 1500);
           } else {
             setResult(resultEl, '<p>Error: ' + esc(data && data.error ? data.error : 'unknown') + '</p>', true);
             if (btn) btn.disabled = false;
