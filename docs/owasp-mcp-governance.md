@@ -2,14 +2,14 @@
 
 Maps [OWASP MCP Governance & Risk Framework v1.0](https://github.com/OWASP/OWASP-MCP-Governance-and-Risk-Project) and the [OWASP MCP Top 10](https://owasp.org/www-project-mcp-top-10/) onto Shield Know Your Agent (KYA).
 
-This is an alignment guide. It is not an OWASP certification and not a claim that Shield replaces your GRC program.
+This is an alignment guide. It is not an OWASP certification and not a claim that Shield replaces your GRC (governance, risk and compliance) program.
 
 ## Four rules
 
 | OWASP rule | Shield |
 |------------|--------|
 | No owner = no approval | Principals are named agents (`AgentId`). Machine API keys are scoped. Unowned shadow installs are outside the plane until registered. |
-| No logging = no production | Evaluate, Hold, and session ingest write trail. Hosted keeps hash-chained event log. Opt-in OTLP is policy metrics, not a substitute for trail. |
+| No logging = no production | Evaluate, Hold, and session ingest write to the record (trail). Hosted keeps a hash-chained event log. Opt-in OTLP is policy metrics, not a substitute for the record. |
 | No scope = no access | Tools are evaluated by id. Never-event tools are DENY. High-stakes tools go to REQUIRE_APPROVE / Hold. |
 | No review = no enterprise deploy | Hosted approvals queue, agent passport, kill/revoke. Periodic org review is still your process. |
 
@@ -18,21 +18,21 @@ This is an alignment guide. It is not an OWASP certification and not a claim tha
 | Principle | Shield surface |
 |-----------|----------------|
 | Ownership | Register agent; API key per principal |
-| Classify before connect | Treat each **tool** by risk (read vs write vs admin). Tier 0–4 below is guidance for what to wrap. |
+| Classify before connect | Treat each **tool** by risk (read vs write vs admin). Tiers 0 to 4 below are guidance for what to wrap. |
 | Least privilege for tools | Policy is per toolId, not “the whole MCP server” |
 | Meaningful human approval | Hold must show **what** (tool/action), **who** (agent), **where** (host=ide\|runtime when known), **impact** (side effect blocked until APPROVED) |
-| Production logging | Trail + sessions; ORR for evidence reports |
+| Production logging | Record + sessions; ORR for evidence reports |
 | Approved path beats shadow IT | Hosted install hub / wrap path; unwrapped tools stay invisible (not auto-discovered) |
 
-## Tier 0–4 (guidance only)
+## Tiers 0 to 4 (guidance only)
 
 Use tiers when deciding which tools must go through Shield. Shield does not yet ship an org MCP inventory UI; classification is operator policy.
 
 | Tier | Meaning | Shield expectation |
 |------|---------|-------------------|
 | 0 | Public read-only | Optional evaluate; still watch tool poisoning |
-| 1 | Internal non-sensitive read | Prefer evaluate + trail |
-| 2 | Sensitive read | Evaluate + trail; Hold if combined with write tools in one session |
+| 1 | Internal non-sensitive read | Prefer evaluate + record |
+| 2 | Sensitive read | Evaluate + record; Hold if combined with write tools in one session |
 | 3 | Write-capable | REQUIRE_APPROVE / Hold before invoke |
 | 4 | Privileged / critical | Hold + named owner + kill path; CISO process outside product |
 
@@ -40,16 +40,16 @@ Classify by the **highest-risk tool** on the server, not the server marketing na
 
 ## OWASP MCP Top 10
 
-| Risk | Shield enforces (PEP) | Shield evidence | Customer / host |
+| Risk | Shield enforces (PEP: policy enforcement point) | Shield evidence | Customer / host |
 |------|------------------------|-----------------|-----------------|
-| MCP01 Token / secret exposure | Deny raw secret tools when policy says so; no secrets in OTLP | Trail redaction on hosted LLM path | Vault / secret hygiene |
+| MCP01 Token / secret exposure | Deny raw secret tools when policy says so; no secrets in OTLP | Record redaction on hosted LLM path | Vault / secret hygiene |
 | MCP02 Scope creep | Re-evaluate new toolIds; never-events | ORR / change review | Re-classify on tool add |
 | MCP03 Tool poisoning | Does not rewrite remote tool schemas | ORR / scanner evidence optional | Scan MCP descriptors before approve |
 | MCP04 Supply chain | Pin npm versions; no auto `npx -y` in our docs | Scorecard / ORR optional | SBOM / pin deps |
-| MCP05 Command injection | DENY / Hold on shell-like toolIds you wrap | Trail of evaluates | Sandbox on host |
+| MCP05 Command injection | DENY / Hold on shell-like toolIds you wrap | Record of evaluates | Sandbox on host |
 | MCP06 Prompt injection / intent subversion | Hold on write after untrusted read (policy) | Sessions | Separate read/write MCP catalogs |
 | MCP07 Authn / authz | API key / Bearer on MCP; fail closed on Hold | Auth audit | OAuth audience on HTTP MCP servers |
-| MCP08 Audit / telemetry | Trail, sessions, OTLP metrics | ORR reports | SIEM join |
+| MCP08 Audit / telemetry | Record, sessions, OTLP metrics | ORR reports | SIEM join |
 | MCP09 Shadow MCP | Unwrapped = invisible | Orphan / growth metrics | Inventory discovery (hosted roadmap) |
 | MCP10 Context over-sharing | Host labels ide vs runtime | Session ingest | Host context isolation |
 
@@ -60,7 +60,7 @@ Classify by the **highest-risk tool** on the server, not the server marketing na
 | Who can act? | Agent passport / principal list |
 | What was decided? | Evaluate records + Hold approve/reject |
 | Was the write blocked until approve? | `sideEffect=blocked` on wrap / MCP request_approval |
-| Immutable trail? | Hosted event log (hash chain) |
+| Tamper-proof record? | Hosted event log (hash chain) |
 | Policy meters? | OTLP / console metrics (not a billing meter) |
 | Readiness snapshot? | `kya orr run` JSON/MD |
 
@@ -76,11 +76,11 @@ Copy of OWASP rollout, mapped to Shield:
 
 ## Hosted inventory (shipping)
 
-Hosted console: `/app/kya/mcp-assets` - tenant MCP asset list, OWASP-style eight-factor auto score, suggested Tier 0-4. Hard gates: no owner / no logging block production status. This is **inventory and classification**, not a second PEP. Writes still need evaluate / Hold.
+Hosted console: `/app/kya/mcp-assets`: tenant MCP asset list, OWASP-style eight-factor auto score, suggested Tier 0-4. Hard gates: no owner / no logging block production status. This is **inventory and classification**, not a second PEP. Writes still need evaluate / Hold.
 
 Sync roadmap (ToolHive + official MCP Registry): hosted `docs/dev/kya-mcp-registry-roadmap.md`.
 
-Still deferred: network discovery of shadow MCP; vendor intake questionnaires; native Splunk/Sentinel apps (see trail SIEM recipe).
+Still deferred: network discovery of shadow MCP; vendor intake questionnaires; native Splunk/Sentinel apps (see the SIEM recipe for the record).
 
 ## Non-claims
 
@@ -89,8 +89,8 @@ Still deferred: network discovery of shadow MCP; vendor intake questionnaires; n
 - Complements (ORR scanners) never ALLOW a write.
 
 
-## Hosted PEP raise (Tier 3–4)
+## Hosted PEP raise (Tiers 3 to 4)
 
-On Shield hosted, inventory Tier **3–4** (and `blocked` assets) raise evaluate/invoke from ALLOW to **Hold** (`MCP_TIER_*`). Tier never Allows. Missing inventory is a no-op.
+On Shield hosted, inventory tiers **3 to 4** (and `blocked` assets) raise evaluate/invoke from ALLOW to **Hold** (`MCP_TIER_*`). Tier never Allows. Missing inventory changes nothing.
 
 Hosted IdP group→tool maps may further **Hold** or **Deny** only (never Allow), after MCP Tier and before OPA.

@@ -15,7 +15,7 @@ That appends a `[mcp_servers.shield-kya]` table to `~/.grok/config.toml` (comman
 1. Open [grok.com/connectors](https://grok.com/connectors).
 2. **New Connector** → **Custom**.
 3. Server URL: `https://shield-agent.com/mcp`.
-4. Auth: your machine API key as `Authorization: Bearer <KYA_API_KEY>` when the UI offers a request-header / API-key field. If the UI only offers OAuth or None, stop - don't turn auth off; use the xAI SDK path below instead.
+4. Auth: your machine API key as `Authorization: Bearer <KYA_API_KEY>` when the UI offers a request-header / API-key field. If the UI only offers OAuth or None, stop. Do not turn auth off; use the xAI SDK path below instead.
 
 ## Setup - xAI SDK
 
@@ -41,21 +41,21 @@ For a custom local Grok-driven agent, use the same stdio launch as Claude/Codex/
 
 ## What KYA reports
 
-Same three tools everywhere: `kya.policy_evaluate` (Allow / Deny / Hold), `kya.session_ingest`, `kya.request_approval`. Shield stays the only policy decision point - the tools never execute the write themselves. Calls land on the receipt: `kya receipt --open`.
+Same three tools everywhere: `kya.policy_evaluate` (Allow / Deny / Hold), `kya.session_ingest`, `kya.request_approval`. Shield stays the only policy decision point (the one place that decides Allow or Deny). The tools never execute the write themselves. Calls land on the receipt: `kya receipt --open`.
 
 ## Files written
 
 | Setup | Path |
 |-------|------|
-| Grok CLI | `~/.grok/config.toml` - one appended `[mcp_servers.shield-kya]` table |
-| grok.com | none locally - the connector lives in your grok.com account |
-| xAI SDK | none - the `mcp(...)` tool lives in your own code |
+| Grok CLI | `~/.grok/config.toml` (one appended `[mcp_servers.shield-kya]` table) |
+| grok.com | none locally (the connector lives in your grok.com account) |
+| xAI SDK | none (the `mcp(...)` tool lives in your own code) |
 
-Connect appends and never rewrites unrelated TOML. An inline `shield-kya = …` definition under `[mcp_servers]` can't be merged as text - connect stops and tells you instead of guessing.
+Connect appends and never rewrites unrelated TOML. An inline `shield-kya = …` definition under `[mcp_servers]` cannot be merged as text. Connect stops and tells you instead of guessing.
 
 ## Verify
 
-1. Grok CLI: open a session, run `/mcps` - `shield-kya` should list with the three tools (press `r` to refresh if the session was already open). In grok.com, open a chat with the connector enabled and ask for the available tools.
+1. Grok CLI: open a session, run `/mcps`. `shield-kya` should list with the three tools (press `r` to refresh if the session was already open). In grok.com, open a chat with the connector enabled and ask for the available tools.
 2. Trigger a small evaluation and check the receipt for the row.
 3. Local smoke:
 
@@ -63,11 +63,11 @@ Connect appends and never rewrites unrelated TOML. An inline `shield-kya = …` 
    kya wrap --offline --tool-id Write --irreversible --args '{"path":"x.ts","content":"hi"}'
    ```
 
-   Expect a `REQUIRE_APPROVE` row on the trail.
+   Expect a `REQUIRE_APPROVE` row in the record (trail).
 
 ## Uninstall
 
-Grok CLI: delete the `[mcp_servers.shield-kya]` table from `~/.grok/config.toml` (or rewire later with `kya connect grok --force`); if you wired the gateway with `kya connect grok --gate`, delete the `[mcp_servers.shield-kya-gate]` table too. grok.com: delete the connector in connector settings; xAI SDK: remove the `mcp(...)` tool from your code. Nothing else is installed - no daemon, no background process.
+Grok CLI: delete the `[mcp_servers.shield-kya]` table from `~/.grok/config.toml` (or rewire later with `kya connect grok --force`); if you wired the gateway with `kya connect grok --gate`, delete the `[mcp_servers.shield-kya-gate]` table too. grok.com: delete the connector in connector settings; xAI SDK: remove the `mcp(...)` tool from your code. Nothing else is installed: no daemon, no background process.
 
 ## Troubleshooting
 
@@ -87,4 +87,4 @@ For local scripts that call the xAI API:
 kya wrap --offline -- python scripts/grok_job.py
 ```
 
-Wrap evaluates the command before it runs and records a trail row. Exit `0` Allow, `4` Hold, `1` Deny.
+Wrap evaluates the command before it runs and records a row in the record. Exit `0` Allow, `4` Hold, `1` Deny.

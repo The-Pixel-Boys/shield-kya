@@ -27,7 +27,7 @@ describe("bundled catalog", () => {
   it("loads the packaged Agent Trust Baseline v0", () => {
     const catalog = loadCatalog();
     expect(catalog.id).toBe("agent-trust-baseline");
-    expect(catalog.version).toBe("0.1.0");
+    expect(catalog.version).toBe("0.1.1");
     expect(catalog.domains).toEqual([
       "data-privacy",
       "security",

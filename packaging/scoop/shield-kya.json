@@ -1,6 +1,6 @@
 {
     "version": "0.27.0",
-    "description": "Audit trail and traceability for AI agents. See what every coding agent did, with opt-in human approval and signed certify.",
+    "description": "Audit trail and traceability for AI agents. See what every coding agent did, block risky calls, ask a human for approval, and prove it with signed trust checks.",
     "homepage": "https://shield-agent.com/install",
     "license": "MIT",
     "depends": "nodejs",

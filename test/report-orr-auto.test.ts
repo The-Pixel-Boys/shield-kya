@@ -170,11 +170,11 @@ describe("ORR zone rendering", () => {
       }),
     );
     expect(html).toContain('pill orr-amber">amber');
-    expect(html).toContain("conditional");
+    expect(html).toContain("fix before production");
     expect(html).toContain("no policy evaluate path");
     expect(html).toContain("wire wrapTool");
     expect(html).toContain("2 pass · 1 fail");
-    expect(html).toContain("auto-refreshes every 30 min");
+    expect(html).toContain("refreshes every 30 min");
     expect(html).toContain("No fail-closed evaluate/wrap path detected");
     expect(html).toContain("src/agent.ts:42");
   });

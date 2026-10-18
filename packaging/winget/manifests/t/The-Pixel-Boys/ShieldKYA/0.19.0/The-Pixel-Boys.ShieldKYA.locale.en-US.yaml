@@ -13,7 +13,7 @@ LicenseUrl: https://github.com/The-Pixel-Boys/shield-kya/blob/main/LICENSE
 Copyright: Copyright (c) The Pixel Boys
 ShortDescription: Audit trail and traceability for AI agents
 Description: |
-  Audit trail and traceability for AI agents. See what every coding agent did, with opt-in human approval and signed certify.
+  Audit trail and traceability for AI agents. See what every coding agent did, block risky calls, ask a human for approval, and prove it with signed trust checks.
 Moniker: shield-kya
 Tags:
   - kya

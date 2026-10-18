@@ -22,7 +22,7 @@ kya hook --host claude --plane-config /Users/you/.kya/hosted.json
 | REQUIRE_APPROVE (hold; every unregistered tool such as Read or Bash today) | allow, recorded | deny, with a console link | allow, recorded |
 | Agent killed or revoked (`AGENT_NOT_ACTIVE`) | deny | deny | allow, recorded |
 | Agent id unknown to the workspace (`AGENT_UNKNOWN`) | deny | deny | allow, recorded |
-| Plane unreachable, 5xx, no verdict (`PLANE_UNREACHABLE`) | deny | deny | allow, recorded |
+| Plane unreachable, 5xx, no decision (`PLANE_UNREACHABLE`) | deny | deny | allow, recorded |
 | Key rejected, 401 or 403 (`PLANE_AUTH_REJECTED`) | deny | deny | allow, recorded |
 | No answer within the budget (`PLANE_TIMEOUT`) | deny | deny | allow, recorded |
 | Rate limited, 429 (`PLANE_RATE_LIMITED`) | deny | deny | allow, recorded |
@@ -30,14 +30,14 @@ kya hook --host claude --plane-config /Users/you/.kya/hosted.json
 | TLS, CA, proxy or code-loading env override (`PLANE_ENV_REFUSED`) | deny | deny | allow, recorded |
 | Unreadable hook payload (`FAIL_CLOSED`) | deny | deny | allow, recorded |
 
-- **The local never-list always wins.** It runs on the tool name before any plane answer is used, and a plane ALLOW cannot override it. The plane is still asked, so the attempt shows up in the hosted trail.
+- **The local never-list always wins.** It runs on the tool name before any plane answer is used, and a plane ALLOW cannot override it. The plane is still asked, so the attempt shows up in the hosted record (trail).
 - **Hold.** A held call is allowed and recorded unless you pass `--strict`. Under `--strict` it is denied with a link to your console. No approval request is opened in this beta, so tell the agent not to retry until an operator has changed the policy.
 - **Shadow** (`--plane-shadow`) is for pilots. It evaluates and records, and never blocks except for the local never-list. Every row it writes carries `"shadow": true`. Shadow can only be set on the command line; no env var or file turns it on.
 - A deny exits 2 with Claude Code's `permissionDecision: "deny"` JSON on stdout and the reason on stderr, exactly like the local hook.
 
 ## Retries and the latency budget
 
-The plane call has one total budget: 3000 ms by default, set with `--plane-budget-ms` (100 to 4000). That leaves room under Claude Code's 5 s hook timeout for node start and the trail write.
+The plane call has one total budget: 3000 ms by default, set with `--plane-budget-ms` (100 to 4000). That leaves room under Claude Code's 5 s hook timeout for node start and the record write.
 
 - **Retried:** 429, any 5xx, network errors (refused, reset, DNS) and a stalled attempt. Each attempt is capped at half the budget, so one stall still leaves room for a retry.
 - **Backoff:** exponential with jitter. Attempt n waits a random time between d/2 and d, where d is 200 ms times 2 to the power n, capped at 1600 ms.
@@ -71,19 +71,19 @@ chmod 600 ~/.kya/hosted.json
   - it is not valid JSON, or `agentId` is not a UUID;
   - `baseUrl` is not a plain `https:` origin: no credentials, query, fragment or port 0, ASCII only, no punycode, written in canonical form (so `0x7f.1` or `2130706433` are refused), and no IP address or `localhost` name. `--plane-allow-http-loopback` (command line only, for local testing) admits exactly `127.0.0.1` and `[::1]`, over http or https.
 - Windows is not supported in this beta, because the owner and mode checks need POSIX.
-- kya never prints, logs or writes the key to the trail, and error messages never echo the file. Node's own debug output (`NODE_DEBUG`, which would print request headers) is refused, see below. As a best-effort last resort, once the config file is loaded, hosted mode redacts the key from string and Buffer writes to `process.stdout` and `process.stderr`: the exact key, the exact key split across two writes, and its URL-encoded or base64 form only when that whole encoded form lies within one write (base64 only when aligned to the key's start). It does not cover a key it has not loaded yet, `Uint8Array` writes, direct `fs.writeSync` to fd 1 or 2, hex or other encodings, unaligned base64, or any other transformation, and a held-back partial key prefix that never completes is released as written at exit.
+- kya never prints, logs or writes the key to the record, and error messages never echo the file. Node's own debug output (`NODE_DEBUG`, which would print request headers) is refused, see below. As a best-effort last resort, once the config file is loaded, hosted mode redacts the key from string and Buffer writes to `process.stdout` and `process.stderr`: the exact key, the exact key split across two writes, and its URL-encoded or base64 form only when that whole encoded form lies within one write (base64 only when aligned to the key's start). It does not cover a key it has not loaded yet, `Uint8Array` writes, direct `fs.writeSync` to fd 1 or 2, hex or other encodings, unaligned base64, or any other transformation, and a held-back partial key prefix that never completes is released as written at exit.
 
 ## Environment: what is ignored and what is refused
 
 A repository can set environment variables for hooks. Claude Code applies the `env` block of a project's committed `.claude/settings.json` once you trust the folder, and hook processes inherit that environment. A `.env` loaded by your shell or tooling does the same. Hosted mode therefore reads its key, URL and agent from the config file only, and treats the environment as untrusted.
 
-**Ignored** (the hook prints one stderr line and the trail row carries `"configIgnored": true`):
+**Ignored** (the hook prints one stderr line and the record row carries `"configIgnored": true`):
 
 - `KYA_OFFLINE`, `KYA_BASE_URL`, `KYA_API_KEY`, `SHIELD_API_KEY`, `KYA_AGENT_ID`, `KYA_HOST` and `KYA_HOME`;
 - the env notify sinks `KYA_NOTIFY_WEBHOOK` and `KYA_OTLP_EXPORT_ENDPOINT`;
 - the project's `.kya/config.json`, including its `gateMode`, `baseUrl`, `agentId` and notify sinks.
 
-The trail goes to `$HOME/.kya/trail.jsonl`. User-level notify and OTLP settings in `$HOME/.kya/config.json` still apply. Proxy variables (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` and their lowercase forms) are removed: the plane call never goes through a proxy, so a plane that is reachable only through a proxy fails closed.
+The record goes to `$HOME/.kya/trail.jsonl`. User-level notify and OTLP settings in `$HOME/.kya/config.json` still apply. Proxy variables (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` and their lowercase forms) are removed: the plane call never goes through a proxy, so a plane that is reachable only through a proxy fails closed (denies the call).
 
 **Refused** (deny `PLANE_ENV_REFUSED`; the message names the variable and never prints its value). These either change who the hook trusts or load code into node before kya starts, and some are read at process start, so they cannot be undone from inside the hook:
 
@@ -102,13 +102,13 @@ Privacy opt-outs are still honoured, because they can only send less. `KYA_SEND_
 
 ## Transport
 
-The plane call uses its own HTTPS client: certificates are always verified, SNI comes from the configured host, there is no keep-alive and no proxy, and redirects are never followed (a 3xx is `PLANE_UNREACHABLE`, so the key is never sent to a second URL). The answer is capped at 64 KiB (a larger or endless body fails closed),. The plane's reason code must be an upper-case identifier (`[A-Z0-9_]`, at most 64 characters); anything else is shown as `PLANE_BAD_RESPONSE`. The hold console link is always built from your configured `baseUrl`, never from the plane's answer. An uncaught error never lowers a decision: the local never-list is evaluated before any plane code and still denies (exit 2) after a crash, even in shadow; a crash before the payload is understood also denies in shadow; otherwise a crash denies (exit 2), except in shadow for a tool known to be off the never-list (exit 0).
+The plane call uses its own HTTPS client: certificates are always verified, SNI comes from the configured host, there is no keep-alive and no proxy, and redirects are never followed (a 3xx is `PLANE_UNREACHABLE`, so the key is never sent to a second URL). The answer is capped at 64 KiB (a larger or endless body fails closed). The plane's reason code must be an upper-case identifier (`[A-Z0-9_]`, at most 64 characters); anything else is shown as `PLANE_BAD_RESPONSE`. The hold console link is always built from your configured `baseUrl`, never from the plane's answer. An uncaught error never lowers a decision: the local never-list is evaluated before any plane code and still denies (exit 2) after a crash, even in shadow; a crash before the payload is understood also denies in shadow; otherwise a crash denies (exit 2), except in shadow for a tool known to be off the never-list (exit 0).
 
 **`onFailure: "block"` is required.** Some failures kill node before kya runs at all: an invalid `NODE_OPTIONS` value, a heap too small to start, or a signal. Those exit with node's own code (for example 9, or SIGABRT), not 2. On a Node that does not know `--use-env-proxy` (Node 20, and Node 22 before 22.21.0), `NODE_OPTIONS=--use-env-proxy` is one of them: node exits 9 before kya can answer with the `PLANE_ENV_REFUSED` deny, and only `onFailure: "block"` stops the call. Use Node 22.21+ (or 24) for hosted mode. Only the host's `onFailure: "block"` turns them into a block, so hosted mode depends on it; `kya connect --hosted` and the managed snippet below set it. After the answer is written the hook exits at once, so a lingering socket cannot hold it past the host timeout.
 
 ## What leaves your machine
 
-The same fields connected mode sends, plus four trail fields:
+The same fields connected mode sends, plus four record fields:
 
 - **Same as connected mode:** the tool name, a sha256 hash of the arguments, the sample-tool risk fields, the agent id, and the redacted change fields (a summary of at most 80 characters, a redacted target path, and at most 8 lines or 480 characters of a redacted edit preview, never for shell commands). Raw arguments never leave the machine.
 - **Added:** `env.correlationId` (a sha256 of the session and tool_use id), `mode`, and `product`. The host's session id is not sent.
@@ -150,9 +150,9 @@ Adjust the node and kya paths for your machines (`which node`, `npm root -g`). W
 
 ## Honest limits
 
-- **The governed agent runs as you.** An agent with a shell can read the config file and the key, edit `~/.claude/settings.json`, or kill the hook. Managed settings stop the settings edits but not the key read. Until evaluate-only keys ship, a leaked key can also change workspace policy. Run agents under a separate OS user if that matters to you.
+- **The gated agent runs as you.** An agent with a shell can read the config file and the key, edit `~/.claude/settings.json`, or kill the hook. Managed settings stop the settings edits but not the key read. Until evaluate-only keys ship, a leaked key can also change workspace policy. Run agents under a separate OS user if that matters to you.
 - **Removal is detected, not prevented.** If the hook is removed, evaluate traffic for that agent stops. Watch the agent's last activity in the console.
 - **Responses are not signed.** A man in the middle with a CA your machine trusts could forge an ALLOW.
-- **Duplicate rows.** Two hook copies, for example the plugin plus a user hook, each call the plane, so the hosted trail gets two rows. The local trail records once per tool_use_id.
+- **Duplicate rows.** Two hook copies, for example the plugin plus a user hook, each call the plane, so the hosted record gets two rows. The local record writes once per tool_use_id.
 - **Only Claude Code has `onFailure: "block"`.** Without it, a host-side timeout or crash lets the call through.
 - **Unregistered tools are held.** Every tool the workspace has not registered comes back as REQUIRE_APPROVE (`UNKNOWN_TOOL`). That is why hold does not block by default.

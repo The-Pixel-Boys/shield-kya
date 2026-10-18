@@ -7,7 +7,7 @@ Two surfaces, deliberately different:
 | Surface | What ships | How you turn it on |
 |---------|------------|--------------------|
 | **OSS CLI** (`@shield-agent/kya`) | Thin: one histogram `kya.client.evaluate.latency` with tags `verdict`, `host` | Set `KYA_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` |
-| **Hosted plane** (shield-agent.com / self-hosted Java) | Rich: Micrometer gauges and timers (policy verdicts, evaluate latency, kill SLO, redaction, LLM) | `KYA_OTLP_ENABLED=true` plus an OTLP metrics endpoint |
+| **Hosted plane** (shield-agent.com / self-hosted Java) | Rich: Micrometer gauges and timers (policy decisions, evaluate latency, kill SLO, redaction, LLM) | `KYA_OTLP_ENABLED=true` plus an OTLP metrics endpoint |
 
 Prefer an OpenTelemetry Collector (or Grafana Alloy / Datadog Agent) in front of the vendor. Keep auth headers on the Collector, not in the app process or in git.
 
@@ -61,9 +61,9 @@ export OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=https://otlp.datadoghq.com/v1/metrics
 
 EU sites use the matching Datadog host (`datadoghq.eu`, etc.).
 
-## Exporting KYA verdicts as spans
+## Exporting KYA decisions as spans
 
-The OSS CLI can also **export** each gate verdict as one OTLP/JSON span (POST to `{endpoint}/v1/traces`), so verdicts show up in Langfuse, Datadog, Honeycomb, or any OTel Collector next to your agent's own GenAI traces. Default is **off**: no endpoint configured means a pure no-op. Export is fire-and-forget: it never blocks, delays, or changes a verdict, and every failure is swallowed (counted in-memory via `otlpExportStats` and persisted to `~/.kya/otel-stats.json`, which powers the report's OTel export panel).
+The OSS CLI can also **export** each gate decision as one OTLP/JSON span (POST to `{endpoint}/v1/traces`), so decisions show up in Langfuse, Datadog, Honeycomb, or any OTel Collector next to your agent's own GenAI traces. Default is **off**: no endpoint configured means a pure no-op. Export is fire-and-forget (send and do not wait): it never blocks, delays, or changes a decision. Every failure is swallowed (counted in memory via `otlpExportStats` and saved to `~/.kya/otel-stats.json`, which powers the report's OTel export panel).
 
 Configure in `.kya/config.json` under the `otlpExport` key:
 
@@ -77,11 +77,11 @@ Configure in `.kya/config.json` under the `otlpExport` key:
 }
 ```
 
-- `endpoint` - OTLP/HTTP base URL (`/v1/traces` is appended if missing). Env override: `KYA_OTLP_EXPORT_ENDPOINT`.
-- `headers` - optional auth headers. Prefer putting secrets on the Collector, not in the file.
-- `insecure` - plaintext `http://` is accepted for loopback only; set `true` to allow http to a remote host. `https://` always works.
+- `endpoint`: OTLP/HTTP base URL (`/v1/traces` is appended if missing). Env override: `KYA_OTLP_EXPORT_ENDPOINT`.
+- `headers`: optional auth headers. Prefer putting secrets on the Collector, not in the file.
+- `insecure`: plaintext `http://` is accepted for loopback only; set `true` to allow http to a remote host. `https://` always works.
 
-Span shape: one span per verdict, `service.name=shield-kya-cli`, name `kya.verdict <toolId>`, attributes following the OTel GenAI semantic conventions:
+Span shape: one span per decision, `service.name=shield-kya-cli`, name `kya.verdict <toolId>`, attributes following the OTel GenAI semantic conventions:
 
 | Attribute | Value |
 |-----------|-------|
@@ -93,7 +93,7 @@ Span shape: one span per verdict, `service.name=shield-kya-cli`, name `kya.verdi
 | `kya.session_id` | gate session id |
 | `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` | only when the caller knows them |
 
-`DENY` spans carry OTLP status `ERROR` with the reason code as the message; other verdicts are `OK`.
+`DENY` spans carry OTLP status `ERROR` with the reason code as the message; other decisions are `OK`.
 
 Collector snippet: add a traces pipeline to [`otel-collector-kya.yaml`](./otel-collector-kya.yaml):
 
@@ -110,7 +110,7 @@ Ready-made community dashboards for these spans and metrics (Datadog dashboard a
 
 ## Forbidden attributes
 
-Do not tag or export: tool args, prompts/completions, emails, phones, IPs, approval payload bodies, raw `merchant_id` / high-cardinality `tool_id` on metrics. The verdict exporter ships only the attributes in the table above.
+Do not tag or export: tool args, prompts/completions, emails, phones, IPs, approval payload bodies, raw `merchant_id` / high-cardinality `tool_id` on metrics. The decision exporter ships only the attributes in the table above.
 
 ## Related (hosted monorepo only)
 

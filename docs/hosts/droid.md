@@ -2,22 +2,22 @@
 
 Wire KYA into [Factory's Droid](https://factory.ai) so tool calls routed through MCP pass Shield's evaluate first. Allow runs, Deny stops, Hold waits for a person.
 
-**Schema warning, up front:** Droid's on-disk MCP config format is not verified against a live install. The preferred path is Droid's own CLI. Treat [`droid/mcp.example.json`](../../droid/mcp.example.json) as a starting point, not gospel.
+**Schema warning, up front:** Droid's on-disk MCP config format is not verified against a live install. The preferred path is Droid's own CLI. Treat [`droid/mcp.example.json`](../../droid/mcp.example.json) as a starting point, not as verified.
 
 ## Setup - preferred: `droid mcp add`
 
 ```bash
-droid mcp add shield-kya "npx --no-install @shield-agent/kya@0.32.4 serve-mcp --stdio" \
+droid mcp add shield-kya "npx --no-install @shield-agent/kya@0.32.5 serve-mcp --stdio" \
   --env KYA_BASE_URL=https://shield-agent.com \
   --env KYA_API_KEY=$KYA_API_KEY \
   --env KYA_HOST=ide
 ```
 
-This needs the package installed (`npm i -g @shield-agent/kya`); `--no-install` means no registry fetch at startup. No restart - Droid reloads automatically when its MCP config changes.
+This needs the package installed (`npm i -g @shield-agent/kya`); `--no-install` means no registry fetch at startup. No restart: Droid reloads automatically when its MCP config changes.
 
 ## Setup - by hand (unverified)
 
-The expected on-disk shape is `~/.factory/mcp.json` (global) or `.factory/mcp.json` (project) with a standard `mcpServers` block - see the example. If `droid mcp add` wrote something different on your machine, trust what it wrote and tell us via an issue; the example gets corrected from real installs.
+The expected on-disk shape is `~/.factory/mcp.json` (global) or `.factory/mcp.json` (project) with a standard `mcpServers` block; see the example. If `droid mcp add` wrote something different on your machine, trust what it wrote and tell us via an issue; the example gets corrected from real installs.
 
 ## What KYA reports
 
@@ -29,15 +29,15 @@ Three tools: `kya.policy_evaluate` (Allow / Deny / Hold), `kya.session_ingest`, 
 
 ## Verify
 
-1. Open Droid's `/mcp` manager - `shield-kya` should be listed.
-2. Ask Droid for a small change; check the trail.
+1. Open Droid's `/mcp` manager. `shield-kya` should be listed.
+2. Ask Droid for a small change; check the record (trail).
 3. Offline smoke:
 
    ```bash
    kya wrap --offline --tool-id Write --irreversible --args '{"path":"x.ts","content":"hi"}'
    ```
 
-   Expect a `REQUIRE_APPROVE` row on the trail.
+   Expect a `REQUIRE_APPROVE` row in the record.
 
 ## Uninstall
 
@@ -45,14 +45,14 @@ Three tools: `kya.policy_evaluate` (Allow / Deny / Hold), `kya.session_ingest`, 
 
 ## Troubleshooting
 
-- **`/mcp` doesn't list shield-kya.** Droid auto-reloads `mcp.json`, so check which file `droid mcp add` wrote (user level) versus the one you edited - if they differ, that's the schema drift the warning above is about.
+- **`/mcp` doesn't list shield-kya.** Droid auto-reloads `mcp.json`, so check which file `droid mcp add` wrote (user level) versus the one you edited. If they differ, that is the schema drift the warning above is about.
 - **Server fails to start.** Install the package globally so `npx --no-install` resolves without a fetch.
-- **`KYA_API_KEY` empty inside Droid.** The `--env KYA_API_KEY=$KYA_API_KEY` flag copies the value at add time - re-run the add command if the key rotated.
-- **Empty trail despite a listed server.** Only MCP-routed calls reach KYA; see the honesty note.
+- **`KYA_API_KEY` empty inside Droid.** The `--env KYA_API_KEY=$KYA_API_KEY` flag copies the value at add time. Re-run the add command if the key rotated.
+- **Empty record despite a listed server.** Only MCP-routed calls reach KYA; see the honesty note.
 
 ## Honesty note
 
-Two honesty items, both deliberate. First: the on-disk schema is unverified - this page says so rather than pretending otherwise. Second: Droid decides which tools go through MCP; anything native is outside the gate.
+Two honesty items, both deliberate. First: the on-disk schema is unverified, and this page says so rather than pretending otherwise. Second: Droid decides which tools go through MCP; anything native is outside the gate.
 
 ## Wrap fallback
 
@@ -60,4 +60,4 @@ Two honesty items, both deliberate. First: the on-disk schema is unverified - th
 kya wrap --offline -- droid "triage the issue queue"
 ```
 
-Wrap evaluates the command itself before it runs and records a trail row. Exit `0` Allow, `4` Hold, `1` Deny.
+Wrap evaluates the command itself before it runs and records a row in the record. Exit `0` Allow, `4` Hold, `1` Deny.

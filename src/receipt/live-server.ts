@@ -233,7 +233,7 @@ export function orrDeltaDetail(
   }
   if (resolved > 0) parts.push(`${resolved} finding${resolved === 1 ? "" : "s"} resolved`);
   if (added > 0) parts.push(`${added} new finding${added === 1 ? "" : "s"}`);
-  if (!moved && resolved === 0 && added === 0) parts.push("same primary failure");
+  if (!moved && resolved === 0 && added === 0) parts.push("same main problem");
   return `ORR re-run at ${time}: ${parts.join(" · ")}`;
 }
 

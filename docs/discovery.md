@@ -4,14 +4,14 @@
 
 ## What is scanned
 
-The scanner runs five independent enumerators and merges the results:
+The scanner runs five independent checks and merges the results:
 
 1. **CLI binaries on PATH**
    - Parses `PATH` into directories.
    - Looks for known executable names from the discovery catalog (e.g. `claude`, `codex`, `ollama`, `aider`).
    - On Unix it checks `fs.statSync` mode bits and `fs.constants.X_OK`.
    - On Windows it accepts files with a `.exe` extension.
-   - **Never runs the binary** - only checks that the file exists and is executable.
+   - **Never runs the binary**. It only checks that the file exists and is executable.
 
 2. **IDE extensions**
    - VS Code-family global storage directories:
@@ -30,7 +30,7 @@ The scanner runs five independent enumerators and merges the results:
 4. **Model runtimes**
    - Looks for `ollama`, `lmstudio`, `llama-server` binaries on PATH.
    - Notes default localhost ports (`ollama` 11434, `lmstudio` 1234) in the evidence.
-   - **Does not connect to the ports** - the port is only metadata.
+   - **Does not connect to the ports**. The port is only metadata.
 
 5. **MCP servers**
    - Reads `.mcp.json`, `mcp.json`, and `.cursor/mcp.json` in the current working directory and in the home directory.
@@ -77,7 +77,7 @@ Each run writes a JSON snapshot matching the hosted `POST /api/v1/kya/endpoints`
 The live activity report and static receipt HTML render a **Discovery** card when `~/.kya/discovery/latest.json` exists:
 
 - Total discovered items.
-- Sanctioned vs review counts (based on the local catalog defaults).
+- Sanctioned (approved) vs review counts, based on the local catalog defaults.
 - Top categories as chips.
 - A one-line CLI hint to re-run or push.
 

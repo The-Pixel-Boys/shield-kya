@@ -52,7 +52,7 @@ describe("cli certify", () => {
     const { io, logs } = captureIo();
     const code = await runCli(["certify"], io, env(home), cwd);
     expect(code).toBe(1);
-    expect(logs.join("\n")).toContain("agent-trust-baseline v0.1.0");
+    expect(logs.join("\n")).toContain("agent-trust-baseline v0.1.1");
     expect(logs.join("\n")).toContain("evidence only");
     expect(existsSync(join(cwd, ".kya", "certify", "report.json"))).toBe(true);
     expect(existsSync(join(cwd, ".kya", "certify", "report.md"))).toBe(true);
@@ -176,7 +176,7 @@ describe("cli certify", () => {
     expect(code).toBe(0);
     expect(logs.join("\n")).toContain("attestation recorded: SOC-01");
     // …but the summary stays suppressed.
-    expect(logs.join("\n")).not.toContain("agent-trust-baseline v0.1.0");
+    expect(logs.join("\n")).not.toContain("agent-trust-baseline v0.1.1");
   });
 
   it("HELP lists certify", async () => {

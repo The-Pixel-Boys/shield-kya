@@ -115,7 +115,7 @@ describe("loadCertifyCard", () => {
     // Seeded fixture: KYA_HOLD=1 → SEC-01 passes, gate title intact
     const sec01 = card.requirements.find((r) => r.id === "SEC-01");
     expect(sec01?.status).toBe("pass");
-    expect(sec01?.title).toBe("Gate enforces, not observe-only");
+    expect(sec01?.title).toBe("The gate blocks, it does not just watch");
   });
 
   it("NEVER throws - unreadable project trail state yields undefined", () => {
@@ -212,18 +212,18 @@ describe("renderReceiptHtml certify panel", () => {
   it("renders a gap card: aria-label, amber pill, counts, top gaps, hint", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3, { certify: GAP_CARD }));
     expect(html).toContain('aria-label="Certify"');
-    expect(html).toContain("Certify - Agent Trust Baseline");
-    expect(html).toContain('<span class="pill orr-amber">gap</span>');
-    expect(html).toContain('<span class="kpi-num warn">3</span><span class="kpi-lab">Gap</span>');
+    expect(html).toContain("Certify - trust checklist for your agent");
+    expect(html).toContain('<span class="pill orr-amber">has gaps</span>');
+    expect(html).toContain('<span class="kpi-num warn">3</span><span class="kpi-lab">Failing</span>');
     expect(html).toContain('<span class="kpi-num ok">20</span><span class="kpi-lab">Pass</span>');
     expect(html).toContain("SEC-04");
     expect(html).toContain("DP-01");
-    expect(html).toContain("window 30d, 42 trail events");
+    expect(html).toContain("last 30 days, 42 recorded events");
     expect(html).toContain(
-      "the Certify tab has the complete gap report · <code>kya certify</code> writes the signed evidence bundle",
+      "the Certify tab lists every rule · <code>kya certify</code> writes the signed proof file",
     );
     expect(html).toContain('<div class="cert-cta">');
-    expect(html).toContain('Open full requirement table');
+    expect(html).toContain('See all rules');
     expect(html).toContain('kya certify --open');
   });
 
@@ -238,7 +238,7 @@ describe("renderReceiptHtml certify panel", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3));
     // The hero slot always renders: no evaluation must never read as a pass.
     expect(html).toContain('aria-label="Certify"');
-    expect(html).toContain('<span class="pill">not evaluated</span>');
+    expect(html).toContain('<span class="pill">not checked yet</span>');
     expect(html).not.toContain('class="pill orr-green"');
     expect(html).not.toContain('class="pill orr-amber"');
   });
@@ -248,9 +248,9 @@ describe("renderReceiptHtml certify panel", () => {
       buildWindowReceiptModel([], 3, { certify: INSUFFICIENT_CARD }),
     );
     expect(html).toContain('aria-label="Certify"');
-    expect(html).toContain('<span class="pill orr-amber">gap</span>');
-    expect(html).toContain('<span class="kpi-num">0</span><span class="kpi-lab">Gap</span>');
-    expect(html).toContain('<span class="kpi-num mute">30</span><span class="kpi-lab">Insufficient</span>');
+    expect(html).toContain('<span class="pill orr-amber">has gaps</span>');
+    expect(html).toContain('<span class="kpi-num">0</span><span class="kpi-lab">Failing</span>');
+    expect(html).toContain('<span class="kpi-num mute">30</span><span class="kpi-lab">No data</span>');
     // Zero gap requirements → no gap rows at all (no vacuous list markup)
     expect(html).not.toContain('<ul class="rows">');
   });

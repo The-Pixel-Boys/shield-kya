@@ -187,7 +187,7 @@ describe("investigate last-run summary", () => {
       }),
     );
     expect(html).toContain('aria-label="Investigations"');
-    expect(html).toContain("No findings");
+    expect(html).toContain("No problems found");
   });
 
   it("tolerates missing and corrupt summary files", () => {
@@ -221,7 +221,7 @@ describe("render-level interop contract", () => {
     expect(md).not.toContain("## Import");
     expect(md).not.toContain("## Investigations");
     expect(md).not.toContain("## Alerts");
-    expect(md).not.toContain("## OTel export");
+    expect(md).not.toContain("## Export to your monitoring (OTel)");
   });
 
   it("live renders wire the empty-state actions", () => {
@@ -283,6 +283,6 @@ describe("render-level interop contract", () => {
     expect(md).toContain("## Import");
     expect(md).toContain("## Investigations");
     expect(md).toContain("## Alerts");
-    expect(md).toContain("## OTel export");
+    expect(md).toContain("## Export to your monitoring (OTel)");
   });
 });

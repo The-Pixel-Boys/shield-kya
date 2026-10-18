@@ -22,10 +22,10 @@ Or open `/plugins` in Codex CLI and install `kya` from the `shield-kya` tab. Plu
 
 What the plugin does, and does not do:
 
-- **SessionStart** runs `node "${PLUGIN_ROOT}/scripts/bootstrap.mjs" @shield-agent/kya@0.32.4`. It installs that exact kya once into the plugin data directory (`~/.codex/plugins/data/kya-shield-kya`, about 5 s on a clean machine) and checks it on later sessions. Same hardened installer as the Claude Code plugin ([claude-plugin.md](claude-plugin.md#install-hardening-and-limits)).
-- **PreToolUse** (every tool) runs `node "${PLUGIN_DATA}/node_modules/@shield-agent/kya/dist/cli.js" hook --host codex`. No npx, no registry traffic at hook time. Trail rows carry `product: codex`.
+- **SessionStart** runs `node "${PLUGIN_ROOT}/scripts/bootstrap.mjs" @shield-agent/kya@0.32.5`. It installs that exact kya once into the plugin data directory (`~/.codex/plugins/data/kya-shield-kya`, about 5 s on a clean machine) and checks it on later sessions. Same hardened installer as the Claude Code plugin ([claude-plugin.md](claude-plugin.md#install-hardening-and-limits)).
+- **PreToolUse** (every tool) runs `node "${PLUGIN_DATA}/node_modules/@shield-agent/kya/dist/cli.js" hook --host codex`. No npx, no registry traffic at hook time. Record (trail) rows carry `product: codex`.
 - It evaluates locally, with no hosted-plane calls, so it has no Hold tickets and no human sign-off. Shell commands come back as `REQUIRE_APPROVE` / `SHELL_EXEC` and are recorded, not blocked. Never-list tools (for example `mcp__postgres__drop_table`) are blocked: Codex shows the model `Tool call blocked by PreToolUse hook: KYA denied ...`.
-- It fails open. If node, npm or kya is missing, or the hook crashes or times out (5 s), Codex marks the hook failed and runs the tool unrecorded. A SessionStart problem prints `Shield KYA is NOT recording: <reason>` as a hook message; `codex exec` (plain or `--json`) does not show it, so check the data directory if the trail stays empty. Whether the interactive TUI shows it is not verified.
+- It fails open. If node, npm or kya is missing, or the hook crashes or times out (5 s), Codex marks the hook failed and runs the tool unrecorded. A SessionStart problem prints `Shield KYA is NOT recording: <reason>` as a hook message; `codex exec` (plain or `--json`) does not show it, so check the data directory if the record stays empty. Whether the interactive TUI shows it is not verified.
 - It needs Node.js 22+ (24 recommended) and `npm` on the PATH that Codex sees. Node 20 and 21 are unsupported but work; the bootstrap then emits a one-line `unsupported but works` hook message (visible only where Codex shows hook messages, see above). Node 18 and older are not supported.
 - Codex hooks see shell, `apply_patch`, MCP and other local function tools, not hosted tools such as web search. OpenAI calls hooks "a useful guardrail, not a complete enforcement boundary". `apply_patch` rows have no change preview yet.
 - The plugin bundles no MCP server (`"mcpServers": {}`), so it never starts the Claude plugin's server. Add the MCP server below if you want the kya tools too.
@@ -40,15 +40,15 @@ Uninstall: `codex plugin remove kya@shield-kya`, then delete `~/.codex/plugins/d
 ### Setup
 
 1. Open [`openai/codex.config.example.toml`](../../openai/codex.config.example.toml).
-2. Merge its `[mcp_servers.shield-kya]` block into `~/.codex/config.toml`. **Global only** - don't drop a live key into a project's `.codex/config.toml`; that file is easy to commit. The example inherits `KYA_API_KEY` from the environment (`env_vars`) instead of storing it.
+2. Merge its `[mcp_servers.shield-kya]` block into `~/.codex/config.toml`. **Global only**: do not drop a live key into a project's `.codex/config.toml`; that file is easy to commit. The example inherits `KYA_API_KEY` from the environment (`env_vars`) instead of storing it.
 3. Restart Codex.
 
-Two variants in the one file - pick one, not both:
+Two variants in the one file: pick one, not both:
 
 - **Local stdio (OSS):** `command = "npx"` + `serve-mcp --stdio`. Needs the package installed (`npm i -g @shield-agent/kya`); `--no-install` means no registry fetch at startup.
 - **Hosted HTTP:** `url = "https://shield-agent.com/mcp"` + `bearer_token_env_var = "KYA_API_KEY"`. Same three tools, no local process.
 
-**Responses API** (no CLI): see [`openai/responses-mcp.example.json`](../../openai/responses-mcp.example.json) - `server_url` + `Authorization: Bearer ${KYA_API_KEY}`. **ChatGPT Apps:** deferred; Developer Mode wants OAuth. Use Codex until then.
+**Responses API** (no CLI): see [`openai/responses-mcp.example.json`](../../openai/responses-mcp.example.json): `server_url` + `Authorization: Bearer ${KYA_API_KEY}`. **ChatGPT Apps:** deferred; Developer Mode wants OAuth. Use Codex until then.
 
 ### What KYA reports
 
@@ -60,15 +60,15 @@ For the MCP path you edit one file by hand: `~/.codex/config.toml`. KYA installs
 
 ### Verify
 
-1. Restart Codex, then run `codex mcp list` - `shield-kya` should show.
-2. Ask Codex for a small change and watch the trail.
+1. Restart Codex, then run `codex mcp list`. `shield-kya` should show.
+2. Ask Codex for a small change and watch the record.
 3. Offline smoke:
 
    ```bash
    kya wrap --offline --tool-id Write --irreversible --args '{"path":"x.ts","content":"hi"}'
    ```
 
-   Expect a `REQUIRE_APPROVE` row on the trail.
+   Expect a `REQUIRE_APPROVE` row in the record.
 
 ### Uninstall
 
@@ -77,13 +77,13 @@ Remove the `[mcp_servers.shield-kya]` block from `~/.codex/config.toml` and rest
 ### Troubleshooting
 
 - **Server fails to start.** The example pins `npx --no-install @shield-agent/kya@…`. Install the package globally first, or switch to the hosted variant which needs no local process.
-- **`KYA_API_KEY is required`.** `env_vars` only *inherits* the variable - export it in the shell that launches Codex (or your desktop environment), not in the TOML.
-- **Both variants enabled.** Codex will run two servers with the same tools and you'll get duplicate verdicts. Comment one out.
-- **Connected but empty trail.** On the MCP path only MCP-routed calls reach KYA; shell commands Codex runs natively bypass it. The plugin's hook records those (after you trust it in `/hooks`).
+- **`KYA_API_KEY is required`.** `env_vars` only *inherits* the variable. Export it in the shell that launches Codex (or your desktop environment), not in the TOML.
+- **Both variants enabled.** Codex will run two servers with the same tools and you'll get duplicate decisions. Comment one out.
+- **Connected but empty record.** On the MCP path only MCP-routed calls reach KYA; shell commands Codex runs natively bypass it. The plugin's hook records those (after you trust it in `/hooks`).
 
 ### Honesty note
 
-On the MCP path, Codex decides which tools go through MCP; anything it executes natively is outside that path. The plugin hook sees native tool calls too, but it is advisory: it records them and blocks only the never-list. The config inherits your key from the environment - never paste a live key into the TOML.
+On the MCP path, Codex decides which tools go through MCP; anything it executes natively is outside that path. The plugin hook sees native tool calls too, but it is advisory: it records them and blocks only the never-list. The config inherits your key from the environment. Never paste a live key into the TOML.
 
 ### Wrap fallback
 
@@ -91,4 +91,4 @@ On the MCP path, Codex decides which tools go through MCP; anything it executes 
 kya wrap --offline -- codex exec "fix the tests"
 ```
 
-Wrap evaluates the command itself before it runs and records a trail row. Exit `0` Allow, `4` Hold, `1` Deny.
+Wrap evaluates the command itself before it runs and records a row in the record. Exit `0` Allow, `4` Hold, `1` Deny.

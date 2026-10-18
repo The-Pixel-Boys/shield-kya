@@ -4,7 +4,7 @@ Wire KYA into [Cline](https://cline.bot) (the VS Code extension) so tool calls i
 
 Fastest path: [`llms-install.md`](../../llms-install.md) at the repo root: global install, two absolute paths, one settings block, verify, with the keyless offline config. It is written so Cline can follow it; a run where Cline sets it up from that file alone has not been tested yet. `node scripts/cline-install-check.mjs` checks everything except Cline itself.
 
-There's no `kya connect cline` - Cline's config lives inside VS Code's globalStorage, which is not safe to rewrite programmatically while VS Code is running. Copy the example by hand instead.
+There is no `kya connect cline`. Cline's config lives inside VS Code's globalStorage, which is not safe to rewrite programmatically while VS Code is running. Copy the example by hand instead.
 
 ## Setup
 
@@ -17,14 +17,14 @@ There's no `kya connect cline` - Cline's config lives inside VS Code's globalSto
    | Linux | `~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` |
    | Windows | `%APPDATA%\Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json` |
 
-   Using VS Code Insiders, VSCodium, or a fork? The `Code` path segment changes (`Code - Insiders`, `VSCodium`, …) - the rest is the same.
-3. Save the file. Cline's MCP hub watches `cline_mcp_settings.json` and connects new servers on save - no VS Code restart.
+   Using VS Code Insiders, VSCodium, or a fork? The `Code` path segment changes (`Code - Insiders`, `VSCodium`, …); the rest is the same.
+3. Save the file. Cline's MCP hub watches `cline_mcp_settings.json` and connects new servers on save, with no VS Code restart.
 
 The example leaves `"autoApprove": []` empty on purpose. Auto-approving MCP calls would skip exactly the human checkpoint KYA exists to provide.
 
 ## What KYA reports
 
-Each MCP tool call shows on the KYA receipt with its verdict and a clipped, redacted change preview: `kya receipt --open`. Holds surface as pending approvals (`kya dash`) until a person decides.
+Each MCP tool call shows on the KYA receipt with its decision and a clipped, redacted change preview: `kya receipt --open`. Holds surface as pending approvals (`kya dash`) until a person decides.
 
 ## Files written
 
@@ -40,16 +40,16 @@ You write one file by hand: the `cline_mcp_settings.json` for your VS Code varia
    kya wrap --offline --tool-id Write --irreversible --args '{"path":"x.ts","content":"hi"}'
    ```
 
-   Expect a `REQUIRE_APPROVE` row on the trail (`--irreversible` without a policy never auto-allows).
+   Expect a `REQUIRE_APPROVE` row in the record (trail) (`--irreversible` without a policy never auto-allows).
 
 ## Uninstall
 
-Remove the `shield-kya` block from `cline_mcp_settings.json` and save - the watcher disconnects it. No VS Code restart.
+Remove the `shield-kya` block from `cline_mcp_settings.json` and save. The watcher disconnects it. No VS Code restart.
 
 ## Troubleshooting
 
-- **Server shows red / fails to start.** The example uses `npx --no-install @shield-agent/kya@…` - it needs the package already installed (`npm i -g @shield-agent/kya`) or on PATH. `--no-install` is deliberate: no silent registry fetch at editor startup.
-- **Connected but no trail rows.** Check which tools Cline actually routes through MCP; native file edits may not go through the MCP path - see the honesty note.
+- **Server shows red / fails to start.** The example uses `npx --no-install @shield-agent/kya@…`. It needs the package already installed (`npm i -g @shield-agent/kya`) or on PATH. `--no-install` is deliberate: no silent registry fetch at editor startup.
+- **Connected but no record rows.** Check which tools Cline actually routes through MCP; native file edits may not go through the MCP path; see the honesty note.
 - **Edits after setup not picked up.** Cline watches the settings file and connects on save. If a connection looks stuck, use the per-server restart button in the MCP tab.
 - **globalStorage path not found.** The extension creates the directory on first run. Install Cline, open it once, then look again.
 
@@ -63,4 +63,4 @@ Cline's MCP coverage is the weakest of the wired hosts: the extension decides pe
 kya wrap --offline -- <any command>
 ```
 
-If you script around the extension or drive it headlessly, wrap evaluates the command itself before it runs and leaves a trail row - no MCP required.
+If you script around the extension or drive it headlessly, wrap evaluates the command itself before it runs and leaves a record row, with no MCP required.

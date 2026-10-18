@@ -5,7 +5,7 @@ Two importable dashboards and three Datadog monitor templates for the OTLP data 
 | File | What it is |
 |------|------------|
 | [`integrations/datadog/kya-dashboard.json`](../integrations/datadog/kya-dashboard.json) | Datadog dashboard (ordered layout, template variables `service`, `env`, `hosted_service`) |
-| [`integrations/datadog/monitors.json`](../integrations/datadog/monitors.json) | Three monitor bodies: DENY spike, never-list hit, no verdict spans for 30 minutes |
+| [`integrations/datadog/monitors.json`](../integrations/datadog/monitors.json) | Three monitor bodies: DENY spike, never-list hit, no decision spans for 30 minutes |
 | [`integrations/grafana/kya-dashboard.json`](../integrations/grafana/kya-dashboard.json) | Grafana dashboard (`schemaVersion` 42, Grafana 12.3 or newer) with `${DS_TEMPO}` and `${DS_PROMETHEUS}` import inputs |
 | [`integrations/otlp-fields.json`](../integrations/otlp-fields.json) | Every span attribute and metric name the dashboards may use, read from the emitting code |
 
@@ -13,20 +13,20 @@ The files are not in the npm package. Take them from the GitHub repo; they are i
 
 ## What the panels read
 
-The verdict-span and connected-mode names below were captured from a real `kya` run (see [How the field list is checked](#how-the-field-list-is-checked)). The hosted-only names were not captured: they are read from the hosted plane source.
+The decision-span and connected-mode names below were captured from a real `kya` run (see [How the field list is checked](#how-the-field-list-is-checked)). The hosted-only names were not captured: they are read from the hosted plane source.
 
-**Verdict spans** (`service.name=shield-kya-cli`, one span per verdict, see [otlp.md](./otlp.md#exporting-kya-verdicts-as-spans)):
+**Decision spans** (`service.name=shield-kya-cli`, one span per decision, see [otlp.md](./otlp.md#exporting-kya-decisions-as-spans)):
 
 - DENY, REQUIRE_APPROVE, never-list hits (`kya.reason_code=NEVER_EVENT`)
 - Gate failures: `PLANE_UNREACHABLE` and `PLANE_AUTH_REJECTED` (MCP gate could not reach or authenticate to the hosted plane; recorded as DENY) and `FAIL_CLOSED` (opt-in fail-closed hook hit an internal error)
-- Verdicts over time by `kya.verdict`
+- Decisions over time by `kya.verdict`
 - Top deny reasons by `kya.reason_code`
 - Tool calls by tool (`gen_ai.tool.name`, top 10)
-- Verdicts by gate host (`kya.host`: `ide` or `runtime`) and mode (`kya.mode`: `observe`, `hold`, `offline`)
+- Decisions by gate host (`kya.host`: `ide` or `runtime`) and mode (`kya.mode`: `observe`, `hold`, `offline`)
 
-**Connected mode only**: the `kya.client.evaluate.latency` histogram, tagged `verdict` and `host`. Panels: verdict mix and evaluate latency p50 / p95. It is recorded only when the CLI calls the hosted plane evaluate API with `KYA_OTLP_ENDPOINT` set, and the CLI exports metrics every 15 seconds without a flush on exit. In practice that means a connected, long-lived MCP gate or gateway. Hooks always evaluate offline and never emit it; offline and keyless gates never emit it either.
+**Connected mode only**: the `kya.client.evaluate.latency` histogram, tagged `verdict` and `host`. Panels: decision mix and evaluate latency p50 / p95. It is recorded only when the CLI calls the hosted plane evaluate API with `KYA_OTLP_ENDPOINT` set, and the CLI exports metrics every 15 seconds without a flush on exit. In practice that means a connected, long-lived MCP gate or gateway. Hooks always evaluate offline and never emit it; offline and keyless gates never emit it either.
 
-**Hosted only** (hosted plane with `KYA_OTLP_ENABLED=true`): verdict counters (`kya.policy.deny`, `kya.policy.require_approve`, `kya.policy.approve_granted`, `kya.evaluate.count`), evaluate latency (`kya.evaluate.latency`, `kya.evaluate.max_ms`), kill latency against its SLO (`kya.kill.last_ms`, `kya.kill.slo_ms`), and PII redaction hits (`kya.redaction.hits`). These names come from the hosted plane source. They are not in the captured fixture.
+**Hosted only** (hosted plane with `KYA_OTLP_ENABLED=true`): decision counters (`kya.policy.deny`, `kya.policy.require_approve`, `kya.policy.approve_granted`, `kya.evaluate.count`), evaluate latency (`kya.evaluate.latency`, `kya.evaluate.max_ms`), kill latency against its SLO (`kya.kill.last_ms`, `kya.kill.slo_ms`), and PII redaction hits (`kya.redaction.hits`). These names come from the hosted plane source. They are not in the captured fixture.
 
 ## Send KYA data to Datadog
 
@@ -70,7 +70,7 @@ Grafana setup the dashboard needs:
 ## Honest limits
 
 - **ALLOW is undercounted from hook-based gates.** Hook and wrap gates (for example Claude Code hooks) export only DENY and REQUIRE_APPROVE spans. Only the long-lived MCP gate or gateway exports ALLOW. A hook-only setup will look close to 100% deny or review. The connected-mode metric does not fix this: it also needs a long-lived connected gate.
-- **No hold or approval latency panel.** KYA does not export approval wait time over OTLP today. Verdict spans have zero duration.
+- **No hold or approval latency panel.** KYA does not export approval wait time over OTLP today. Decision spans have zero duration.
 - **No export-failure or fail-open panel.** Failed exports are counted only in local `~/.kya/otel-stats.json`, not sent anywhere. A default hook that fails open lets the call through without a span, so fail-open events are invisible here; only opt-in fail-closed hooks emit `FAIL_CLOSED`.
 - **Do not group `kya.client.evaluate.latency` or the hosted `kya.evaluate.latency` by `host` in Datadog.** Both carry a `host` attribute (`ide` / `runtime`) that becomes a tag on Datadog's reserved `host` key, which normally names the reporting machine. The dashboard never groups by it, and the validator rejects a Datadog metric query that does.
 - **The silence monitor** only makes sense with the MCP gate or gateway. With hooks only, 30 quiet minutes can just mean no denies.
@@ -81,7 +81,7 @@ Grafana setup the dashboard needs:
 `pnpm test` runs `test/dashboards.test.ts`, which:
 
 1. parses every file and checks the required top-level keys for each format;
-2. rejects unscoped TraceQL attributes (`.kya.verdict`), Datadog span facets without `@`, and hard-coded values (verdicts, modes, hosts, the reason codes the panels filter on) that KYA does not emit;
+2. rejects unscoped TraceQL attributes (`.kya.verdict`), Datadog span facets without `@`, and hard-coded values (decisions, modes, hosts, the reason codes the panels filter on) that KYA does not emit;
 3. extracts every span attribute and metric name from the Datadog, TraceQL and PromQL queries and fails if one is not in `integrations/otlp-fields.json`;
 4. checks that `otlp-fields.json` matches the attribute keys in `src/otel/exporter.ts` and the histogram in `src/otel.ts`;
 5. checks that every OSS name a dashboard uses appears in `test/fixtures/otlp-capture.json`. That fixture holds the OTLP/JSON bodies a real `kya serve-mcp --stdio` run sent to a local receiver: ALLOW, REQUIRE_APPROVE, a never-list DENY for `postgres__drop_table`, a `PLANE_UNREACHABLE` DENY, and the evaluate-latency metric.
