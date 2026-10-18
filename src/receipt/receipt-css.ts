@@ -360,6 +360,13 @@ export function receiptCss(): string {
      the hide rules never apply and every zone stays visible (degraded but complete). */
   .zone { scroll-margin-top: 6.4rem; }
   .zone-empty { margin: 0.25rem 0 0.5rem; }
+  /* Live-refresh highlight: brief outline pulse when a container re-renders
+     in place, so streaming updates are visible without stealing focus. */
+  @keyframes kya-frag-flash {
+    0% { outline: 2px solid color-mix(in srgb, var(--ok) 55%, transparent); outline-offset: 3px; }
+    100% { outline: 2px solid transparent; outline-offset: 3px; }
+  }
+  .frag-flash { animation: kya-frag-flash 0.8s ease-out 1; }
   @supports selector(body:has(*)) {
     #activity, #changes, #certify, #orr,
     #gateway-home, #gateway-listeners, #gateway-routes, #gateway-backends, #gateway-policies, #gateway-playground,

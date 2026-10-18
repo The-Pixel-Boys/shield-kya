@@ -763,8 +763,13 @@ describe("chip filters", () => {
     expect(liveHtml).toContain("filtered-out");
     expect(liveHtml).toContain("clear-filters");
     expect(liveHtml).toContain(".filtered-out { display: none !important; }");
-    expect(liveHtml).toContain("new EventSource('/events?t=tok-abc123')");
-    expect(liveHtml).toContain("es.onmessage = function(){ location.reload(); };");
+    expect(liveHtml).toContain("new EventSource('/events?t=' + encodeURIComponent(readToken()))");
+    // Live updates are targeted container refreshes: the SSE handler must
+    // never reload the page (action buttons still reload after user clicks).
+    expect(liveHtml).not.toContain("es.onmessage = function(){ location.reload(); }");
+    expect(liveHtml).toContain("FRAG_TARGETS");
+    expect(liveHtml).toContain("/fragments?t=");
+    expect(liveHtml).toContain("frag-flash");
   });
 
   it("renders the search input and relevance meta only when a query is set", () => {

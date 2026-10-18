@@ -36,6 +36,7 @@ import {
   loadReceiptModel,
   renderReceiptHtml,
   renderFeedPage,
+  buildLiveFragments,
   type FeedFilters,
 } from "./render-receipt.js";
 import { trailPath, type TrailEvent } from "../trail.js";
@@ -373,19 +374,20 @@ export function startLiveReceiptServer(
     return provider.embed(q.trim());
   };
 
-  const broadcast = (): void => {
+  const broadcast = (source: "trail" | "orr" | "action"): void => {
+    const payload = `data: ${JSON.stringify({ source })}\n\n`;
     for (const client of [...clients]) {
       try {
-        client.write(`data: reload\n\n`);
+        client.write(payload);
       } catch {
         dropClient(clients, client);
       }
     }
   };
 
-  const scheduleBroadcast = (): void => {
+  const scheduleBroadcast = (source: "trail" | "orr" | "action"): void => {
     if (debounce) clearTimeout(debounce);
-    debounce = setTimeout(broadcast, 120);
+    debounce = setTimeout(() => broadcast(source), 120);
   };
 
   const unauthorized = (res: ServerResponse): void => {
@@ -447,7 +449,8 @@ export function startLiveReceiptServer(
           url.pathname === "/action/import" ||
           url.pathname === "/action/notify-test" ||
           url.pathname === "/action/otel-test" ||
-          url.pathname === "/action/orr-run");
+          url.pathname === "/action/orr-run" ||
+          url.pathname === "/fragments");
       if (isPostAction && !isLoopbackClient(req)) {
         return forbidden(res, { ok: false, error: "loopback only" });
       }
@@ -541,7 +544,7 @@ export function startLiveReceiptServer(
         void (async () => {
           try {
             const result = await runReportInvestigateAction(cwd, process.env);
-            if (result.status === 200) scheduleBroadcast();
+            if (result.status === 200) scheduleBroadcast("action");
             return jsonOk(res, result.body);
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
@@ -557,7 +560,7 @@ export function startLiveReceiptServer(
         void (async () => {
           try {
             const result = await runReportDiscoverAction(cwd, process.env);
-            if (result.status === 200) scheduleBroadcast();
+            if (result.status === 200) scheduleBroadcast("action");
             return jsonOk(res, result.body);
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
@@ -579,7 +582,7 @@ export function startLiveReceiptServer(
           }
           try {
             const result = await runReportImportAction(body, cwd, process.env);
-            if (result.status === 200) scheduleBroadcast();
+            if (result.status === 200) scheduleBroadcast("action");
             return result.status === 200 ? jsonOk(res, result.body) : badRequest(res, result.body);
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
@@ -674,6 +677,29 @@ export function startLiveReceiptServer(
             if (err instanceof SyntaxError) {
               return badRequest(res, { ok: false, error: "invalid JSON body" });
             }
+            const message = err instanceof Error ? err.message : String(err);
+            res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(`${JSON.stringify({ ok: false, error: message })}\n`);
+            return;
+          }
+        })();
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/fragments") {
+        // Targeted live refresh: the client swaps these containers in place
+        // instead of reloading the whole page. Body is unused today; drained
+        // so keep-alive sockets are not wedged.
+        void (async () => {
+          try {
+            await readJsonBody(req);
+            const model = loadReceiptModel({
+              cwd,
+              sessionId: options.sessionId,
+              days: options.days,
+            });
+            return jsonOk(res, { ok: true, ...buildLiveFragments(model, true) });
+          } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
             res.end(`${JSON.stringify({ ok: false, error: message })}\n`);
@@ -798,7 +824,7 @@ export function startLiveReceiptServer(
       const refreshOrr = (): void => {
         if (closed || !orrReportStale(cwd)) return;
         const ran = runOrrBoard(cwd);
-        if (ran.ok) scheduleBroadcast();
+        if (ran.ok) scheduleBroadcast("orr");
       };
       setTimeout(refreshOrr, 1_500);
       orrTimer = setInterval(refreshOrr, ORR_REFRESH_MS);
@@ -808,7 +834,7 @@ export function startLiveReceiptServer(
         mkdirSync(dirname(path), { recursive: true });
         watcher = watch(dirname(path), { persistent: true }, (_event, filename) => {
           if (!filename || String(filename).endsWith("trail.jsonl")) {
-            scheduleBroadcast();
+            scheduleBroadcast("trail");
           }
         });
         watcher.on("error", () => {

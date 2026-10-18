@@ -50,11 +50,14 @@ class FakeEl {
   children: FakeEl[] = [];
   querySelectorAll?: (sel: string) => FakeEl[];
   private listeners: Record<string, (() => void) | undefined> = {};
+  /** Mount-scoped document click delegate installed by the filter script. */
+  private readonly delegate: { fn?: (e: { target: unknown }) => void } | undefined;
 
   constructor(attrs: Record<string, string>) {
     this.attrs = { ...attrs };
     this.classList = new FakeClassList(attrs.class);
     this.hidden = "hidden" in attrs;
+    this.delegate = currentDelegate;
     for (const [k, v] of Object.entries(attrs)) {
       if (k.startsWith("data-")) this.dataset[k.slice(5)] = v;
     }
@@ -68,10 +71,19 @@ class FakeEl {
   addEventListener(ev: string, fn: () => void): void {
     this.listeners[ev] = fn;
   }
+  closest(sel: string): FakeEl | null {
+    if (sel === "[data-fgroup]") return "data-fgroup" in this.attrs ? this : null;
+    if (sel === "#clear-filters") return this.attrs.id === "clear-filters" ? this : null;
+    return null;
+  }
   click(): void {
     this.listeners.click?.();
+    this.delegate?.fn?.({ target: this });
   }
 }
+
+/** Set by mount() so each mount's elements dispatch to their own delegate. */
+let currentDelegate: { fn?: (e: { target: unknown }) => void } | undefined;
 
 interface Mount {
   chips: FakeEl[];
@@ -87,6 +99,10 @@ function mount(
   url: { search?: string; hash?: string } = {},
   opts: { live?: boolean } = {},
 ): Mount {
+  // Fresh delegate BEFORE any element is constructed: FakeEl captures it at
+  // construction time so clicks in this mount dispatch to this mount's
+  // document-level filter handler, not a previous mount's.
+  currentDelegate = {};
   const script = /<script id="kya-filters">([\s\S]*?)<\/script>/.exec(html)?.[1];
   expect(script, "filter script tag present").toBeTruthy();
 
@@ -125,6 +141,7 @@ function mount(
   const searchInput = new FakeEl({ id: "feed-search", class: "feed-search-input", type: "search" });
   const searchMeta = new FakeEl({ class: "feed-search-meta" });
   const liveTokenEl = opts.live ? new FakeEl({ "data-live-token": "1" }) : null;
+
   const document = {
     getElementById: (id: string) =>
       id === "feed" ? feed : id === "clear-filters" ? clearBtn : id === "feed-search" ? searchInput : null,
@@ -134,6 +151,10 @@ function mount(
       return [];
     },
     querySelector: (sel: string) => (sel === ".feed-search-meta" ? searchMeta : null),
+    addEventListener: (ev: string, fn: (e: { target: unknown }) => void) => {
+      if (ev === "click" && currentDelegate) currentDelegate.fn = fn;
+    },
+    hidden: false,
   };
   new Function("document", "location", "history", script!)(document, location, history);
   return { chips, rows, days, clearBtn, location };
