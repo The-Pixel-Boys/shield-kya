@@ -2,13 +2,14 @@
 # Runs on the Hetzner agent (local backend, user `it`) — every step uses
 # `image: bash`; Node 24 + pnpm 11 are on the agent PATH. Woodpecker clones
 # automatically, so there is no checkout step.
-# Public repo: fork PRs run without secrets by default; no secrets here.
+# Push to main only. Pull request validation runs on GitHub-hosted runners
+# (.github/workflows/ci.yml): fork PR code (package.json scripts, dependencies
+# run by `pnpm install`) must never execute unsandboxed as `it` on the
+# production host. Do not re-add a pull_request event here.
 
 when:
   - event: push
     branch: [main]
-  - event: pull_request
-    branch: main
 
 steps:
   - name: test
