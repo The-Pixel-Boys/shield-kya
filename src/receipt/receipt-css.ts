@@ -644,6 +644,8 @@ export function receiptCss(): string {
   .pill.att { color: var(--fg); border-color: color-mix(in srgb, var(--fg) 35%, transparent); }
   .orrline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.55rem; }
   .orrline .disp { font-size: 0.84rem; font-weight: 600; }
+  .orrfindings { list-style: none; margin: 0.35rem 0 0; padding: 0; }
+  .orrfindings li { padding: 0.3rem 0; border-top: 1px solid var(--line); font-size: 0.84rem; }
   .alert {
     display: flex; flex-wrap: wrap; gap: 0.45rem 0.75rem; align-items: baseline;
     background: color-mix(in srgb, var(--bad) 12%, var(--card));

@@ -11,7 +11,7 @@ import {
   realpathSync,
   statSync,
 } from "node:fs";
-import { basename, join, resolve, sep } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import { UsageError } from "../errors.js";
 import { ensureOutDir, writeOutFile } from "../fs-atomic.js";
 import type { ParsedArgs } from "../parse-args.js";
@@ -403,10 +403,8 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
   const dualPepSmell =
     /dual.?pep|second.?pep|scanner.?allow|edge.?approv/i.test(textBlob) &&
     /allow.?without.?shield|bypass.?kya/i.test(textBlob);
-  const secretsSmell =
-    /(?:api[_-]?key|secret|password)\s*[:=]\s*["'][A-Za-z0-9_\-]{16,}/i.test(
-      textBlob,
-    );
+  const secretHits = collectSecretHits(root, tree);
+  const secretsSmell = secretHits.length > 0;
   const factoryGated =
     /org\.kya\.agent\.create|factory.*toolId|AGENT_REGISTERED/.test(textBlob);
   const registerWithoutPolicy =
@@ -483,7 +481,8 @@ export function runSaFirstPartyProbes(root: string): OrrFinding[] {
       severity: "critical",
       title: "Possible hardcoded secrets",
       detail: "Rotate credentials; load secrets from env or a secret manager.",
-      evidence: "sa.first_party text probe",
+      evidence: secretHits.slice(0, 3).join(", ") +
+        (secretHits.length > 3 ? ` (+${secretHits.length - 3} more)` : ""),
     });
   }
   if (registerWithoutPolicy) {
@@ -852,6 +851,7 @@ function listTreeSample(root: string, maxFiles: number): string[] {
     "coverage",
     ".idea",
     "vendor",
+    "orr-report",
   ]);
 
   function walk(dir: string): void {
@@ -879,4 +879,56 @@ function listTreeSample(root: string, maxFiles: number): string[] {
 
   walk(root);
   return out;
+}
+
+const SECRET_LINE_RE =
+  /(?:api[_-]?key|secret|password)\s*[:=]\s*["']([A-Za-z0-9_\-]{16,})["']/i;
+const SECRET_PLACEHOLDER_RE =
+  /^(changeme|change_me|your[_-]|xxx|<|\$\{|example|placeholder|redacted|dummy|fake|test[_-])/i;
+const SECRET_SKIP_DIRS = new Set([
+  "test",
+  "tests",
+  "fixture",
+  "fixtures",
+  "__fixtures__",
+  "__mocks__",
+  "docs",
+  "examples",
+]);
+const SECRET_SKIP_BASENAME_RE =
+  /(^\.env\.(example|sample|template)$)|(\.(example|sample|template)\.[^.]+$)/i;
+
+/**
+ * Locate plausible hardcoded secrets, returning `relative/path:line` evidence.
+ * Docs, tests, fixtures, and *.example/*.sample files are excluded; values that
+ * look like placeholders are ignored. The secret value itself is never returned.
+ */
+function collectSecretHits(root: string, tree: readonly string[]): string[] {
+  const hits: string[] = [];
+  for (const abs of tree) {
+    if (!/\.(ts|js|java|json|yml|yaml)$/i.test(abs)) continue;
+    const rel = relative(root, abs);
+    const segments = rel.split(/[\\/]/);
+    const basename = segments[segments.length - 1] ?? "";
+    if (SECRET_SKIP_BASENAME_RE.test(basename)) continue;
+    if (segments.slice(0, -1).some((s) => SECRET_SKIP_DIRS.has(s.toLowerCase()))) {
+      continue;
+    }
+    let text: string;
+    try {
+      text = readFileSync(abs, "utf8");
+    } catch {
+      continue;
+    }
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i += 1) {
+      const m = SECRET_LINE_RE.exec(lines[i] ?? "");
+      if (m && !SECRET_PLACEHOLDER_RE.test(m[1] ?? "")) {
+        hits.push(`${rel}:${i + 1}`);
+        break;
+      }
+    }
+    if (hits.length >= 10) break;
+  }
+  return hits;
 }

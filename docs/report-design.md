@@ -50,6 +50,16 @@ Corollaries for anyone changing this report:
   when the live report starts and refreshes on a fixed cadence while it runs,
   so the menu item is populated on first open. The underlying CLI command
   stays the escape hatch, and a "run now" action covers the impatient case.
+- A "run now" action must report the delta, not repeat the screen. The ORR
+  re-run confirmation compares the new board against the previous one and says
+  what moved ("red → green · 2 findings resolved") or states plainly "no
+  change · still red · no go" with a timestamp, so an identical board is
+  understood as the correct result, never as a broken button.
+- Findings must be falsifiable. Every finding rendered in the report names
+  its evidence (file:line, never the secret value), and heuristic probes
+  exclude their own output directory, docs, tests, fixtures, and
+  *.example/*.sample files (the ORR secrets probe is the contract: an
+  unfalsifiable "rotate credentials" is worse than no finding).
 - Conditional rendering on data *inside* a panel (hide a table with zero
   rows, show counts only when non-zero) stays fine; conditional rendering of
   the feature itself does not.
@@ -71,3 +81,23 @@ Corollaries for anyone changing this report:
 - Zones never render as bare whitespace: with no panels a zone shows a hint
   that names the activation path (the Capabilities panel normally guarantees
   the System zone is never empty).
+
+## Live-update contract
+
+- The report never reloads the page on trail activity. SSE announces typed
+  changes (`{"source":"trail"|"orr"|"action"}`); the client then refreshes in
+  place: `POST /feed` swaps the feed + pagination for the current
+  filter/page/search state, `POST /fragments` swaps only the containers whose
+  HTML changed (`buildLiveFragments` in `render-receipt.ts` renders both the
+  initial page and the refresh, so they cannot drift apart).
+- Every live-updated container needs a stable id listed in the client's
+  `FRAG_TARGETS` map. A new panel that renders live data must be added to
+  `buildLiveFragments` and `FRAG_TARGETS`, or it will go stale until the next
+  user action.
+- Interactive elements inside swapped containers must not rely on per-element
+  bindings: chip clicks are delegated on document, the pagination bar already
+  delegates. After a swap the client reapplies pressed state from the
+  query-param filter state.
+- Updates are throttled (one `/fragments` per 2s), debounced (300ms), and
+  deferred while the tab is hidden. A 401 stops auto-refresh and shows a
+  restart banner: a dead token must never turn into a reload loop.

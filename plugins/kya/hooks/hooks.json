@@ -10,7 +10,7 @@
             "command": "node",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap.mjs",
-              "@shield-agent/kya@0.32.3"
+              "@shield-agent/kya@0.32.4"
             ],
             "timeout": 120,
             "onFailure": "block"

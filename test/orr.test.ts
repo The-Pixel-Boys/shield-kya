@@ -354,6 +354,18 @@ describe("orr run", () => {
     expect(findings.some((f) => f.id === "sa.probe.no_evaluate_path")).toBe(false);
   });
 
+  it("never scans its own orr-report output dir", () => {
+    const root = tmp();
+    mkdirSync(join(root, "orr-report"));
+    writeFileSync(
+      join(root, "orr-report", "report.md"),
+      "# ORR\nREQUIRE_APPROVE evaluatePolicy wrapTool PolicyEngine EventLog POLICY_ALLOW\n",
+    );
+    const findings = runSaFirstPartyProbes(root);
+    expect(findings.some((f) => f.id === "sa.probe.no_evaluate_path")).toBe(true);
+    expect(findings.some((f) => f.id === "sa.probe.no_require_approve")).toBe(true);
+  });
+
   it("cli orr run writes report", async () => {
     const root = tmp();
     writeFileSync(join(root, "x.md"), "# hi\n");

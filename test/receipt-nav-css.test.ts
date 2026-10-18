@@ -53,6 +53,7 @@ const ORR_CARD: OrrCard = {
   generatedAt: iso(60_000),
   targetName: "dev",
   scorecards: { pass: 3, fail: 1, partial: 2, notEvaluated: 0 },
+  findings: [],
 };
 
 function renderFull(): string {
