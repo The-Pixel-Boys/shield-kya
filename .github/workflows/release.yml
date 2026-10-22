@@ -22,7 +22,7 @@ jobs:
           version: 11
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4  # Oct 2026 security release (HIGH); pin until lines float past it
           registry-url: 'https://registry.npmjs.org'
       - run: pnpm install
       - run: pnpm test
