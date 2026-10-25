@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "2.0.0",
+  "info": {
+    "title": "Shield KYA App",
+    "id": { "group": null, "name": "shield_kya", "version": "0.1.0" },
+    "author": [{ "name": "MFR Limited", "email": "it@shield-agent.com", "company": "MFR Limited" }],
+    "releaseDate": null,
+    "description": "Dashboards for Shield KYA agent tool-call verdicts from the local trail file or OTLP verdict spans.",
+    "classification": { "intendedAudience": null, "categories": [], "developmentStatus": null },
+    "commonInformationModels": null,
+    "license": { "name": "MIT", "text": "LICENSE", "uri": "https://opensource.org/license/mit" },
+    "privacyPolicy": { "name": null, "text": null, "uri": null },
+    "releaseNotes": { "name": null, "text": null, "uri": null }
+  },
+  "dependencies": null,
+  "tasks": null,
+  "inputGroups": null,
+  "incompatibleApps": null,
+  "platformRequirements": null,
+  "supportedDeployments": ["_standalone", "_distributed", "_search_head_clustering"],
+  "targetWorkloads": ["_search_heads", "_indexers"]
+}

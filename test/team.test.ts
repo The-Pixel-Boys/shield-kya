@@ -9,12 +9,20 @@ import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { runCli } from "../src/cli.js";
-import { managedSettings, mergeTeamSettings, releaseRef, runTeamInit } from "../src/commands/team.js";
+import { managedSettings, marketplaceSource, mergeTeamSettings, releaseRef, runTeamInit } from "../src/commands/team.js";
 
 const root = join(import.meta.dirname, "..");
 const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version as string;
+// A prerelease kya refuses team init (no public tag). In-process tests run as the matching stable version, so they
+// also pass on a release-candidate commit; the built-CLI tests below use the real version and expect the refusal.
+const isPre = version.includes("-");
+const stable = version.split("-")[0]!;
+vi.mock("../src/version.js", async (orig) => {
+  const m = await orig<typeof import("../src/version.js")>();
+  return { ...m, CLI_VERSION: m.CLI_VERSION.split("-")[0]! };
+});
 const marketplace = JSON.parse(readFileSync(join(root, ".claude-plugin/marketplace.json"), "utf8"));
 const cliJs = join(root, "dist/cli.js");
 const posix = process.platform !== "win32";
@@ -41,7 +49,7 @@ function assertDocumentedShape(s: Record<string, any>) {
   expect(Object.keys(m.source).every((k) => ["source", "repo", "ref", "path", "sparsePaths"].includes(k))).toBe(true);
   expect(m.source.source).toBe("github");
   expect(m.source.repo).toMatch(/^[\w.-]+\/[\w.-]+$/);
-  expect(m.source.ref).toBe(`v${version}`); // a release tag, never a branch
+  expect(m.source.ref).toBe(`v${stable}`); // a release tag, never a branch
   for (const [id, on] of Object.entries(s.enabledPlugins)) {
     expect(typeof on).toBe("boolean");
     expect(id).toMatch(/^[A-Za-z0-9][\w.-]*@[A-Za-z0-9][\w.-]*$/);
@@ -54,9 +62,9 @@ function assertDocumentedShape(s: Record<string, any>) {
 
 describe("team init: merge", () => {
   it("pins the public release tag v<package.json version>, never a branch", () => {
-    expect(releaseRef()).toBe(`v${version}`);
+    expect(releaseRef()).toBe(`v${stable}`);
     expect(managedSettings().extraKnownMarketplaces).toEqual({
-      "shield-kya": { source: { source: "github", repo: "The-Pixel-Boys/shield-kya", ref: `v${version}` } },
+      "shield-kya": { source: { source: "github", repo: "The-Pixel-Boys/shield-kya", ref: `v${stable}` } },
     });
   });
 
@@ -106,8 +114,8 @@ describe("team init: merge", () => {
       extraKnownMarketplaces: { "shield-kya": { source: { source: "github", repo: "The-Pixel-Boys/shield-kya", ref: "v0.0.1" }, autoUpdate: false } },
     };
     const changes = mergeTeamSettings(s);
-    expect(changes.join("\n")).toContain(`"v0.0.1" -> "v${version}"`);
-    expect(s.extraKnownMarketplaces["shield-kya"]).toEqual({ source: { source: "github", repo: "The-Pixel-Boys/shield-kya", ref: `v${version}` }, autoUpdate: false });
+    expect(changes.join("\n")).toContain(`"v0.0.1" -> "v${stable}"`);
+    expect(s.extraKnownMarketplaces["shield-kya"]).toEqual({ source: { source: "github", repo: "The-Pixel-Boys/shield-kya", ref: `v${stable}` }, autoUpdate: false });
   });
 
   it.each([
@@ -174,6 +182,35 @@ describe("team init: merge", () => {
     expect(mergeTeamSettings(t).join("\n")).not.toMatch(/downgrade/);
   });
 
+  it("compares prerelease and stable pins by SemVer precedence, both ways", () => {
+    const pin = (ref: string): Record<string, any> => ({ extraKnownMarketplaces: { "shield-kya": { source: { source: "github", repo: "The-Pixel-Boys/shield-kya", ref } } } });
+    // A stable kya and an older or prerelease pin of the same version: an upgrade, no warning.
+    expect(mergeTeamSettings(pin("v0.32.6-rc.1"), "0.32.6").join("\n")).not.toMatch(/downgrade/);
+    expect(mergeTeamSettings(pin("v0.32.5"), "0.32.6").join("\n")).not.toMatch(/downgrade/);
+    // A stable kya and a newer stable or prerelease pin: downgrade.
+    expect(mergeTeamSettings(pin("v0.33.0"), "0.32.6").join("\n")).toMatch(/! downgrade: the file pins v0\.33\.0,/);
+    expect(mergeTeamSettings(pin("v0.32.7-rc.1"), "0.32.6").join("\n")).toMatch(/! downgrade: the file pins v0\.32\.7-rc\.1,/);
+    expect(mergeTeamSettings(pin("v0.33.0-rc.1"), "0.32.6").join("\n")).toMatch(/! downgrade: the file pins v0\.33\.0-rc\.1,/);
+    // Not a release tag: never a downgrade.
+    expect(mergeTeamSettings(pin("main"), "0.32.6").join("\n")).not.toMatch(/downgrade/);
+  });
+
+  it("refuses a prerelease kya: shield-kya has no public tag for it, so nothing is written", () => {
+    const msg = /prerelease kya has no public tag; use a stable kya/;
+    expect(() => marketplaceSource("0.32.6-rc.1")).toThrow(msg);
+    expect(() => managedSettings("0.32.6-rc.1")).toThrow(msg);
+    expect(() => mergeTeamSettings({}, "0.32.6-rc.1")).toThrow(msg);
+    const dir = project("{}");
+    const before = readFileSync(join(dir, ".claude/settings.json"), "utf8");
+    expect(() => runTeamInit({ cwd: dir, env: {}, version: "0.32.6-rc.1" })).toThrow(msg);
+    expect(readFileSync(join(dir, ".claude/settings.json"), "utf8")).toBe(before);
+    const fresh = tmp();
+    expect(() => runTeamInit({ cwd: fresh, env: {}, version: "0.32.6-rc.1" })).toThrow(msg);
+    expect(existsSync(join(fresh, ".claude"))).toBe(false);
+    // A stable version still pins its tag.
+    expect(marketplaceSource("0.32.6").ref).toBe("v0.32.6");
+  });
+
   it("refuses when the project .claude is the user-level Claude dir (CLAUDE_CONFIG_DIR)", () => {
     const dir = project();
     expect(() => runTeamInit({ cwd: dir, env: { CLAUDE_CONFIG_DIR: join(dir, ".claude") } })).toThrow(/user-level/);
@@ -221,7 +258,7 @@ describe("team: CLI wiring", () => {
     expect(text).toMatch(/Wrote .*settings\.json/);
     expect(text).toMatch(/folder trust prompt once/);
     expect(text).toMatch(/fails open/);
-    expect(text).toContain(`git ls-remote https://github.com/The-Pixel-Boys/shield-kya refs/tags/v${version}`);
+    expect(text).toContain(`git ls-remote https://github.com/The-Pixel-Boys/shield-kya refs/tags/v${stable}`);
     expect(text).toMatch(/plugin skipped, not an error/);
   });
 
@@ -267,11 +304,31 @@ describe("integration: the built CLI in a temp HOME and project", () => {
     const home = tmp();
     const dir = project();
     const r = run(["team", "init"], dir, home);
+    if (isPre) {
+      // This commit is a prerelease: the real CLI refuses and writes nothing.
+      expect(r.status).toBe(1);
+      expect(r.stderr).toMatch(/prerelease kya has no public tag; use a stable kya/);
+      expect(readdirSync(dir)).toEqual([]);
+      expect(readdirSync(home)).toEqual([]);
+      return;
+    }
     expect(r.status, r.stderr).toBe(0);
     assertDocumentedShape(settingsOf(dir));
     expect(readdirSync(home)).toEqual([]);
     expect(readdirSync(dir)).toEqual([".claude"]);
     expect(readdirSync(join(dir, ".claude"))).toEqual(["settings.json"]);
+  });
+
+  it.skipIf(!haveDist)("team managed-settings with the real package version: refuses a prerelease, pins a stable tag", () => {
+    const r = run(["team", "managed-settings"], tmp(), tmp());
+    if (isPre) {
+      expect(r.status).toBe(1);
+      expect(r.stderr).toMatch(/prerelease kya has no public tag; use a stable kya/);
+      expect(r.stdout).not.toMatch(/extraKnownMarketplaces/);
+      return;
+    }
+    expect(r.status, r.stderr).toBe(0);
+    expect(JSON.parse(r.stdout).extraKnownMarketplaces["shield-kya"].source.ref).toBe(`v${version}`);
   });
 
   it.skipIf(!haveDist)("run from HOME itself: refuses, ~/.claude untouched", () => {
@@ -296,7 +353,8 @@ describe("integration: the built CLI in a temp HOME and project", () => {
 });
 
 const haveClaude = spawnSync("claude", ["--version"], { encoding: "utf8" }).status === 0;
-describe.skipIf(!(haveClaude && process.env.KYA_CLAUDE_E2E === "1" && existsSync(cliJs)))("e2e: claude loads the plugin from the generated project settings", () => {
+// Skipped on a prerelease commit: the built CLI refuses team init there (no public tag to pin).
+describe.skipIf(isPre || !(haveClaude && process.env.KYA_CLAUDE_E2E === "1" && existsSync(cliJs)))("e2e: claude loads the plugin from the generated project settings", () => {
   /**
    * The public repo may not carry the tag yet, so the marketplace is served from a local git repo that has the
    * tag v<version> while its default branch has moved on; the generated github source is swapped for a git source
@@ -316,7 +374,7 @@ describe.skipIf(!(haveClaude && process.env.KYA_CLAUDE_E2E === "1" && existsSync
     git("init", "-q");
     git("add", "-A");
     git("commit", "-qm", "release");
-    git("tag", `v${version}`);
+    git("tag", `v${stable}`);
     git("checkout", "-qb", "moved-on");
     writeFileSync(join(mk, "drift"), "x");
     git("add", "drift");
@@ -372,7 +430,7 @@ describe.skipIf(!(haveClaude && process.env.KYA_CLAUDE_E2E === "1" && existsSync
     const kya = plugins.find((p) => p.source === "kya@shield-kya");
     expect(kya, JSON.stringify(plugins)).toBeDefined();
     const checkout = join(home, ".claude/plugins/marketplaces/shield-kya");
-    expect(spawnSync("git", ["describe", "--tags"], { cwd: checkout, encoding: "utf8" }).stdout.trim()).toBe(`v${version}`);
+    expect(spawnSync("git", ["describe", "--tags"], { cwd: checkout, encoding: "utf8" }).stdout.trim()).toBe(`v${stable}`);
     expect(existsSync(join(checkout, "drift"))).toBe(false);
     expect(existsSync(join(home, ".claude/settings.json"))).toBe(false); // nothing written to user settings
 

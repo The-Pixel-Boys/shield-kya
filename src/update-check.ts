@@ -51,14 +51,39 @@ export function shouldSkipUpdateCheck(
   return false;
 }
 
+/**
+ * SemVer precedence of two versions (a leading v is ignored, missing x.y.z parts count as 0).
+ * A prerelease sorts below its release (0.32.6-rc.1 < 0.32.6); prerelease identifiers compare
+ * numerically when both are numbers, else as text, and a number sorts below text. Build metadata is ignored.
+ */
 export function compareVersions(a: string, b: string): number {
-  const parse = (v: string) => v.replace(/^v/, "").split(".").map((n) => Number.parseInt(n, 10));
-  const av = parse(a);
-  const bv = parse(b);
+  const split = (v: string) => {
+    const [core = "", ...pre] = v.replace(/^v/, "").split("+")[0]!.split("-");
+    return { nums: core.split(".").map((n) => Number.parseInt(n, 10)), pre: pre.join("-") };
+  };
+  const av = split(a);
+  const bv = split(b);
   for (let i = 0; i < 3; i++) {
-    const an = Number.isFinite(av[i]) ? av[i] : 0;
-    const bn = Number.isFinite(bv[i]) ? bv[i] : 0;
+    const an = Number.isFinite(av.nums[i]) ? av.nums[i]! : 0;
+    const bn = Number.isFinite(bv.nums[i]) ? bv.nums[i]! : 0;
     if (an !== bn) return an - bn;
+  }
+  if (av.pre === bv.pre) return 0;
+  if (!av.pre) return 1;
+  if (!bv.pre) return -1;
+  const ai = av.pre.split(".");
+  const bi = bv.pre.split(".");
+  for (let i = 0; i < Math.max(ai.length, bi.length); i++) {
+    const x = ai[i];
+    const y = bi[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    if (x === y) continue;
+    const xn = /^\d+$/.test(x);
+    const yn = /^\d+$/.test(y);
+    if (xn && yn) return Number(x) - Number(y);
+    if (xn !== yn) return xn ? -1 : 1;
+    return x < y ? -1 : 1;
   }
   return 0;
 }

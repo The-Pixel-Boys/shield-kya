@@ -1,6 +1,6 @@
 {
   "name": "shield-kya",
-  "version": "0.32.5",
+  "version": "0.32.6-rc.1",
   "description": "Audit trail and traceability for AI agents. See what every coding agent did, block risky calls, ask a human for approval, and prove it with signed trust checks.",
   "author": {
     "name": "Shield Agent",

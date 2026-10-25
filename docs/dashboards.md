@@ -60,12 +60,13 @@ export KYA_OTLP_EXPORT_ENDPOINT=http://127.0.0.1:4318   # spans -> Tempo
 export KYA_OTLP_ENDPOINT=http://127.0.0.1:4318          # metric -> Prometheus (connected mode only)
 ```
 
-Import: **Dashboards > New > Import**, upload `grafana/kya-dashboard.json`, then pick your Tempo and Prometheus data sources for the `DS_TEMPO` and `DS_PROMETHEUS` inputs. The `service` variable defaults to `shield-kya-cli`, and `hosted_job` defaults to `shield-agent` (the hosted plane's `spring.application.name`).
+Import: **Dashboards > New > Import**, upload `grafana/kya-dashboard.json`, then pick your Tempo and Prometheus data sources for the `DS_TEMPO` and `DS_PROMETHEUS` inputs. The HTTP API works too: `POST /api/dashboards/import` with the file as `dashboard` and both `inputs` set (without them, Grafana refuses the import with `missing dashboard input variable DS_TEMPO`). The `service` variable defaults to `shield-kya-cli`, and `hosted_job` defaults to `shield-agent` (the hosted plane's `spring.application.name`).
 
 Grafana setup the dashboard needs:
 
-1. **Tempo 2.8 or newer with TraceQL metrics enabled** (the `local-blocks` processor). Every span panel uses `count_over_time()`, and the top-N panels use `topk(10)`, which older Tempo versions reject.
+1. **Tempo 2.8 or newer with TraceQL metrics enabled.** On Tempo 2.x, turn on the `local-blocks` processor (`metrics_generator.processor.local_blocks` and `processors: [local-blocks]` in the overrides). Tempo 3.x removed that processor (Tempo 3.1.0 does not start with those config keys) and serves TraceQL metrics without extra config. Every span panel uses `count_over_time()`, and the top-N panels use `topk(10)`, which older Tempo versions reject.
 2. **Prometheus naming.** The PromQL assumes the Prometheus OTLP receiver default, `UnderscoreEscapingWithSuffixes`: dots become underscores, unit `ms` adds `_milliseconds`, histograms get `_bucket` / `_sum` / `_count`, and `service.name` becomes the `job` label. So `kya.client.evaluate.latency` is queried as `kya_client_evaluate_latency_milliseconds_bucket{job="shield-kya-cli"}`. Grafana Cloud and the Collector / Alloy Prometheus exporters add these suffixes. Self-hosted Mimir's OTLP endpoint drops unit suffixes by default (`otel_metric_suffixes_enabled` is false), so the latency and evaluate-count panels come back empty there: route OTLP through a Collector or Alloy, enable `otel_metric_suffixes_enabled`, or remove `_milliseconds` from those queries. If your pipeline keeps UTF-8 names, adjust the queries too.
+3. **File provisioning.** Grafana provisioning does not fill the import inputs. A provisioned copy of the file loads, but its panels ask for the data source `${DS_TEMPO}` and fail with `Data source not found`. Before you provision the file, replace `${DS_TEMPO}` and `${DS_PROMETHEUS}` with the uids of your data sources, for example `sed -e 's/\${DS_TEMPO}/my-tempo-uid/g' -e 's/\${DS_PROMETHEUS}/my-prom-uid/g'`.
 
 ## Honest limits
 
@@ -74,7 +75,7 @@ Grafana setup the dashboard needs:
 - **No export-failure or fail-open panel.** Failed exports are counted only in local `~/.kya/otel-stats.json`, not sent anywhere. A default hook that fails open lets the call through without a span, so fail-open events are invisible here; only opt-in fail-closed hooks emit `FAIL_CLOSED`.
 - **Do not group `kya.client.evaluate.latency` or the hosted `kya.evaluate.latency` by `host` in Datadog.** Both carry a `host` attribute (`ide` / `runtime`) that becomes a tag on Datadog's reserved `host` key, which normally names the reporting machine. The dashboard never groups by it, and the validator rejects a Datadog metric query that does.
 - **The silence monitor** only makes sense with the MCP gate or gateway. With hooks only, 30 quiet minutes can just mean no denies.
-- **Not tested in a live Datadog or Grafana instance.** The files follow the vendors' published JSON schemas and are checked by `scripts/validate-dashboards.mjs`. Import has not been tried against a real Datadog org or Grafana server.
+- **Grafana: tested live, Datadog: not tested.** On 2026-10-20 the maintainers imported the Grafana dashboard through the HTTP API into Grafana 12.4.13 and 13.2.4, with Tempo 2.8.3 and 3.1.0 and Prometheus v3.13.4 (OTLP receiver) in containers. The span and connected-mode data was the captured OTLP from a real `kya` run (see below), replayed with new timestamps. The hosted-only metrics were synthetic, shaped like the hosted plane's Micrometer gauges and timer. Every panel query ran without errors and returned data, and the file-provisioning path behaved as described above. Not covered: how the panels look in a browser, Grafana Cloud, Mimir and Alloy. The Datadog files follow Datadog's published JSON schemas and are checked by `scripts/validate-dashboards.mjs`, but have not been tried against a real Datadog org.
 
 ## How the field list is checked
 

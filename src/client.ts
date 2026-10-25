@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import { AuthRequiredError, HttpError, KyaError, UsageError } from "./errors.js";
 import type { Host } from "./config.js";
 import { computeArgsHash } from "./hash.js";
@@ -276,9 +277,18 @@ export class KyaHttpClient {
     });
   }
 
-  async requestApproval(req: CreateApprovalRequest): Promise<ApprovalResponse> {
+  /**
+   * Retries a busy plane (503 kya.approval_busy). Safe: the plane gives busy before
+   * any write, and a create with the same work item returns the existing row (dedup).
+   */
+  async requestApproval(
+    req: CreateApprovalRequest,
+    opts: { signal?: AbortSignal } = {},
+  ): Promise<ApprovalResponse> {
     return this.request<ApprovalResponse>("/api/v1/kya/approvals", {
       method: "POST",
+      signal: opts.signal,
+      retryBusy: true,
       body: {
         agentId: req.agentId,
         disputeId: req.disputeId,
@@ -343,10 +353,16 @@ export class KyaHttpClient {
     );
   }
 
-  /** Human decide. Requires kya.approve. Never called by wrap or offline eval. */
+  /**
+   * Human decide. Requires kya.approve. Never called by wrap or offline eval.
+   * Retries a busy plane (503 kya.approval_busy): the plane gives busy when the
+   * row lock wait times out, before any write, so nothing changed. A decide that another call already
+   * made gives 409 kya.approval_already_decided, never a second decision.
+   */
   async decideApproval(
     id: string,
     decision: "approve" | "reject",
+    opts: { signal?: AbortSignal } = {},
   ): Promise<ApprovalResponse> {
     const trimmed = id.trim();
     if (!trimmed) {
@@ -354,7 +370,7 @@ export class KyaHttpClient {
     }
     const res = await this.request<ApprovalResponse>(
       `/api/v1/kya/approvals/${encodeURIComponent(trimmed)}/${decision}`,
-      { method: "POST" },
+      { method: "POST", signal: opts.signal, retryBusy: true },
     );
     if (!res || typeof res.id !== "string" || typeof res.status !== "string") {
       throw new HttpError(200, "approval decide returned no id/status", res);
@@ -369,7 +385,49 @@ export class KyaHttpClient {
       body?: unknown;
       headers?: Record<string, string>;
       signal?: AbortSignal;
+      /**
+       * Retry 503 kya.approval_busy. Only for calls that are safe to send again
+       * (approval create and decide). Other calls never retry.
+       */
+      retryBusy?: boolean;
     } = {},
+  ): Promise<T> {
+    if (!options.retryBusy) return this.attempt<T>(path, options);
+    // Monotonic clock: a wall clock change cannot move the deadline.
+    const started = performance.now();
+    for (let retries = 0; ; retries++) {
+      try {
+        return await this.attempt<T>(path, options);
+      } catch (err) {
+        if (!isApprovalBusy(err)) throw err;
+        const waitMs = busyWaitMs(err.retryAfter);
+        // ponytail: the deadline stops new waits and attempts. An attempt that has
+        // started keeps its own 15 s timeout (no caller signal), so the worst case
+        // is about 20 s + 15 s.
+        if (retries >= BUSY_MAX_RETRIES || performance.now() - started + waitMs > BUSY_DEADLINE_MS) {
+          const busy = new KyaError("approval service busy; retry later", "PLANE_BUSY", 1);
+          busy.cause = err;
+          throw busy;
+        }
+        try {
+          await sleep(waitMs, undefined, { signal: options.signal });
+        } catch (abortErr) {
+          // Same rule as a fetch abort: the caller gets its own abort reason.
+          throw options.signal?.reason ?? abortErr;
+        }
+      }
+    }
+  }
+
+  /** One HTTP call with the default 15 s timeout (or the caller signal). */
+  private async attempt<T>(
+    path: string,
+    options: {
+      method?: "GET" | "POST" | "PUT" | "DELETE";
+      body?: unknown;
+      headers?: Record<string, string>;
+      signal?: AbortSignal;
+    },
   ): Promise<T> {
     const method = options.method ?? "GET";
     const url = `${this.baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
@@ -387,14 +445,36 @@ export class KyaHttpClient {
       body = JSON.stringify(options.body);
     }
 
-    const response = await this.fetchImpl(url, {
-      method,
-      headers,
-      body,
-      redirect: "error",
-      signal: options.signal ?? AbortSignal.timeout(15_000),
-    });
-    const text = await response.text();
+    // Kept in a local so the catch can tell our timeout from any other abort.
+    const defaultSignal = options.signal ? undefined : AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+    let response: Response;
+    let text: string;
+    try {
+      response = await this.fetchImpl(url, {
+        method,
+        headers,
+        body,
+        redirect: "error",
+        signal: options.signal ?? defaultSignal,
+      });
+      // The same signal also covers the body read.
+      text = await response.text();
+    } catch (err) {
+      // Only the default timeout gets the new message. A caller signal or any
+      // other abort keeps its own error.
+      const name = (err as Error | undefined)?.name;
+      if (defaultSignal?.aborted && (name === "TimeoutError" || name === "AbortError")) {
+        const timeout = new KyaError(
+          timeoutMessage(this.baseUrl, method, path),
+          "PLANE_HTTP_TIMEOUT",
+          1,
+        );
+        // SDK users can still read the original error name.
+        timeout.cause = err;
+        throw timeout;
+      }
+      throw err;
+    }
     const parsed = parseJsonSafe(text);
 
     if (!response.ok) {
@@ -412,7 +492,13 @@ export class KyaHttpClient {
       ) {
         msg = (parsed as { message: string }).message;
       }
-      throw new HttpError(response.status, msg, parsed);
+      throw new HttpError(
+        response.status,
+        msg,
+        parsed,
+        // Optional chain: injected fetch stubs may return a Response-like object with no headers.
+        response.headers?.get("retry-after") ?? undefined,
+      );
     }
 
     return parsed as T;
@@ -443,6 +529,57 @@ export function buildEvaluateFromToolArgs(input: {
       sandboxId: input.sandboxId,
     },
   };
+}
+
+/** Default wait for one control plane request (headers and body). */
+const REQUEST_TIMEOUT_MS = 15_000;
+
+/** Busy approval retry: 1 call plus at most 3 retries, all inside 20 s. */
+const BUSY_MAX_RETRIES = 3;
+const BUSY_DEADLINE_MS = 20_000;
+const BUSY_DEFAULT_WAIT_S = 2;
+const BUSY_MAX_WAIT_MS = 10_000;
+
+function isApprovalBusy(err: unknown): err is HttpError {
+  if (!(err instanceof HttpError) || err.status !== 503) return false;
+  const body = err.body as { error?: { code?: unknown } } | undefined;
+  return body?.error?.code === "kya.approval_busy";
+}
+
+/**
+ * Wait before a busy retry. Retry-After counts only as delta-seconds (digits).
+ * An HTTP-date, a negative, an empty or any other value gives the 2 s default.
+ * Adds up to 20 percent jitter. The result is never more than 10 s.
+ */
+export function busyWaitMs(
+  retryAfter: string | null | undefined,
+  random: () => number = Math.random,
+): number {
+  const v = (retryAfter ?? "").trim();
+  const seconds = /^\d+$/.test(v) ? Number(v) : BUSY_DEFAULT_WAIT_S;
+  return Math.min(seconds * 1000 * (1 + 0.2 * random()), BUSY_MAX_WAIT_MS);
+}
+
+/**
+ * Method and the full request URL: origin, base path and request path. No
+ * userinfo, no query, no fragment. Never the API key.
+ */
+function timeoutMessage(baseUrl: string, method: string, path: string): string {
+  // Same normalization as the request URL: "agents" and "/agents" give one target.
+  const p = path.startsWith("/") ? path : `/${path}`;
+  const cleanPath = p.split(/[?#]/, 1)[0];
+  let target = cleanPath;
+  try {
+    const base = new URL(baseUrl);
+    target = `${base.origin}${base.pathname.replace(/\/+$/, "")}${cleanPath}`;
+  } catch {
+    /* keep the path only */
+  }
+  return (
+    `control plane did not answer ${method} ${target} within ${REQUEST_TIMEOUT_MS / 1000} seconds. ` +
+    "Check the base URL (KYA_BASE_URL or --base-url), check your network, then try again. " +
+    "Hosted hooks are not affected: they use their own time budget."
+  );
 }
 
 function stripTrailingSlash(url: string): string {

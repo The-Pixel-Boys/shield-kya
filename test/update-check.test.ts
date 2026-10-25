@@ -38,6 +38,21 @@ describe("compareVersions", () => {
     expect(compareVersions("0.20.0", "v0.20.0")).toBe(0);
   });
 
+  it("sorts a prerelease below its release and compares prereleases by SemVer precedence", () => {
+    expect(compareVersions("0.32.6-rc.1", "0.32.6")).toBeLessThan(0);
+    expect(compareVersions("0.32.6", "0.32.6-rc.1")).toBeGreaterThan(0);
+    expect(compareVersions("0.32.6-rc.1", "0.32.5")).toBeGreaterThan(0);
+    expect(compareVersions("0.32.5", "v0.32.6-rc.1")).toBeLessThan(0);
+    expect(compareVersions("0.32.6-rc.2", "0.32.6-rc.10")).toBeLessThan(0);
+    expect(compareVersions("1.0.0-alpha", "1.0.0-alpha.1")).toBeLessThan(0);
+    expect(compareVersions("1.0.0-1", "1.0.0-alpha")).toBeLessThan(0);
+    expect(compareVersions("1.0.0-beta", "1.0.0-alpha.9")).toBeGreaterThan(0);
+    expect(compareVersions("0.32.6-rc.1", "0.32.6-rc.1")).toBe(0);
+    expect(compareVersions("1.0.0+build.5", "1.0.0")).toBe(0);
+    expect(compareVersions("1.0.0+build-5", "1.0.0")).toBe(0);
+    expect(compareVersions("1.0.0-rc.1+b.2", "1.0.0-rc.1")).toBe(0);
+  });
+
   it("treats missing segments as zero", () => {
     expect(compareVersions("1.0", "1.0.0")).toBe(0);
     expect(compareVersions("1", "1.0.1")).toBeLessThan(0);

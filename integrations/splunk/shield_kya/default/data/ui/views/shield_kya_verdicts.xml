@@ -1,0 +1,115 @@
+<form version="1.1" theme="light">
+  <label>Shield KYA verdicts</label>
+  <description>Shield KYA tool-call verdicts from the local trail file (shield:kya:trail) and OTLP verdict spans (shield:kya:verdict). Hook gates send only DENY and REQUIRE_APPROVE spans, so ALLOW is low unless you run the MCP gate or gateway. The open source CLI is advisory.</description>
+  <fieldset submitButton="false">
+    <input type="time" token="time">
+      <label>Time range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <single>
+        <title>DENY verdicts</title>
+        <search>
+          <query>`shield_kya_events` kya_verdict="DENY" | stats count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>REQUIRE_APPROVE verdicts</title>
+        <search>
+          <query>`shield_kya_events` kya_verdict="REQUIRE_APPROVE" | stats count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Never-list hits (NEVER_EVENT)</title>
+        <search>
+          <query>`shield_kya_events` kya_reason_code="NEVER_EVENT" | stats count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Gate failures (plane unreachable, auth rejected, fail-closed)</title>
+        <search>
+          <query>`shield_kya_events` kya_reason_code IN ("PLANE_UNREACHABLE", "PLANE_AUTH_REJECTED", "FAIL_CLOSED") | stats count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Verdicts over time</title>
+        <search>
+          <query>`shield_kya_events` kya_verdict=* | timechart count by kya_verdict</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Top deny reasons</title>
+        <search>
+          <query>`shield_kya_events` kya_verdict="DENY" | top limit=10 showperc=false kya_reason_code</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Tool calls by tool (top 10)</title>
+        <search>
+          <query>`shield_kya_events` kya_tool=* | top limit=10 showperc=false kya_tool</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Verdicts by gate host and mode</title>
+        <search>
+          <query>`shield_kya_events` kya_verdict=* | stats count by kya_host kya_mode kya_verdict | sort - count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Verdicts by MCP server</title>
+        <search>
+          <query>`shield_kya_events` kya_mcp_server=* | chart count over kya_mcp_server by kya_verdict</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+      </table>
+    </panel>
+  </row>
+</form>

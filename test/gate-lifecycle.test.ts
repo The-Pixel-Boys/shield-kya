@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { startGateSupervisor } from "../src/commands/gate-serve.js";
@@ -229,12 +230,24 @@ function cfg(cwd: string) {
   return resolveConfig({ cwd, offline: true, allowMissingApiKey: true, flags: { offline: true } });
 }
 
+// Ephemeral ports (asked from the OS once per run), not fixed ones: a fixed port that another
+// process on the shared CI host holds made "gateway failed to start" flaky (pipelines 2129, 2189).
+async function freePort(): Promise<number> {
+  const srv = createServer();
+  await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
+  const port = (srv.address() as { port: number }).port;
+  await new Promise<void>((resolve) => srv.close(() => resolve()));
+  return port;
+}
+const GW_PORT = await freePort();
+const OTLP_PORT = await freePort();
+
 function writeGateways2(home: string, servers: unknown[]): void {
   const path = join(home, ".kya", "gateways.json");
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(
     path,
-    JSON.stringify({ port: 39932, otlpPort: 39933, servers }),
+    JSON.stringify({ port: GW_PORT, otlpPort: OTLP_PORT, servers }),
     "utf8",
   );
 }
@@ -249,7 +262,7 @@ describe("kya gate run (detached, fake listening binary)", () => {
 
       const first = await runGateRun(cfg(home), { env: e });
       expect(first.reused).toBe(false);
-      expect(first.url).toBe("http://127.0.0.1:39932");
+      expect(first.url).toBe(`http://127.0.0.1:${GW_PORT}`);
       expect(pidAlive(first.pid)).toBe(true);
 
       const second = await runGateRun(cfg(home), { env: e });
@@ -304,7 +317,7 @@ describe("runGateStop pid guards", () => {
     try {
       const e = env(home);
       writeGateState(
-        { pid: foreign.pid!, url: "http://127.0.0.1:39932", port: 39932, otlpPort: 39933, startedAt: new Date().toISOString() },
+        { pid: foreign.pid!, url: `http://127.0.0.1:${GW_PORT}`, port: GW_PORT, otlpPort: OTLP_PORT, startedAt: new Date().toISOString() },
         e,
       );
       const r = await runGateStop(e);
@@ -333,9 +346,9 @@ describe("runGateStop pid guards", () => {
         {
           pid: deadSupervisor.pid!,
           childPid: child.pid!,
-          url: "http://127.0.0.1:39932",
-          port: 39932,
-          otlpPort: 39933,
+          url: `http://127.0.0.1:${GW_PORT}`,
+          port: GW_PORT,
+          otlpPort: OTLP_PORT,
           startedAt: new Date().toISOString(),
         },
         e,

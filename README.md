@@ -265,7 +265,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.32.5", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.32.6-rc.1", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -283,6 +283,8 @@ npx @shield-agent/kya wrap --offline --tool-id org.sample.data.write --irreversi
 npx @shield-agent/kya approve --id <approval-id>
 npx @shield-agent/kya reject --id <approval-id>
 ```
+
+A hosted high-risk request (HIGH priority now or before, or created with the irreversible hint) cannot be approved from the CLI or the TUI: the hosted plane answers 403 `kya.approval_console_mfa_required`. Approve it in the hosted console with a two-factor code. `reject` always works.
 
 `wrap` evaluates and may open a pending ticket. It never executes the side effect. `invoke` asks the live plane to authorize after Allow or APPROVED. It does not run the write on this machine. The TUI (`dash`) can `a`/`x` decide only after `y` confirm with a JWT (`sk_*` refused).
 
@@ -305,7 +307,7 @@ Offline evaluate by default (no network, no hosted plane); an explicit config us
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.32.5 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.32.6-rc.1 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -316,7 +318,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.32.5 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.32.6-rc.1 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -380,7 +382,7 @@ npx @shield-agent/kya certify --sign           # also emit a signed evidence-bun
 
 Certify is **evidence-only**. It never ALLOWs, DENYs, or blocks anything. The sole PEP (policy enforcement point: the component that can block a call) remains Shield KYA. Record-based machine checks never pass on an empty record (they report `insufficient_evidence`). What a machine cannot check is covered by explicit local attestations (`--attest`), recorded in `.kya/attestations.json`. These are unverified operator statements, labeled as such.
 
-`--sign` emits `evidence-bundle.json`: canonical JSON, ed25519-signed (a public-key signature) by a locally generated key (`~/.kya/keys/evidence-ed25519.json`, mode 0600, auto-created on first use). Each `--sign` run prints the signing key fingerprint. When the key was just created, the CLI notes that key continuity resets there (earlier bundles stay verifiable only under the old pubkey). A self-signed developer key proves bundle **integrity** and **continuity of a key**, **not identity**. Identity binding and the verified badge are the hosted verification product (separate). The bundle format is open and documented in `docs/certify.md`; anyone can verify a bundle offline with the embedded pubkey.
+`--sign` emits `evidence-bundle.json`: canonical JSON, ed25519-signed (a public-key signature) by a locally generated key (`~/.kya/keys/evidence-ed25519.json`, mode 0600, auto-created on first use). Each `--sign` run prints the signing key fingerprint. When the key was just created, the CLI notes that key continuity resets there (earlier bundles stay verifiable only under the old pubkey). A self-signed developer key proves bundle **integrity** and **continuity of a key**, **not identity**. Bundles from `--sign` verify offline. On the public verify endpoint (`POST /api/v1/kya/evidence/verify`) and badge, they show a grey `self-signed` badge. Only a bundle signed with the key of an active hosted workspace earns the green Shield Verified badge. That ties the badge to a hosted account. It does not prove the legal identity of the company or the agent. The bundle format is open and documented in `docs/certify.md`; anyone can verify a bundle offline with the embedded pubkey.
 
 `kya certify` is local, free, and offline: no account, no network calls, no license check (it never sends usage stats). The catalog is MIT-licensed and PRs are welcome. An EU AI Act crosswalk (baseline requirements mapped to Articles 9-15, 26, 72) ships in [docs/certify-eu-ai-act.md](docs/certify-eu-ai-act.md) and `src/certify/eu-ai-act-map.json`.
 
@@ -433,18 +435,23 @@ Home-directory prefixes are redacted from evidence paths (replaced with `~`). Th
 
 ## Alert webhooks (decision routing)
 
-Route DENY / REQUIRE_APPROVE events to Slack, Linear, Jira, or any webhook. Config lives in `.kya/config.json` (project) or `~/.kya/config.json` (global):
+Route DENY / REQUIRE_APPROVE events to Slack, Microsoft Teams, Linear, Jira, or any webhook. Config lives in `.kya/config.json` (project) or `~/.kya/config.json` (global):
 
 ```json
 {
   "notify": {
     "webhooks": [
       { "url": "https://hooks.slack.com/services/...", "template": "slack", "events": ["DENY", "REQUIRE_APPROVE"] },
+      { "url": "https://<env>.environment.api.powerplatform.com:443/powerautomate/...", "template": "teams", "events": ["DENY"] },
       { "url": "https://example.invalid/jira", "template": "jira", "events": ["DENY"] }
     ]
   }
 }
 ```
+
+Every Slack message ends with a line that says a Slack reaction or reply is not an approval. The hosted plane can also post new approval requests to Slack (Approvals > Slack notify in the console); that message only links to the console and has no approve button.
+
+The `teams` template sends one Adaptive Card to a Teams Workflows webhook (in Teams: channel, Workflows, "Send webhook alerts to a channel", copy the webhook link). The card has no buttons and ends with a line that says a Teams reaction or reply is not an approval. Event text loses the characters that Teams uses for links, mentions and Markdown. The workflow URL holds a signature, so keep it secret; the notify log stores the host only. The hosted plane can also post new approval requests to Teams (Approvals > Teams notify in the console).
 
 `KYA_NOTIFY_WEBHOOK=<url>` is the zero-config variant (generic payload). Delivery retries with exponential backoff (250ms/1s/4s + jitter), per-attempt timeouts, a per-URL circuit breaker (stops sending to a target that keeps failing), and a send rate limiter. Payloads are built only from redacted record fields, with an automatic minimized fallback if the secret scan finds something. From short-lived hook/wrap spawns, a detached helper (`kya notify-flush`) sends the webhooks, so the gate path never waits on the network. Every delivery attempt is appended to `~/.kya/notify-log.jsonl` (target host only, never the full URL; capped at the last 500 entries), and the report's System tab shows an **Alerts** panel with per-target delivered/failed counts and the last attempt.
 
@@ -493,6 +500,7 @@ pnpm build
 - [Works with your observability stack](docs/marketing/observability-stack.md)
 - [SDK & framework integrations (in-process shims)](docs/sdk-integrations.md)
 - [Hosted operator SSO / SCIM (not in OSS CLI)](docs/hosted-operator-sso.md)
+- [What is open source and what is hosted](docs/oss-vs-hosted.md)
 - See also `LIMITATIONS.md` in this repo
 
 ## Anonymous usage stats (opt-in, off by default)

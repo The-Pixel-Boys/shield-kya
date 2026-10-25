@@ -18,6 +18,7 @@ import {
   notifyStats,
   resetNotifyState,
   resolveWebhooks,
+  teamsText,
   type NotifyDeps,
 } from "../src/notify/index.js";
 import { RATE_LIMIT_MAX_SENDS, RETRY_DELAYS_MS } from "../src/notify/sender.js";
@@ -146,6 +147,45 @@ describe("templates", () => {
     const blocks = p["blocks"] as { type: string }[];
     expect(blocks[0]?.type).toBe("header");
     expect(blocks.some((b) => b.type === "section")).toBe(true);
+    const last = blocks[blocks.length - 1] as { type: string; elements: { text: string }[] };
+    expect(last.type).toBe("context");
+    expect(last.elements[0]?.text).toContain("not an approval");
+  });
+
+  it("teams payload is one Adaptive Card with no actions and the not-an-approval line", () => {
+    const p = buildPayload("teams", baseEvent({ argsHash: "h", diffPreview: "SECRET DIFF" }));
+    expect(p["type"]).toBe("message");
+    const att = (p["attachments"] as { contentType: string; content: Record<string, unknown> }[])[0]!;
+    expect(att.contentType).toBe("application/vnd.microsoft.card.adaptive");
+    expect(att.content["type"]).toBe("AdaptiveCard");
+    expect(att.content["actions"]).toEqual([]);
+    const json = JSON.stringify(p);
+    expect(json).toContain("shell . exec");
+    expect(json).toContain("not an approval");
+    expect(json).not.toContain("Action.");
+    expect(json).not.toContain("SECRET DIFF");
+    expect(json).not.toContain("argsHash");
+  });
+
+  it("teams text cannot add links, mentions, bold or lists", () => {
+    const t = teamsText("[Approve](https://evil.example) <at>Boss</at> **x** `y`\u202e\n");
+    expect(t).not.toMatch(/[[\]()<>*`\u202e\n]/);
+    expect(t).toContain("https: //evil . example");
+    expect(teamsText("- item")).toBe("  item");
+    expect(teamsText("db_write")).toBe("db_write");
+    const dots: [string, string][] = [["a.b", "a . b"], ["evil.example/x", "evil . example/x"],
+      ["x.dev", "x . dev"], ["y.longtld", "y . longtld"], ["1.2.3.4", "1 . 2 . 3 . 4"], ["a.b.c", "a . b . c"],
+      ["\u00e9.fr", "\u00e9 . fr"], ["end.", "end."], ["1.2", "1 . 2"], ["fs.read", "fs . read"]];
+    for (const [input, out] of dots) expect(teamsText(input)).toBe(out);
+  });
+
+  it("teams card cleans the free-text summary and target fields", () => {
+    const p = buildPayload("teams", baseEvent({ summary: "see [here](https://x.example)", targetPath: "<at>a</at>" }));
+    const json = JSON.stringify(p);
+    expect(json).toContain("https: //x . example");
+    expect(json).toContain("\"title\":\"target\"");
+    expect(json).not.toContain("<at>");
+    expect(json).not.toContain("](");
   });
 
   it("linear payload is create-issue-shaped, DENY urgent / REQUIRE_APPROVE high", () => {
