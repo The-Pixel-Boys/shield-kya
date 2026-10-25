@@ -1,42 +1,34 @@
 # npm trusted publishing (OIDC) for @shield-agent/kya, in the PUBLIC repo The-Pixel-Boys/shield-kya.
 #
 # The source of this file is kept in the release monorepo and is copied here byte for byte. Do not
-# edit it here: the release pipeline refuses to dispatch when this copy differs from its source.
+# edit it here: the release pipeline refuses to push the release tag when this copy differs from its
+# source.
 #
-# Policy (owner, 2026-10-21): this repo publishes to npm ONLY by dispatch from the kya-v* release
-# tag pipeline. The gates that enforce it are platform settings: the main ruleset, the environment
-# `npm` (deployment branch main), and the npm trusted publisher bound to this file and environment.
+# Trigger: the push of a tag npm-vX.Y.Z (or npm-vX.Y.Z-pre). Only the private kya-v* release
+# pipeline pushes these tags, on the merged sync commit, which must be the main head. The gates are
+# platform settings: the tag ruleset (only the sync identity creates npm-v* tags), the main ruleset,
+# the environment `npm` (deployment tag policy npm-v*), and the npm trusted publisher bound to this
+# file and environment. GitHub runs this file as it is at the tagged commit; that commit must be
+# the main head (checked below), so it is the reviewed file on main.
 #
 # Two jobs. `build` runs dependency code (install, build, test) and has NO id-token. `publish` gets
 # the id-token, but runs no source checkout, no dependency code and no pnpm: it only publishes the
 # tarball that `build` made, after checks of its sha256, name, version, scripts and files. Both jobs
-# are in one workflow run, so the provenance names this workflow, this run and the dispatched sha.
+# are in one workflow run, so the provenance names this workflow, this run and the tagged commit.
 # The build job is the trust boundary: a compromised build can still make a bad tarball.
 name: npm-publish
-run-name: npm-publish ${{ inputs.version }} ${{ inputs.sha }} ${{ inputs.request_id }}
+run-name: npm-publish ${{ github.ref_name }}
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: package.json version to publish (X.Y.Z or X.Y.Z-pre)
-        required: true
-        type: string
-      sha:
-        description: commit on main to publish; must be the main head at dispatch time
-        required: true
-        type: string
-      request_id:
-        description: free id of the caller, used to find this run (letters, digits, dot, dash, underscore)
-        required: false
-        type: string
-        default: ''
+  push:
+    tags:
+      - 'npm-v*'
 
 permissions:
   contents: read
 
 concurrency:
-  group: npm-publish
+  group: npm-publish-${{ github.ref_name }}
   cancel-in-progress: false
 
 defaults:
@@ -44,34 +36,30 @@ defaults:
     shell: bash
 
 env:
-  VERSION: ${{ inputs.version }}
-  WANT_SHA: ${{ inputs.sha }}
-  REQUEST_ID: ${{ inputs.request_id }}
+  TAG: ${{ github.ref_name }}
   PKG_URL: https://registry.npmjs.org/@shield-agent%2fkya
 
 jobs:
   build:
+    if: github.repository == 'The-Pixel-Boys/shield-kya'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
     steps:
-      # Provenance names github.sha. A different commit would make the attestation false.
-      - name: Refuse a wrong ref, sha or input
-        run: |
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "::error::version '$VERSION' is not X.Y.Z or X.Y.Z-pre"; exit 1; }
-          [[ "$WANT_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sha must be 40 lowercase hex characters"; exit 1; }
-          [[ "$REQUEST_ID" =~ ^[A-Za-z0-9._-]{0,64}$ ]] || { echo "::error::request_id has characters outside A-Z a-z 0-9 . _ -"; exit 1; }
-          [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::dispatch on main only (got $GITHUB_REF)"; exit 1; }
-          [ "$WANT_SHA" = "$GITHUB_SHA" ] || { echo "::error::inputs.sha $WANT_SHA is not the main head $GITHUB_SHA at dispatch. Main moved: dispatch again with the new head after a check."; exit 1; }
-
-      # A re-run keeps the old github.sha. Refuse when main moved since the dispatch.
-      - name: Refuse unless main still points at the sha
+      # Provenance names github.sha. Refuse anything but a release tag on the current main head: a tag
+      # on a side commit, and a re-run of an old tag after main moved, both fail here.
+      - name: Refuse a wrong ref, tag or commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          [ "$GITHUB_REF_TYPE" = tag ] || { echo "::error::not a tag push (ref type '$GITHUB_REF_TYPE')"; exit 1; }
+          [[ "$TAG" =~ ^npm-v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]] || { echo "::error::tag '$TAG' is not npm-vX.Y.Z or npm-vX.Y.Z-pre"; exit 1; }
+          v=${BASH_REMATCH[1]}
+          [ "$GITHUB_REF" = "refs/tags/$TAG" ] || { echo "::error::ref $GITHUB_REF is not refs/tags/$TAG"; exit 1; }
           live=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
-          [ "$live" = "$WANT_SHA" ] || { echo "::error::main is now $live, not $WANT_SHA. Do not re-run this run: dispatch a new one for the new head after a check."; exit 1; }
+          [ "$live" = "$GITHUB_SHA" ] || { echo "::error::tag $TAG is on $GITHUB_SHA, but main is $live. A release tag must be on the main head; do not re-run an old tag."; exit 1; }
+          echo "VERSION=$v" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,11 +77,11 @@ jobs:
           npm install -g pnpm@11.18.0
           pnpm --version
 
-      - name: Refuse unless HEAD and package.json match the inputs
+      - name: Refuse unless HEAD and package.json match the tag
         run: |
-          [ "$(git rev-parse HEAD)" = "$WANT_SHA" ] || { echo "::error::checked out $(git rev-parse HEAD), want $WANT_SHA"; exit 1; }
+          [ "$(git rev-parse HEAD)" = "$GITHUB_SHA" ] || { echo "::error::checked out $(git rev-parse HEAD), want $GITHUB_SHA"; exit 1; }
           have=$(node -p "require('./package.json').version")
-          [ "$have" = "$VERSION" ] || { echo "::error::package.json at $WANT_SHA is $have, not $VERSION"; exit 1; }
+          [ "$have" = "$VERSION" ] || { echo "::error::package.json at $GITHUB_SHA is $have, not $VERSION (tag $TAG)"; exit 1; }
 
       # Same gates as the Woodpecker publish-npm step (.woodpecker/release-sdk-kya.yml in the monorepo).
       - name: Embedding fork exists on npm
@@ -163,9 +151,10 @@ jobs:
   # This job holds the id-token: no checkout, no dependency code, no pnpm, no npx. The lint in the
   # release monorepo pins the sha256 of this whole file: any change to the file fails that pin until a
   # reviewer reads the whole file and updates the hash. The pin detects drift; the gates are the
-  # platform settings (main ruleset, environment npm, trusted publisher binding, SHA pinning).
+  # platform settings (tag and main rulesets, environment npm, trusted publisher binding, SHA pinning).
   publish:
     needs: build
+    if: github.repository == 'The-Pixel-Boys/shield-kya'
     runs-on: ubuntu-latest
     environment: npm
     timeout-minutes: 15
@@ -173,16 +162,18 @@ jobs:
       contents: read
       id-token: write
     steps:
-      # "Re-run failed jobs" runs this job again without the build job: check live main here too.
-      - name: Refuse a wrong ref or sha, or a moved main
+      # "Re-run failed jobs" runs this job again without the build job: the same checks here too.
+      - name: Refuse a wrong ref, tag or commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "::error::bad version"; exit 1; }
-          [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::dispatch on main only"; exit 1; }
-          [ "$WANT_SHA" = "$GITHUB_SHA" ] || { echo "::error::inputs.sha is not github.sha"; exit 1; }
+          [ "$GITHUB_REF_TYPE" = tag ] || { echo "::error::not a tag push (ref type '$GITHUB_REF_TYPE')"; exit 1; }
+          [[ "$TAG" =~ ^npm-v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]] || { echo "::error::tag '$TAG' is not npm-vX.Y.Z or npm-vX.Y.Z-pre"; exit 1; }
+          v=${BASH_REMATCH[1]}
+          [ "$GITHUB_REF" = "refs/tags/$TAG" ] || { echo "::error::ref $GITHUB_REF is not refs/tags/$TAG"; exit 1; }
           live=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
-          [ "$live" = "$WANT_SHA" ] || { echo "::error::main is now $live, not $WANT_SHA. Do not re-run this run: dispatch a new one for the new head after a check."; exit 1; }
+          [ "$live" = "$GITHUB_SHA" ] || { echo "::error::tag $TAG is on $GITHUB_SHA, but main is $live. A release tag must be on the main head; do not re-run an old tag."; exit 1; }
+          echo "VERSION=$v" >> "$GITHUB_ENV"
 
       # No registry-url: setup-node would write an .npmrc that reads NODE_AUTH_TOKEN.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -291,10 +282,10 @@ jobs:
                 exit 0
               fi
               jq '._npmUser, .dist.attestations' "$RUNNER_TEMP/meta.json"
-              echo "::error::npm serves $VERSION without _npmUser.trustedPublisher or dist.attestations. The version is public and immutable: do NOT publish it again. Reconcile only (find how it was published, fix the trusted publisher), and ship the fix in the next version. A re-run is safe: this job skips the publish when npm serves the version."
+              echo "::error::npm serves $VERSION without _npmUser.trustedPublisher or dist.attestations. The version is public and immutable: do NOT publish it again. Reconcile only (find how it was published, fix the trusted publisher), and ship the fix in the next version. A re-run (while main has not moved) is safe: this job skips the publish when npm serves the version."
               exit 1
             fi
             sleep 15
           done
-          echo "::error::npm does not serve $VERSION after 5 minutes. A re-run is safe: it skips the publish when npm serves the version."
+          echo "::error::npm does not serve $VERSION after 5 minutes. A re-run (while main has not moved) is safe: it skips the publish when npm serves the version."
           exit 1
