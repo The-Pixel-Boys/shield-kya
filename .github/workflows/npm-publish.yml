@@ -1,0 +1,291 @@
+# npm trusted publishing (OIDC) for @shield-agent/kya, in the PUBLIC repo The-Pixel-Boys/shield-kya.
+#
+# The source of this file is kept in the release monorepo and is copied here byte for byte. Do not
+# edit it here: the release pipeline refuses to push the release tag when this copy differs from its
+# source.
+#
+# Trigger: the push of a tag npm-vX.Y.Z (or npm-vX.Y.Z-pre). Only the private kya-v* release
+# pipeline pushes these tags, on the merged sync commit, which must be the main head. The gates are
+# platform settings: the tag ruleset (only the sync identity creates npm-v* tags), the main ruleset,
+# the environment `npm` (deployment tag policy npm-v*), and the npm trusted publisher bound to this
+# file and environment. GitHub runs this file as it is at the tagged commit; that commit must be
+# the main head (checked below), so it is the reviewed file on main.
+#
+# Two jobs. `build` runs dependency code (install, build, test) and has NO id-token. `publish` gets
+# the id-token, but runs no source checkout, no dependency code and no pnpm: it only publishes the
+# tarball that `build` made, after checks of its sha256, name, version, scripts and files. Both jobs
+# are in one workflow run, so the provenance names this workflow, this run and the tagged commit.
+# The build job is the trust boundary: a compromised build can still make a bad tarball.
+name: npm-publish
+run-name: npm-publish ${{ github.ref_name }}
+
+on:
+  push:
+    tags:
+      - 'npm-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish-${{ github.ref_name }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  TAG: ${{ github.ref_name }}
+  PKG_URL: https://registry.npmjs.org/@shield-agent%2fkya
+
+jobs:
+  build:
+    if: github.repository == 'The-Pixel-Boys/shield-kya'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      # Provenance names github.sha. Refuse anything but a release tag on the current main head: a tag
+      # on a side commit, and a re-run of an old tag after main moved, both fail here.
+      - name: Refuse a wrong ref, tag or commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ "$GITHUB_REF_TYPE" = tag ] || { echo "::error::not a tag push (ref type '$GITHUB_REF_TYPE')"; exit 1; }
+          [[ "$TAG" =~ ^npm-v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]] || { echo "::error::tag '$TAG' is not npm-vX.Y.Z or npm-vX.Y.Z-pre"; exit 1; }
+          v=${BASH_REMATCH[1]}
+          [ "$GITHUB_REF" = "refs/tags/$TAG" ] || { echo "::error::ref $GITHUB_REF is not refs/tags/$TAG"; exit 1; }
+          live=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          [ "$live" = "$GITHUB_SHA" ] || { echo "::error::tag $TAG is on $GITHUB_SHA, but main is $live. A release tag must be on the main head; do not re-run an old tag."; exit 1; }
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      # No registry-url: setup-node would write an .npmrc that reads NODE_AUTH_TOKEN.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install pnpm 11.18.0
+        run: |
+          npm install -g pnpm@11.18.0
+          pnpm --version
+
+      - name: Refuse unless HEAD and package.json match the tag
+        run: |
+          [ "$(git rev-parse HEAD)" = "$GITHUB_SHA" ] || { echo "::error::checked out $(git rev-parse HEAD), want $GITHUB_SHA"; exit 1; }
+          have=$(node -p "require('./package.json').version")
+          [ "$have" = "$VERSION" ] || { echo "::error::package.json at $GITHUB_SHA is $have, not $VERSION (tag $TAG)"; exit 1; }
+
+      # Same gates as the Woodpecker publish-npm step (.woodpecker/release-sdk-kya.yml in the monorepo).
+      - name: Embedding fork exists on npm
+        run: |
+          ALIAS="$(node -p "require('./package.json').dependencies.fastembed || ''")"
+          case "$ALIAS" in
+            npm:*@*)
+              npm view "${ALIAS#npm:}" version >/dev/null 2>&1 || { echo "::error::fork ${ALIAS#npm:} missing on npm"; exit 1; }
+              ;;
+          esac
+
+      # --ignore-scripts: no dependency lifecycle script runs. Build and test pass without them
+      # (esbuild takes its binary from its platform package). This job has no id-token and no secret.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm run check:version
+      - run: pnpm run build
+      - run: pnpm run test
+
+      - name: CLI smokes
+        run: |
+          T="$RUNNER_TEMP/smoke"
+          mkdir -p "$T/start-work"
+          node dist/cli.js --help | tee "$T/kya-help.txt"
+          for w in start wrap receipt invoke dash; do grep -q "$w" "$T/kya-help.txt"; done
+          set +e
+          node dist/cli.js eval-tool --offline --tool-id org.sample.never.event --irreversible | tee "$T/deny.txt"
+          deny=${PIPESTATUS[0]}
+          node dist/cli.js eval-tool --offline --tool-id org.sample.data.write --irreversible | tee "$T/ra.txt"
+          ra=${PIPESTATUS[0]}
+          node dist/cli.js wrap --offline --tool-id org.sample.data.write --irreversible > "$T/wrap.txt"
+          wrap=$?
+          set -e
+          test "$deny" -eq 1
+          grep -q DENY "$T/deny.txt"
+          test "$ra" -eq 4
+          grep -q REQUIRE_APPROVE "$T/ra.txt"
+          test "$wrap" -eq 0
+          grep -q REQUIRE_APPROVE "$T/wrap.txt"
+          grep -qi observe "$T/wrap.txt"
+          node dist/cli.js dash --once --offline | tee "$T/kya-dash.txt"
+          grep -q FREE "$T/kya-dash.txt"
+          (cd "$T/start-work" && node "$GITHUB_WORKSPACE/dist/cli.js" start --no-open | tee "$T/start.txt")
+          test -f "$T/start-work/.mcp.json"
+          grep -q serve-mcp "$T/start-work/.mcp.json"
+          grep -q 'KYA start' "$T/start.txt"
+          test -f server.json
+          node -e "const p=require('./package.json'); if(!p.mcpName) process.exit(1)"
+
+      - name: Pack one tarball and its sha256
+        run: |
+          out="$RUNNER_TEMP/pkg"
+          mkdir -p "$out"
+          pnpm pack --pack-destination "$out"
+          cd "$out"
+          n=$(find . -maxdepth 1 -name '*.tgz' | wc -l)
+          [ "$n" -eq 1 ] || { echo "::error::want one tarball, got $n"; exit 1; }
+          sha256sum ./*.tgz > pkg.sha256
+          cat pkg.sha256
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-package
+          path: ${{ runner.temp }}/pkg
+          if-no-files-found: error
+          retention-days: 7
+
+  # This job holds the id-token: no checkout, no dependency code, no pnpm, no npx. The lint in the
+  # release monorepo pins the sha256 of this whole file: any change to the file fails that pin until a
+  # reviewer reads the whole file and updates the hash. The pin detects drift; the gates are the
+  # platform settings (tag and main rulesets, environment npm, trusted publisher binding, SHA pinning).
+  publish:
+    needs: build
+    if: github.repository == 'The-Pixel-Boys/shield-kya'
+    runs-on: ubuntu-latest
+    environment: npm
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # "Re-run failed jobs" runs this job again without the build job: the same checks here too.
+      - name: Refuse a wrong ref, tag or commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ "$GITHUB_REF_TYPE" = tag ] || { echo "::error::not a tag push (ref type '$GITHUB_REF_TYPE')"; exit 1; }
+          [[ "$TAG" =~ ^npm-v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]] || { echo "::error::tag '$TAG' is not npm-vX.Y.Z or npm-vX.Y.Z-pre"; exit 1; }
+          v=${BASH_REMATCH[1]}
+          [ "$GITHUB_REF" = "refs/tags/$TAG" ] || { echo "::error::ref $GITHUB_REF is not refs/tags/$TAG"; exit 1; }
+          live=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          [ "$live" = "$GITHUB_SHA" ] || { echo "::error::tag $TAG is on $GITHUB_SHA, but main is $live. A release tag must be on the main head; do not re-run an old tag."; exit 1; }
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+
+      # No registry-url: setup-node would write an .npmrc that reads NODE_AUTH_TOKEN.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: npm 11.5.1 or later (trusted publishing)
+        run: |
+          v=$(npm --version)
+          echo "npm $v"
+          node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$v" \
+            || { echo "::error::npm $v is older than 11.5.1, which trusted publishing needs"; exit 1; }
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-package
+          path: ${{ runner.temp }}/pkg
+
+      - name: Check the tarball (sha256, name, version, scripts, files)
+        run: |
+          cd "$RUNNER_TEMP/pkg"
+          sha256sum -c pkg.sha256
+          n=$(find . -maxdepth 1 -name '*.tgz' | wc -l)
+          [ "$n" -eq 1 ] || { echo "::error::want one tarball, got $n"; exit 1; }
+          tgz=$(find . -maxdepth 1 -name '*.tgz')
+          mkdir x
+          tar -xzf "$tgz" -C x package/package.json
+          m=x/package/package.json
+          [ "$(jq -r .name "$m")" = "@shield-agent/kya" ] || { echo "::error::tarball name is $(jq -r .name "$m")"; exit 1; }
+          [ "$(jq -r .version "$m")" = "$VERSION" ] || { echo "::error::tarball version is $(jq -r .version "$m"), not $VERSION"; exit 1; }
+          jq -e '(.scripts // {}) | (has("preinstall") or has("install") or has("postinstall")) | not' "$m" > /dev/null \
+            || { echo "::error::the tarball has an install lifecycle script"; exit 1; }
+          jq -e '.publishConfig == null or .publishConfig == {"access":"public"}' "$m" > /dev/null \
+            || { echo "::error::publishConfig is not {\"access\":\"public\"}: $(jq -c .publishConfig "$m")"; exit 1; }
+          jq -e '.gypfile != true' "$m" > /dev/null || { echo "::error::package.json has gypfile (implicit node-gyp install)"; exit 1; }
+          # List once into a file: a tar error is fatal here, and no grep -q can stop tar early (SIGPIPE
+          # under pipefail would turn a match into a pass).
+          tar -tzf "$tgz" > "$RUNNER_TEMP/list.txt"
+          if grep -qx 'package/binding.gyp' "$RUNNER_TEMP/list.txt"; then echo "::error::the tarball has binding.gyp (implicit node-gyp install)"; exit 1; fi
+          if grep -Ei '(^|/)(\.npmrc|\.env[^/]*|id_rsa[^/]*|[^/]*\.pem|[^/]*\.key|[^/]*\.p12)$' "$RUNNER_TEMP/list.txt"; then
+            echo "::error::the tarball holds a credential-like file (listed above)"; exit 1
+          fi
+          echo "TGZ=$RUNNER_TEMP/pkg/${tgz#./}" >> "$GITHUB_ENV"
+
+      # Only the newest stable gets `latest`. A prerelease goes to `next`. An older stable needs a
+      # deliberate dist-tag by a person: this job refuses it.
+      - name: Choose the dist-tag
+        run: |
+          # A re-run after a publish: npm serves the version, the publish step skips, the post-check runs.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "$PKG_URL/$VERSION") || { echo "::error::cannot read $PKG_URL/$VERSION"; exit 1; }
+          case "$code" in
+            200) echo "npm already serves $VERSION: no dist-tag needed, the publish step skips"; echo "DIST=latest" >> "$GITHUB_ENV"; exit 0 ;;
+            404) ;;
+            *) echo "::error::$PKG_URL/$VERSION answered HTTP $code"; exit 1 ;;
+          esac
+          case "$VERSION" in *-*) echo "DIST=next" >> "$GITHUB_ENV"; exit 0 ;; esac
+          # The package exists (latest 0.32.5), so an empty or failed read is an error, never "no latest".
+          cur=$(npm view @shield-agent/kya dist-tags.latest) || { echo "::error::cannot read the npm latest dist-tag"; exit 1; }
+          [[ "$cur" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::npm latest is '$cur', not X.Y.Z"; exit 1; }
+          echo "npm latest is $cur"
+          node -e 'const [a,b]=process.argv.slice(1).map(v=>v.split(".").map(Number)); for (let i=0;i<3;i++){ if(a[i]!==b[i]) process.exit(a[i]>b[i]?0:1) } process.exit(1)' "$VERSION" "$cur" \
+            || { echo "::error::$VERSION is not newer than latest $cur. Publish an older line by hand with a deliberate dist-tag."; exit 1; }
+          echo "DIST=latest" >> "$GITHUB_ENV"
+
+      # npm calls the OIDC exchange only in `npm publish`, so `npm whoami` cannot use it. A credential
+      # here would let npm publish without OIDC.
+      - name: Refuse any npm credential before the OIDC exchange
+        run: |
+          if [ -n "${NPM_TOKEN:-}${NODE_AUTH_TOKEN:-}" ]; then echo "::error::an npm token is set in the environment"; exit 1; fi
+          if env | cut -d= -f1 | grep -Ei '^npm_config_[^=]*(_auth|_password|certfile|keyfile)'; then echo "::error::npm credential config in the environment (names above, values not shown)"; exit 1; fi
+          for f in "$(npm config get globalconfig)" "$(npm config get userconfig)" .npmrc "$HOME/.npmrc"; do
+            if [ -f "$f" ] && grep -Ein '_auth|_password|certfile|keyfile' "$f" | cut -d= -f1; then
+              echo "::error::$f holds npm credential config (keys above): refusing"; exit 1
+            fi
+          done
+          if out=$(npm whoami 2>&1); then echo "::error::npm has a credential before OIDC (whoami: $out): refusing"; exit 1; fi
+          grep -q ENEEDAUTH <<< "$out" || { echo "::error::cannot prove there is no npm credential (whoami: $out)"; exit 1; }
+
+      - name: Publish with OIDC and provenance (no token)
+        env:
+          NODE_AUTH_TOKEN: ''
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "$PKG_URL/$VERSION") || { echo "::error::cannot read $PKG_URL/$VERSION"; exit 1; }
+          case "$code" in
+            200) echo "npm already serves $VERSION: not publishing again. The next step checks how it was published."; exit 0 ;;
+            404) ;;
+            *) echo "::error::$PKG_URL/$VERSION answered HTTP $code"; exit 1 ;;
+          esac
+          npm publish "$TGZ" --access public --provenance --ignore-scripts --tag "$DIST" --loglevel verbose 2>&1 | tee "$RUNNER_TEMP/publish.log"
+          if ! grep -q 'oidc Successfully retrieved and set token' "$RUNNER_TEMP/publish.log"; then
+            echo "::error::the log has no 'oidc Successfully retrieved and set token': the publish did not use the trusted publisher. Check the trusted publisher on npmjs.com: repo shield-kya, file npm-publish.yml, environment npm, direct publish allowed."
+            exit 1
+          fi
+
+      - name: Check trusted publisher and provenance on npm
+        run: |
+          echo "Check commands:"
+          echo "  curl -s $PKG_URL/$VERSION | jq '._npmUser.trustedPublisher, .dist.attestations'"
+          echo "  curl -s https://registry.npmjs.org/-/npm/v1/attestations/@shield-agent%2fkya@$VERSION | jq '.attestations[].predicateType'"
+          for _ in $(seq 1 20); do
+            if curl -fsS "$PKG_URL/$VERSION" -o "$RUNNER_TEMP/meta.json" 2>/dev/null; then
+              if jq -e '._npmUser.trustedPublisher != null and .dist.attestations != null' "$RUNNER_TEMP/meta.json" >/dev/null; then
+                jq '._npmUser, .dist.attestations' "$RUNNER_TEMP/meta.json"
+                echo "npm serves @shield-agent/kya $VERSION with a trusted publisher and a provenance attestation."
+                exit 0
+              fi
+              jq '._npmUser, .dist.attestations' "$RUNNER_TEMP/meta.json"
+              echo "::error::npm serves $VERSION without _npmUser.trustedPublisher or dist.attestations. The version is public and immutable: do NOT publish it again. Reconcile only (find how it was published, fix the trusted publisher), and ship the fix in the next version. A re-run (while main has not moved) is safe: this job skips the publish when npm serves the version."
+              exit 1
+            fi
+            sleep 15
+          done
+          echo "::error::npm does not serve $VERSION after 5 minutes. A re-run (while main has not moved) is safe: it skips the publish when npm serves the version."
+          exit 1
