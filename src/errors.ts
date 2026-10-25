@@ -22,12 +22,15 @@ export class AuthRequiredError extends KyaError {
 export class HttpError extends KyaError {
   readonly status: number;
   readonly body: unknown;
+  /** Raw Retry-After header of the response, when the plane sent one. */
+  readonly retryAfter: string | undefined;
 
-  constructor(status: number, message: string, body?: unknown) {
+  constructor(status: number, message: string, body?: unknown, retryAfter?: string) {
     super(message, `HTTP_${status}`, 1);
     this.name = "HttpError";
     this.status = status;
     this.body = body;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -42,6 +45,14 @@ export class UsageError extends KyaError {
 export function clientSafeError(err: unknown): string {
   if (err instanceof HttpError) {
     return `control plane HTTP ${err.status}`;
+  }
+  // The timeout text names the plane URL and CLI hints. An MCP client gets neither.
+  if (err instanceof KyaError && err.code === "PLANE_HTTP_TIMEOUT") {
+    return "control plane timeout";
+  }
+  // Fixed text: never the plane URL or the 503 body.
+  if (err instanceof KyaError && err.code === "PLANE_BUSY") {
+    return "approval service busy; retry later";
   }
   if (err instanceof KyaError) {
     return err.message;

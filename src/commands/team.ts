@@ -6,7 +6,7 @@
  *   enabledPlugins["kya@shield-kya"] = true
  * Every other key is kept. No network, no permissions, nothing auto-accepted: Claude Code still
  * shows each teammate its folder trust prompt. managed-settings prints the same two keys as an
- * admin policy document. Schema: code.claude.com/docs/en/plugins/org and
+ * admin policy document. A prerelease kya refuses both (no public tag to pin). Schema: code.claude.com/docs/en/plugins/org and
  * /docs/en/plugins/marketplace-reference (marketplace `github` source: repo, ref, path; no sha).
  */
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
@@ -14,6 +14,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { KyaError } from "../errors.js";
 import { atomicWriteSync } from "../fs-atomic.js";
+import { compareVersions } from "../update-check.js";
 import { CLI_VERSION } from "../version.js";
 
 export const MARKETPLACE = "shield-kya";
@@ -25,7 +26,14 @@ export function releaseRef(version: string = CLI_VERSION): string {
   return `v${version}`;
 }
 
+/**
+ * A prerelease kya (X.Y.Z-pre) is published to npm `next` only: shield-kya gets no `v<version>` tag for it,
+ * so a pin to that ref would point at nothing. Refuse instead of writing a broken marketplace source.
+ */
 export function marketplaceSource(version: string = CLI_VERSION) {
+  if (version.includes("-")) {
+    throw refuse(`kya ${version} is a prerelease: prerelease kya has no public tag; use a stable kya (npx @shield-agent/kya@latest team init)`);
+  }
   return { source: "github", repo: PUBLIC_REPO, ref: releaseRef(version) };
 }
 
@@ -87,14 +95,10 @@ function detectIndent(text: string): string | number {
   return m ? m[1]! : 2;
 }
 
-/** True when tag `a` (vX.Y.Z) is a strictly newer release than `b`; non-semver refs compare as not newer. */
+/** True when tag `a` (vX.Y.Z[-pre]) is a strictly newer release than `b` (SemVer precedence); other refs are not newer. */
 function newerThan(a: string, b: string): boolean {
-  const parse = (t: string) => /^v(\d+)\.(\d+)\.(\d+)$/.exec(t)?.slice(1).map(Number);
-  const x = parse(a);
-  const y = parse(b);
-  if (!x || !y) return false;
-  const d = x.map((n, i) => n - y[i]!).find((n) => n !== 0);
-  return d !== undefined && d > 0;
+  const tag = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+  return tag.test(a) && tag.test(b) && compareVersions(a, b) > 0;
 }
 
 /** Merge our two keys into `settings`; returns change lines. Throws (nothing written) on conflicts. */

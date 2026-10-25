@@ -1,0 +1,14 @@
+# The dashboard and nav stay in this app. The source types, field extractions and macros are
+# exported so that searches in other apps can use them.
+[]
+access = read : [ * ], write : [ admin, sc_admin ]
+export = none
+
+[props]
+export = system
+
+[transforms]
+export = system
+
+[macros]
+export = system

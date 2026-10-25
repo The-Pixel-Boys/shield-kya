@@ -34,7 +34,7 @@ It merges two keys into `.claude/settings.json` and keeps every other key and th
 }
 ```
 
-`vX.Y.Z` is the version of the kya you ran, read from its `package.json` at runtime (the command prints it), so the marketplace is pinned to that release tag, never to a branch. Run `kya team init` again after you upgrade kya to move the pin; it only rewrites the `ref`. If the file already pins a newer tag than your kya, the change list says `downgrade` so you notice before committing.
+`vX.Y.Z` is the version of the kya you ran, read from its `package.json` at runtime (the command prints it), so the marketplace is pinned to that release tag, never to a branch. Run `kya team init` again after you upgrade kya to move the pin; it only rewrites the `ref`. If the file already pins a newer tag than your kya, the change list says `downgrade` so you notice before committing. A prerelease kya (for example `0.32.6-rc.1`, npm dist-tag `next`) refuses `team init` and `team managed-settings`: prereleases get no public tag, so there is no ref to pin. Use a stable kya.
 
 The command makes no network call, so it cannot check that the tag exists. Do it once before you commit:
 

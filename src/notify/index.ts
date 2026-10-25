@@ -6,7 +6,7 @@
  * the parsed object, it does not read files):
  *
  *   notify: { webhooks: [ { url, events?: ["DENY","REQUIRE_APPROVE"],
- *                           template?: "slack"|"linear"|"jira"|"generic",
+ *                           template?: "slack"|"teams"|"linear"|"jira"|"generic",
  *                           headers?: Record<string,string>, timeoutMs? } ] }
  *
  * `KYA_NOTIFY_WEBHOOK` adds one quick generic webhook on top of the config list.
@@ -66,7 +66,9 @@ export {
   buildMinimizedPayload,
   buildPayload,
   buildSlackPayload,
+  buildTeamsPayload,
   headline,
+  teamsText,
   type NotifyTemplate,
 } from "./templates.js";
 

@@ -1,0 +1,4 @@
+<nav search_view="search" color="#1F3A5F">
+  <view name="shield_kya_verdicts" default="true" />
+  <view name="search" />
+</nav>

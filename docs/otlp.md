@@ -108,6 +108,8 @@ service:
 
 Ready-made community dashboards for these spans and metrics (Datadog dashboard and monitors, Grafana dashboard): [dashboards.md](./dashboards.md).
 
+For Splunk, a community app (source types, field names and a dashboard, no inputs and no credentials) reads the verdict spans from the Collector `splunk_hec` exporter or the local trail file: [integrations/splunk](../integrations/splunk/shield_kya/README.md).
+
 ## Forbidden attributes
 
 Do not tag or export: tool args, prompts/completions, emails, phones, IPs, approval payload bodies, raw `merchant_id` / high-cardinality `tool_id` on metrics. The decision exporter ships only the attributes in the table above.

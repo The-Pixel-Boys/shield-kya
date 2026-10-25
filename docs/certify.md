@@ -172,9 +172,12 @@ self-signed and local. A valid signature proves the bundle was produced by
 someone holding this key and was not modified (integrity), and repeat
 bundles with the same `pubkey` prove continuity of a key across time. It
 proves **nothing about identity**: anyone can generate a key and sign a
-bundle. Identity binding (this key belongs to this agent/org) is the hosted
-verification product; the format above is the open, documented seam for it.
-Third parties can verify integrity offline today with the embedded `pubkey`.
+bundle. Bundles from `--sign` therefore show a grey `self-signed` badge on
+the public verify endpoint (`POST /api/v1/kya/evidence/verify`) and badge. The green Shield Verified badge is reserved for bundles
+signed with the key of an active hosted workspace. That ties the badge to a
+hosted account. It is not a check of the legal identity of the company or the
+agent, and not a third-party audit. Third parties can verify integrity offline
+today with the embedded `pubkey`.
 
 **Privacy:** the bundle contains requirement results, counts, and a sha256
 digest of the window's record events, never raw tool arguments, diffs, or

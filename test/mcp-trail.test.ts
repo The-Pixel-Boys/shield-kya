@@ -346,6 +346,39 @@ describe("MCP offline evaluate + fail-closed recording", () => {
     });
   });
 
+  it("default timeout: MCP result has no host and no path, deny row stays PLANE_UNREACHABLE", async () => {
+    const controller = new AbortController();
+    const spy = vi.spyOn(AbortSignal, "timeout").mockImplementation(() => controller.signal);
+    try {
+      const timingOut = new KyaHttpClient({
+        baseUrl: "https://kya-plane.corp.internal:8443/tenant-acme",
+        apiKey: "sk_test",
+        host: "ide",
+        fetch: (async () => {
+          const reason = new DOMException("The operation was aborted due to timeout", "TimeoutError");
+          controller.abort(reason);
+          throw reason;
+        }) as unknown as typeof fetch,
+      });
+      const result = await handleMcpToolCall(
+        "kya.policy_evaluate",
+        { toolId: "org.sample.safe.read" },
+        { client: timingOut, host: "ide", trail: { cwd, offline: false, holdEnabled: false } },
+      );
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toEqual({ error: "control plane timeout" });
+      const text = result.content[0]?.text ?? "";
+      for (const leak of ["corp.internal", "8443", "tenant-acme", "/api/v1", "KYA_BASE_URL"]) {
+        expect(text).not.toContain(leak);
+      }
+      const events = readTrail(cwd);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ verdict: "DENY", reasonCode: "PLANE_UNREACHABLE" });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("plane reached but rejecting auth records PLANE_AUTH_REJECTED", async () => {
     const rejecting = new KyaHttpClient({
       baseUrl: "http://127.0.0.1:1",
