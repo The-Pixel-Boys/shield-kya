@@ -184,7 +184,7 @@ jobs:
       - name: npm 11.5.1 or later (trusted publishing)
         run: |
           v=$(npm --version)
-          echo "npm $v"
+          echo "node $(node --version), npm $v"
           node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$v" \
             || { echo "::error::npm $v is older than 11.5.1, which trusted publishing needs"; exit 1; }
 
@@ -226,13 +226,13 @@ jobs:
           # A re-run after a publish: npm serves the version, the publish step skips, the post-check runs.
           code=$(curl -sS -o /dev/null -w '%{http_code}' "$PKG_URL/$VERSION") || { echo "::error::cannot read $PKG_URL/$VERSION"; exit 1; }
           case "$code" in
-            200) echo "npm already serves $VERSION: no dist-tag needed, the publish step skips"; echo "DIST=latest" >> "$GITHUB_ENV"; exit 0 ;;
+            200) echo "the registry already serves $VERSION: no tag choice needed, the publish step skips"; echo "DIST=latest" >> "$GITHUB_ENV"; exit 0 ;;
             404) ;;
             *) echo "::error::$PKG_URL/$VERSION answered HTTP $code"; exit 1 ;;
           esac
           case "$VERSION" in *-*) echo "DIST=next" >> "$GITHUB_ENV"; exit 0 ;; esac
           # The package exists (latest 0.32.5), so an empty or failed read is an error, never "no latest".
-          cur=$(npm view @shield-agent/kya dist-tags.latest) || { echo "::error::cannot read the npm latest dist-tag"; exit 1; }
+          cur=$(npm view @shield-agent/kya dist-tags.latest) || { echo "::error::cannot read the latest tag from the registry"; exit 1; }
           [[ "$cur" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::npm latest is '$cur', not X.Y.Z"; exit 1; }
           echo "npm latest is $cur"
           node -e 'const [a,b]=process.argv.slice(1).map(v=>v.split(".").map(Number)); for (let i=0;i<3;i++){ if(a[i]!==b[i]) process.exit(a[i]>b[i]?0:1) } process.exit(1)' "$VERSION" "$cur" \
@@ -243,7 +243,7 @@ jobs:
       # here would let npm publish without OIDC.
       - name: Refuse any npm credential before the OIDC exchange
         run: |
-          if [ -n "${NPM_TOKEN:-}${NODE_AUTH_TOKEN:-}" ]; then echo "::error::an npm token is set in the environment"; exit 1; fi
+          if [ -n "${NPM_TOKEN:-}${NODE_AUTH_TOKEN:-}" ]; then echo "::error::a registry token is set in the environment"; exit 1; fi
           if env | cut -d= -f1 | grep -Ei '^npm_config_[^=]*(_auth|_password|certfile|keyfile)'; then echo "::error::npm credential config in the environment (names above, values not shown)"; exit 1; fi
           for f in "$(npm config get globalconfig)" "$(npm config get userconfig)" .npmrc "$HOME/.npmrc"; do
             if [ -f "$f" ] && grep -Ein '_auth|_password|certfile|keyfile' "$f" | cut -d= -f1; then
@@ -289,3 +289,54 @@ jobs:
           done
           echo "::error::npm does not serve $VERSION after 5 minutes. A re-run (while main has not moved) is safe: it skips the publish when npm serves the version."
           exit 1
+
+      # After a stable publish, move dist-tag `next` up to it, so `npm i @shield-agent/kya@next` never installs an
+      # older rc. npm runs the OIDC exchange for `npm dist-tag` only from npm 11.21.0 (npm/cli 1f38f64, #10056)
+      # or 12.2.0 (9741b64, #10038). With an older npm this step prints the owner fix and skips: the run stays
+      # green. It never moves next backwards and never touches latest. A re-run reaches it too (the publish
+      # step skips a version that npm serves).
+      - name: Move next up to the stable (npm 11.21.0 or later)
+        env:
+          NODE_AUTH_TOKEN: ''
+          TAGS_URL: https://registry.npmjs.org/-/package/@shield-agent%2fkya/dist-tags
+        run: |
+          nv=$(npm --version)
+          echo "node $(node --version), npm $nv"
+          case "$VERSION" in *-*) echo "prerelease $VERSION: next is its own dist-tag, nothing to move"; exit 0 ;; esac
+          [ "$DIST" = latest ] || { echo "dist-tag $DIST: nothing to move"; exit 0; }
+          fix="npm dist-tag add @shield-agent/kya@$VERSION next"
+          [[ "$nv" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "::error::npm --version is '$nv', not X.Y.Z"; exit 1; }
+          ma=${BASH_REMATCH[1]}
+          mi=${BASH_REMATCH[2]}
+          if ! { [ "$ma" -gt 12 ] || { [ "$ma" -eq 12 ] && [ "$mi" -ge 2 ]; } || { [ "$ma" -eq 11 ] && [ "$mi" -ge 21 ]; }; }; then
+            echo "::notice::this npm ($nv) has no OIDC for tag changes (it needs 11.21.0 or later, or 12.2.0 or later): next is not moved. Owner fix: $fix"
+            exit 0
+          fi
+          # The registry can serve the old latest for a short time after the publish: read it up to 10 times.
+          for i in $(seq 1 10); do
+            curl -fsS "$TAGS_URL" -o "$RUNNER_TEMP/tags.json" || { echo "::error::cannot read $TAGS_URL"; exit 1; }
+            latest=$(jq -r '.latest // ""' "$RUNNER_TEMP/tags.json")
+            [ "$latest" != "$VERSION" ] || break
+            [ "$i" = 10 ] || sleep 15
+          done
+          next=$(jq -r '.next // ""' "$RUNNER_TEMP/tags.json")
+          echo "latest $latest, next ${next:-none}"
+          [ "$latest" = "$VERSION" ] || { echo "::notice::latest is $latest, not $VERSION, after 10 reads 15 s apart: only the newest stable moves next"; exit 0; }
+          if [ -n "$next" ]; then
+            [ "$next" != "$VERSION" ] || { echo "npm next is already $VERSION"; exit 0; }
+            # Exit 0: next is older than VERSION (move it). 1: newer (keep it). 2: not a SemVer version.
+            rc=0
+            node -e 'const re=/^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$/; const a=re.exec(process.argv[1]), b=re.exec(process.argv[2]); if(!a||!b) process.exit(2); for (let i=1;i<4;i++){ const x=Number(a[i]), y=Number(b[i]); if(x!==y) process.exit(x<y?0:1) } process.exit(a[4]?0:1)' "$next" "$VERSION" || rc=$?
+            case "$rc" in
+              0) ;;
+              1) echo "npm next $next is newer than $VERSION: kept"; exit 0 ;;
+              *) echo "::error::npm next is '$next', not a SemVer version. Owner fix: $fix"; exit 1 ;;
+            esac
+          fi
+          if ! npm dist-tag add "@shield-agent/kya@$VERSION" next; then
+            echo "::error::the dist-tag add failed. Owner task: tick Allow dist-tag on the trusted publisher of @shield-agent/kya at npmjs.com (docs/operations/kya-npm-oidc.md). Owner fix now: $fix"
+            exit 1
+          fi
+          curl -fsS "$TAGS_URL" -o "$RUNNER_TEMP/tags.json" || { echo "::error::cannot read $TAGS_URL"; exit 1; }
+          [ "$(jq -r '.next // ""' "$RUNNER_TEMP/tags.json")" = "$VERSION" ] || { echo "::error::next is still not $VERSION after dist-tag add. Owner fix: $fix"; exit 1; }
+          echo "npm next is now $VERSION"
