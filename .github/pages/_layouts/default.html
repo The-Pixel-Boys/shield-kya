@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {%- seo %}
+  <link rel="stylesheet" href="{{ '/assets/main.css' | relative_url }}">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrapper">
+      <a class="site-title" href="{{ '/' | relative_url }}">{{ site.title }}</a>
+      <nav class="site-nav">
+        <a class="page-link" href="{{ '/' | relative_url }}">Docs</a>
+        <a class="page-link" href="{{ '/certify.html' | relative_url }}">Certify</a>
+        <a class="page-link" href="{{ '/oss-vs-hosted.html' | relative_url }}">OSS and hosted</a>
+        <a class="page-link" href="https://github.com/The-Pixel-Boys/shield-kya">GitHub</a>
+        <a class="page-link" href="https://www.npmjs.com/package/@shield-agent/kya">npm</a>
+        <a class="page-link" href="https://shield-agent.com">shield-agent.com</a>
+      </nav>
+    </div>
+  </header>
+  <main class="page-content">
+    <div class="wrapper">
+      {%- comment -%}
+        The docs link to repo files outside docs/ (for example ../catalog/*.json).
+        Those files are not on this site, so send them to the file on GitHub.
+        jekyll-relative-links has already turned links to other docs into site URLs.
+      {%- endcomment -%}
+      {%- assign repo = "https://github.com/The-Pixel-Boys/shield-kya/blob/main/" -%}
+      {%- if page.dir == "/" -%}
+        {%- assign up1 = 'href="' | append: repo -%}
+        {{ content | replace: 'href="../', up1 }}
+      {%- else -%}
+        {%- assign up2 = 'href="' | append: repo -%}
+        {%- assign up1 = 'href="' | append: repo | append: 'docs/' -%}
+        {{ content | replace: 'href="../../', up2 | replace: 'href="../', up1 }}
+      {%- endif %}
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="wrapper">
+      <p>Shield KYA is open source under the <a href="https://github.com/The-Pixel-Boys/shield-kya/blob/main/LICENSE">MIT license</a>.
+        Source: <a href="https://github.com/The-Pixel-Boys/shield-kya/tree/main/docs">docs/ on GitHub</a>.</p>
+    </div>
+  </footer>
+</body>
+</html>
