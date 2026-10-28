@@ -180,9 +180,15 @@ function localDayKey(ts: string | number): string {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * "Today" / "Yesterday" by the local calendar, not by "now minus 24 hours": a local day can have 23 or 25 hours (a
+ * clock change), and "now - 24h" then lands on the wrong day (just after midnight on the day after spring-forward).
+ */
 function dayLabel(key: string, nowMs: number): string {
   const today = localDayKey(nowMs);
-  const y = localDayKey(nowMs - 86400000);
+  const n = new Date(nowMs);
+  // Noon of the day before: never near a clock change, so it is always on the previous calendar day.
+  const y = localDayKey(new Date(n.getFullYear(), n.getMonth(), n.getDate() - 1, 12).getTime());
   if (key === today) return "Today";
   if (key === y) return "Yesterday";
   return key;
@@ -3155,7 +3161,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">Theme</button>
     <!-- Stop-report action is wired by the live-server POST handler. -->
     <a href="#" id="stop-report">Stop report</a>
-    ${model.liveToken ? '<a href="https://github.com/The-Pixel-Boys/shield-agent" class="star-link" target="_blank" rel="noopener noreferrer">Star on GitHub ↗</a>' : ""}
+    ${model.liveToken ? '<a href="https://github.com/The-Pixel-Boys/shield-kya" class="star-link" target="_blank" rel="noopener noreferrer">Star on GitHub ↗</a>' : ""}
   </footer>
 </aside>
 ${model.liveToken ? '<main data-live-token="1">' : '<main>'}

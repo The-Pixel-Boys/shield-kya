@@ -264,7 +264,7 @@ describe("receipt dashboard layout (hero grid + sidebar)", () => {
     // The live report carries exactly one intentional external reference:
     // the sidebar "Star on GitHub" CTA. Everything else stays loopback/offline.
     const withoutStar = live.replaceAll(
-      "https://github.com/The-Pixel-Boys/shield-agent",
+      "https://github.com/The-Pixel-Boys/shield-kya",
       "",
     );
     expect(withoutStar).not.toMatch(/https?:\/\//);

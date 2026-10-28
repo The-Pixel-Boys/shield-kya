@@ -32,8 +32,6 @@ This page lists which is which, so you can decide what you need.
 | Operator SSO and SCIM | Hosted only. See [hosted-operator-sso.md](hosted-operator-sso.md). |
 | Fail-closed hosted hook mode (beta) | When the workspace cannot answer, the call is denied. See [hosted-hook.md](hosted-hook.md). |
 | Plan limits | Caps on agents, seats and trail visibility depend on your plan. |
-| Drata evidence push | Hosted only, Pro and up. The workspace uploads its signed certify bundle to your Drata Evidence Library once a day, when the evidence changed. Your Drata API key stays encrypted in the workspace. The OSS CLI never holds a Drata key: to use Drata with the OSS CLI only, run `kya certify --sign` and upload the file yourself. |
-| AWS Marketplace billing | Hosted only, and not listed yet. When the listing is live, a hosted workspace can be billed through an AWS Marketplace subscription in place of a card. The OSS CLI is free and has no billing. |
 
 The short version: the open source client is advisory and fails open, apart from the never-list. Enforcement lives on the MCP gate path and on the hosted service, and the hosted service fails closed.
 

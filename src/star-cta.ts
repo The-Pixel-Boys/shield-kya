@@ -10,7 +10,7 @@ import { configDir } from "./config.js";
 import { ensureProjectDir, writeProjectFile } from "./fs-atomic.js";
 import { readTrailSince } from "./trail.js";
 
-export const STAR_REPO_URL = "https://github.com/The-Pixel-Boys/shield-agent";
+export const STAR_REPO_URL = "https://github.com/The-Pixel-Boys/shield-kya";
 export const STAR_CTA_LINE = `Loving KYA? Star the repo - it keeps the OSS report free: ${STAR_REPO_URL}`;
 /** The CTA only fires once the trail has meaningful activity to report. */
 export const STAR_CTA_MIN_EVENTS = 10;

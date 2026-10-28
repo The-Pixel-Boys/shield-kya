@@ -109,6 +109,7 @@ import {
 import { triggerHostedSyncFromEnv } from "./gate/hosted-sync.js";
 import { runGateServe } from "./commands/gate-serve.js";
 import { ensureSupportedNode } from "./node-upgrade.js";
+import { CLI_VERSION } from "./version.js";
 import {
   checkForUpdate,
   formatUpdateBanner,
@@ -129,6 +130,7 @@ Usage:
   kya <command> [options]
 
 Commands:
+  version           Print the package version (same as --version)
   start             ONE LINER: init + wire local MCP + open live report
                     (report runs in the background - returns your terminal)
                     Auto-bootstraps the gateway for third-party MCP servers
@@ -219,6 +221,7 @@ Options (shared):
   --file <path>     import: input file (agt defaults to ~/.claude/agt/audit-log.json)
   --json            Machine-readable output
   --help, -h        Show help
+  --version, -v     Print the package version and exit (also: kya version)
 
 Examples:
   kya start
@@ -290,6 +293,18 @@ export async function runCli(
   cwd: string = process.cwd(),
 ): Promise<number> {
   const parsed = parseArgs(argv);
+
+  // Before help, config and the Node handoff: one line, exit 0, nothing else.
+  if (
+    parsed.command === "version" ||
+    (parsed.command === undefined &&
+      (parsed.flags["version"] !== undefined ||
+        parsed.flags["v"] !== undefined ||
+        parsed.flags["V"] !== undefined))
+  ) {
+    io.log(CLI_VERSION);
+    return 0;
+  }
 
   if (
     !parsed.command ||

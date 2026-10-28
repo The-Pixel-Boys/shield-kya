@@ -40,7 +40,7 @@ describe("maybePrintStarCta", () => {
     const logs: string[] = [];
     expect(maybePrintStarCta(dir, 3, (m) => logs.push(m))).toBe(true);
     expect(logs).toEqual([STAR_CTA_LINE]);
-    expect(logs[0]).toContain("https://github.com/The-Pixel-Boys/shield-agent");
+    expect(logs[0]).toContain("https://github.com/The-Pixel-Boys/shield-kya");
     expect(starCtaShown(dir)).toBe(true);
 
     const second: string[] = [];

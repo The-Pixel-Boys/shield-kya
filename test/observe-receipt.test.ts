@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveConfig } from "../src/config.js";
 import { runWrap } from "../src/commands/wrap.js";
 import { runReceipt } from "../src/commands/receipt.js";
@@ -134,45 +134,59 @@ describe("receipt 3-day window", () => {
     expect(html).not.toContain("this page will refresh");
   });
 
-  it("day buckets use Today and Yesterday labels", () => {
-    const now = Date.now();
-    const html = renderReceiptHtml(
-      buildWindowReceiptModel(
-        [
-          {
-            ts: new Date(now).toISOString(),
-            sessionId: "a",
-            product: "cursor",
-            toolId: "t1",
-            verdict: "ALLOW",
-            reasonCode: "ALLOW",
-            mode: "observe",
-          },
-          {
-            ts: new Date(now - 86400000).toISOString(),
-            sessionId: "b",
-            product: "claude",
-            toolId: "t2",
-            verdict: "ALLOW",
-            reasonCode: "ALLOW",
-            mode: "observe",
-          },
-          {
-            ts: new Date(now - 2 * 86400000).toISOString(),
-            sessionId: "c",
-            product: "grok",
-            toolId: "t3",
-            verdict: "ALLOW",
-            reasonCode: "ALLOW",
-            mode: "observe",
-          },
-        ],
-        3,
-      ),
-    );
-    expect(html).toContain(">Today<");
-    expect(html).toContain(">Yesterday<");
-    expect(html).toMatch(/class="day"[^>]*>\d{4}-\d{2}-\d{2}</);
+  // The day labels follow the LOCAL calendar. The clock and the time zone are fixed, so the result does not depend on
+  // when or where the test runs (it failed in CI just after local midnight next to a 25-hour clock-change day).
+  describe("day buckets use Today and Yesterday labels", () => {
+    const savedTz = process.env.TZ;
+    afterEach(() => {
+      vi.useRealTimers();
+      if (savedTz === undefined) delete process.env.TZ;
+      else process.env.TZ = savedTz;
+    });
+
+    const at = (ts: string, sessionId: string) => ({
+      ts,
+      sessionId,
+      product: "cursor",
+      toolId: "t1",
+      verdict: "ALLOW" as const,
+      reasonCode: "ALLOW",
+      mode: "observe" as const,
+    });
+
+    /** Local noon of the day {@code back} days before the local day of {@code now}. */
+    const localNoon = (now: Date, back: number) =>
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() - back, 12).toISOString();
+
+    const labels = (html: string) => [...html.matchAll(/class="day"[^>]*>([^<]*)</g)].map((m) => m[1]);
+
+    // [time zone, local wall time of "now"]: 23:59 and 00:01 boundaries, and both clock-change weeks of 2026.
+    const cases: Array<[string, string]> = [
+      ["UTC", "2026-10-27T00:01:00Z"],
+      ["UTC", "2026-10-26T23:59:00Z"],
+      ["Europe/Bucharest", "2026-10-26T21:55:00Z"], // 23:55 local, the day after the 25-hour day (CI failure)
+      ["Europe/Bucharest", "2026-10-26T22:01:00Z"], // 00:01 local on 2026-10-27
+      ["Europe/Bucharest", "2026-03-29T21:30:00Z"], // 00:30 local, the day after the 23-hour day
+      ["America/New_York", "2026-11-02T04:59:00Z"], // 23:59 local on the 25-hour day (2026-11-01)
+      ["America/New_York", "2026-11-02T05:01:00Z"], // 00:01 local
+      ["Pacific/Auckland", "2026-09-27T11:01:00Z"], // 00:01 local on 2026-09-28, after spring-forward
+    ];
+
+    it.each(cases)("in %s at %s", (tz, instant) => {
+      process.env.TZ = tz;
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(instant));
+      const now = new Date();
+      const html = renderReceiptHtml(
+        buildWindowReceiptModel(
+          [at(now.toISOString(), "a"), at(localNoon(now, 1), "b"), at(localNoon(now, 2), "c")],
+          3,
+        ),
+      );
+      const twoDaysBack = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2, 12);
+      const key = `${twoDaysBack.getFullYear()}-${String(twoDaysBack.getMonth() + 1).padStart(2, "0")}-${String(twoDaysBack.getDate()).padStart(2, "0")}`;
+      expect(labels(html)).toEqual(["Today", "Yesterday", key]);
+    });
   });
 
   it("detectProduct maps common env", () => {
