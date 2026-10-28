@@ -1001,11 +1001,11 @@ describe("star CTA link", () => {
     const live = renderReceiptHtml(
       buildReceiptModel("s", events, { live: true, liveToken: "tok-abc123" }),
     );
-    expect(live).toContain('href="https://github.com/The-Pixel-Boys/shield-agent"');
+    expect(live).toContain('href="https://github.com/The-Pixel-Boys/shield-kya"');
     expect(live).toContain("Star on GitHub ↗");
     expect(live).toContain('rel="noopener noreferrer"');
     const staticHtml = renderReceiptHtml(buildReceiptModel("s", events, {}));
     expect(staticHtml).not.toContain("Star on GitHub");
-    expect(staticHtml).not.toContain("The-Pixel-Boys/shield-agent");
+    expect(staticHtml).not.toContain("The-Pixel-Boys/shield-kya");
   });
 });

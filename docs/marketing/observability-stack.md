@@ -15,8 +15,8 @@ changes.
 
 ## What KYA records locally
 
-Every gated call lands as one event in the local record, which is
-tamper-evident (it shows if someone changed it):
+Every gated call lands as one event in the local record. The record is a
+plain JSON Lines file and has no built-in check for edits:
 
 - `toolId`: which tool was called (for MCP: `<target>__<tool>`)
 - `verdict`: ALLOW / DENY, with REVIEW flows for human approval

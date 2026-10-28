@@ -9,7 +9,7 @@ This is an alignment guide. It is not an OWASP certification and not a claim tha
 | OWASP rule | Shield |
 |------------|--------|
 | No owner = no approval | Principals are named agents (`AgentId`). Machine API keys are scoped. Unowned shadow installs are outside the plane until registered. |
-| No logging = no production | Evaluate, Hold, and session ingest write to the record (trail). Hosted keeps a hash-chained event log. Opt-in OTLP is policy metrics, not a substitute for the record. |
+| No logging = no production | Evaluate, Hold, and session ingest write to the record (trail). Hosted keeps an event log. Opt-in OTLP is policy metrics, not a substitute for the record. |
 | No scope = no access | Tools are evaluated by id. Never-event tools are DENY. High-stakes tools go to REQUIRE_APPROVE / Hold. |
 | No review = no enterprise deploy | Hosted approvals queue, agent passport, kill/revoke. Periodic org review is still your process. |
 
@@ -60,7 +60,7 @@ Classify by the **highest-risk tool** on the server, not the server marketing na
 | Who can act? | Agent passport / principal list |
 | What was decided? | Evaluate records + Hold approve/reject |
 | Was the write blocked until approve? | `sideEffect=blocked` on wrap / MCP request_approval |
-| Tamper-proof record? | Hosted event log (hash chain) |
+| Tamper-proof record? | Not claimed. Hosted keeps an event log, and KYA has no built-in check that it was not changed. |
 | Policy meters? | OTLP / console metrics (not a billing meter) |
 | Readiness snapshot? | `kya orr run` JSON/MD |
 

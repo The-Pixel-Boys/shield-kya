@@ -8,7 +8,7 @@
 [![X](https://img.shields.io/badge/X-%40coscosmico-000000?logo=x&logoColor=white)](https://x.com/coscosmico)
 
 
-**Audit trail and traceability for AI agents.** See what every coding agent did, block risky calls, ask a human for approval, and prove it with signed trust checks. Every tool call is recorded on a live local dashboard and can be checked against the Agent Trust Baseline. Locally KYA gives warnings, not blocks, and fails open (an error lets the call through). The one exception is a small never-list (a short list of dangerous calls that is always denied). Real enforcement runs on the MCP gate path and the hosted plane (the Shield Agent cloud service). One command. Free forever under MIT.
+**Audit trail and traceability for AI agents.** See what every coding agent did and check each tool call against policy. Every tool call is recorded on a live local dashboard and can be checked against the Agent Trust Baseline. The open source client is advisory and fails open (an error lets the call through), apart from a small never-list of dangerous calls that is always denied. Real blocking and human approval run on the MCP policy path against a hosted workspace (the Shield Agent cloud service). One command. Free forever under MIT.
 
 ```bash
 npm i -g @shield-agent/kya@latest && kya start
@@ -25,13 +25,16 @@ Walkthrough: [how you use it](https://shield-agent.com/how-kya-works#using).
 
 ```bash
 npx @shield-agent/kya@latest --help
+npx @shield-agent/kya@latest --version
 ```
+
+`--version`, `-v`, `-V` and `kya version` print the installed package version on one line and exit `0`. They read the local package only: no network, no banner, no config.
 
 Requires **Node.js 22+** (`engines.node: >=22`); 24 is the recommended line. Node 20 and 21 are unsupported but work: the CLI prints a one-line warning. Node 18 and older are unsupported and some features break there (HTTP `serve-mcp`, the gateway OTLP receiver). Below 22 the CLI offers to install Node 24 for you (via volta / fnm / nvm / brew), reinstall itself, and finish the command. If you decline, it just prints the warning and continues. `kya hook` never warns or prompts.
 
 It works with any host that speaks MCP or OpenAPI. Vertical packs are optional. Shield is the only policy decision point (the one place that decides Allow or Deny). This gate never auto-approves an irreversible side effect (a change you cannot undo).
 
-If `KYA_API_KEY` is empty against an authenticated plane, network commands exit non-zero. `eval-tool`, `wrap`, and `invoke` exit `0` on ALLOW, `4` on REQUIRE_APPROVE, and `1` on DENY or unknown, so a line like `eval-tool && write` cannot skip the gate.
+If `KYA_API_KEY` is empty against an authenticated plane, network commands exit non-zero. `eval-tool`, `wrap`, and `invoke` exit `0` on ALLOW, `4` on REQUIRE_APPROVE, and `1` on DENY or unknown, so a line like `eval-tool && write` cannot skip the gate. `wrap` runs in observe mode by default, so it exits `0` on REQUIRE_APPROVE too. Set `KYA_HOLD=1` or pass `--hold` to get the `4`.
 
 `--offline` runs sample evaluate without a paid cloud (useful for DENY and REQUIRE_APPROVE demos). Creating an agent is itself a tool: offline, `kya.agent.register` comes back REQUIRE_APPROVE. Allow, break-glass, and approve mint modes (the modes that create approvals) live on the control plane.
 
@@ -92,7 +95,7 @@ kya connect qwen --project      # project scope instead of global
 kya connect kiro --force        # overwrite an existing shield-kya entry
 ```
 
-Connect merges. It never rewrites a host config it cannot parse, and it keeps your other servers and keys. Supported hosts: `claude`, `grok`, `opencode`, `kilo`, `kiro`, `qwen`, `kimi`, `mastracode`, `amp`, `copilot`, `cursor`. Each wires `serve-mcp --stdio` with `KYA_OFFLINE=1` so the gate starts keyless (no API key). Set `KYA_API_KEY` in the host env when you point at an authenticated plane.
+Connect merges. It never rewrites a host config it cannot parse, and it keeps your other servers and keys. Supported hosts: `claude`, `codex`, `grok`, `opencode`, `kilo`, `kiro`, `qwen`, `kimi`, `mastracode`, `amp`, `copilot`, `cursor`. Each wires `serve-mcp --stdio` with `KYA_OFFLINE=1` so the gate starts keyless (no API key). Set `KYA_API_KEY` in the host env when you point at an authenticated plane.
 
 Hosts without a `connect` target still work: `kya wrap --offline -- <agent command>` puts the same evaluate gate in front of any CLI. Per-host recipes with verify steps and troubleshooting live in [docs/hosts/](docs/hosts/).
 
@@ -171,6 +174,8 @@ kya gate run      # generate the gateway config, start the listener detached
 kya connect claude --gate   # point the host at the gateway (server key shield-kya-gate)
 kya gate doctor   # binary, config, listener health, loopback-only posture
 ```
+
+If another process already holds a default port (`port` 3930 or `otlpPort` 3931), `kya gate run` stops with `EADDRINUSE`. Set free ports in `.kya/gateways.json` (`port` and `otlpPort`), then run it again.
 
 `kya gate stop` stops the supervisor and the binary with it. Honest notes: `kya gate setup` (and `kya start`'s auto-bootstrap, only when it found servers to govern) downloads the pinned gateway binary from our releases. Nothing else downloads anything. The only other network use is the opt-in anonymous usage stats in [docs/telemetry.md](docs/telemetry.md), off unless you say yes. `run` never downloads. Observe mode means allowed calls are recorded, not blocked. The deny set above is the only hard stop, and plane enforcement stays with `kya.policy_evaluate`. `kya connect <host> --gate` covers the same hosts as plain `connect`. Grok gets a `[mcp_servers.shield-kya-gate]` url table in its config.toml (Grok supports remote MCP servers over HTTP). Per-server tiers and recipes: [docs/mcp-servers.md](docs/mcp-servers.md).
 
@@ -265,7 +270,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.32.6", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.32.7", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -307,7 +312,7 @@ Offline evaluate by default (no network, no hosted plane); an explicit config us
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.32.6 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.32.7 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -318,7 +323,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.32.6 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.32.7 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
