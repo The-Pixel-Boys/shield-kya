@@ -1,0 +1,29 @@
+# Jekyll config for https://docs.shield-agent.com
+# The workflow .github/workflows/docs-pages.yml copies docs/ and this folder
+# into one build folder. The site files stay under .github/ because the
+# monorepo mirror sync keeps .github and replaces docs/ (rsync --delete).
+title: Shield KYA docs
+description: User documentation for Shield Know Your Agent (KYA), the open-source gate and record for AI coding agents.
+url: https://docs.shield-agent.com
+baseurl: ""
+theme: minima
+markdown: kramdown
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap
+  - jekyll-relative-links
+  - jekyll-optional-front-matter
+  - jekyll-titles-from-headings
+optional_front_matter:
+  remove_originals: true
+relative_links:
+  enabled: true
+  collections: false
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+# Draft social posts, not user docs.
+exclude:
+  - marketing/x-series-mcp-sdk.md

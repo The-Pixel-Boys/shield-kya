@@ -54,8 +54,8 @@ one machine `check` (13 kinds) or an `attest` escape hatch. Schema:
 ```json
 {
   "id": "agent-trust-baseline",
-  "version": "0.1.0",
-  "updated": "2026-09-18",
+  "version": "0.1.1",
+  "updated": "2026-10-18",
   "domains": ["data-privacy", "security", "safety", "reliability", "accountability", "society"],
   "requirements": [
     { "id": "DP-01", "domain": "data-privacy", "title": "…", "text": "…",
@@ -139,7 +139,7 @@ artifact. Secret-shaped text is refused.
   "version": 1,
   "generatedAt": "ISO-8601 UTC",
   "agent": { "agentId?": "string", "agentName?": "string", "host?": "ide|runtime", "product?": "string" },
-  "catalog": { "id": "agent-trust-baseline", "version": "0.1.0" },
+  "catalog": { "id": "agent-trust-baseline", "version": "0.1.1" },
   "window": { "days": 30, "since": "ISO", "until": "ISO" },
   "trail": { "eventCount": 0, "digest": "sha256 hex of canonicalJson(events-in-window array)",
              "verdictMix": { "ALLOW": 0, "DENY": 0, "REQUIRE_APPROVE": 0 },
