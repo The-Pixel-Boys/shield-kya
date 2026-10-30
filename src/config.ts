@@ -13,6 +13,8 @@ export interface KyaFileConfig {
   readonly agentName?: string;
   /** Gate mode pin: honored only when exactly "hold" or "offline". */
   readonly gateMode?: string;
+  /** true turns off the one-line hosted CTAs (kya certify, kya receipt) in this project. */
+  readonly ctaOptOut?: boolean;
 }
 
 export type GateMode = "observe" | "hold" | "offline";

@@ -41,6 +41,8 @@ export interface TrailEvent {
   readonly reasonCode: string;
   readonly mode: "observe" | "hold" | "offline";
   readonly neverEvent?: boolean;
+  /** Never-list input rule id that denied the call (an id from never-list-input.ts, never command text or a path). */
+  readonly neverRule?: string;
   /** Source format on imported (host "import") events. */
   readonly importFormat?: TrailImportFormat;
   readonly packId?: string;
@@ -211,6 +213,7 @@ function parseTrailEvent(raw: unknown): TrailEvent | undefined {
       : {}),
     ...(typeof e.project === "string" ? { project: e.project } : {}),
     ...(typeof e.neverEvent === "boolean" ? { neverEvent: e.neverEvent } : {}),
+    ...(typeof e.neverRule === "string" && /^[a-z0-9-]{1,64}$/.test(e.neverRule) ? { neverRule: e.neverRule } : {}),
     ...(typeof e.importFormat === "string" && TRAIL_IMPORT_FORMATS.has(e.importFormat)
       ? { importFormat: e.importFormat as TrailImportFormat }
       : {}),
@@ -262,6 +265,18 @@ function readTrailText(path: string): string {
   // First line is partial (possibly mid-multibyte) - drop it.
   const nl = tail.indexOf("\n");
   return nl === -1 ? "" : tail.slice(nl + 1);
+}
+
+/** True when the global or legacy trail file is over the read cap, so a report shows only its newest part. */
+export function trailTruncated(cwd: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  for (const path of [globalTrailPath(env), legacyTrailPath(cwd)]) {
+    try {
+      if (statSync(path).size > MAX_TRAIL_BYTES) return true;
+    } catch {
+      /* missing file: not truncated */
+    }
+  }
+  return false;
 }
 
 function readTrailFile(path: string): TrailEvent[] {

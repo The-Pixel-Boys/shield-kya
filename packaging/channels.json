@@ -174,12 +174,14 @@
     {
       "id": "pypi",
       "kind": "PyPI shield-kya (Python shim)",
-      "where": "pypi.org/project/shield-kya (own version line, published from the public repo's kya-python/)",
-      "update": "manual-owner",
-      "by": "owner (held)",
-      "files": ["sdks/kya-python/pyproject.toml"],
+      "where": "pypi.org/project/shield-kya (version lockstep with package.json: pyproject.toml and __version__ in sdks/kya-python)",
+      "update": "auto-pipeline",
+      "by": "maintainers' release pipeline: pypi-publish.yml on the kya-v* tag (GitHub Actions, Trusted Publishing), after npm serves the version",
+      "files": ["sdks/kya-python/pyproject.toml", "sdks/kya-python/shield_kya/__init__.py"],
       "probe": { "type": "json", "url": "https://pypi.org/pypi/shield-kya/json", "path": "info.version" },
-      "action": "Held by the owner, not published (pypi.org JSON 404). The shim has its own version line, not the CLI's. On publish: set [project].description to channel-copy variants.python (sdks/kya/packaging/README.md, Copy and screenshot parity) and add a publish step + probe."
+      "lockstep": { "file": "sdks/kya-python/pyproject.toml", "pattern": "^version = \"([^\"]+)\"" },
+      "grace_hours": 3,
+      "note": "Watched only at a tag whose pyproject.toml carries the tag version. kya-v0.32.7 and older tags carry 0.17.0 and print UNRESOLVED. check-version-pins keeps the Python version equal to package.json on every main commit, so kya-v0.32.8 and later enforce."
     },
     {
       "id": "vscode-marketplace",

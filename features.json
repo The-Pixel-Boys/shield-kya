@@ -1,0 +1,1632 @@
+{
+  "about": "Registry of every documented kya feature. Checked by scripts/check-feature-coverage.mjs (rules R1 to R7). Row cli entries: an entry starting with `kya ` is a command, an entry starting with `-` is a flag, any other entry is free text that no rule parses (env vars, install lines). docs: oss and both rows cite package paths (README.md, docs/x.md); hosted rows cite public https URLs. tests: integration or e2e test files that name the feature (its id or one of its cli entries). Package paths, or ../../ paths for hosted tests in the monorepo. A stable or beta row needs at least one tests path that exists and names it. status: stable, beta, planned or flagged (flagged = not live). plan: oss, hosted or both. knownGaps lists today's gaps, each with a reason and the step that clears it.",
+  "features": [
+    {
+      "id": "kya-version",
+      "name": "Print version",
+      "summary": "Prints the installed kya version and exits.",
+      "cli": [
+        "kya version",
+        "--version",
+        "-v",
+        "-V"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [
+        "test/cli-version.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-start",
+      "name": "One-line start",
+      "summary": "Wires the local MCP gate into your coding host and opens the live report in the background.",
+      "cli": [
+        "kya start",
+        "--no-open",
+        "--force",
+        "--no-gate"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [
+        "test/start.test.ts",
+        "test/start-gate.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-stop",
+      "name": "Stop report server",
+      "summary": "Stops the background report server that kya start began.",
+      "cli": [
+        "kya stop",
+        "--all"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [
+        "test/daemon-version.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-init",
+      "name": "Scaffold config",
+      "summary": "Creates the .kya config folder with sample tools and an env example.",
+      "cli": [
+        "kya init",
+        "--force"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [
+        "test/init.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-connect",
+      "name": "Wire a coding host",
+      "summary": "Writes the KYA MCP server into the config of one coding host (12 hosts).",
+      "cli": [
+        "kya connect",
+        "--project",
+        "--force"
+      ],
+      "docs": [
+        "README.md",
+        "docs/hosts/claude.md"
+      ],
+      "tests": [
+        "test/connect.test.ts",
+        "test/connect-mcp.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-connect-hooks",
+      "name": "Wire PreToolUse hook",
+      "summary": "Writes the PreToolUse hook for claude, grok or kimi.",
+      "cli": [
+        "kya connect",
+        "--hooks"
+      ],
+      "docs": [
+        "README.md",
+        "docs/hosts/claude.md"
+      ],
+      "tests": [
+        "test/connect.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-connect-gate",
+      "name": "Point host at gateway",
+      "summary": "Points a coding host at the local kya gateway.",
+      "cli": [
+        "kya connect",
+        "--gate"
+      ],
+      "docs": [
+        "README.md",
+        "docs/mcp-servers.md"
+      ],
+      "tests": [
+        "test/connect-gate.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-update",
+      "name": "Self-update and version banner",
+      "summary": "Updates kya to the latest npm version. kya start warns when a newer release exists.",
+      "cli": [
+        "kya update",
+        "--no-update-check",
+        "KYA_UPDATE_CHECK"
+      ],
+      "docs": [
+        "README.md",
+        "docs/hosts/codex.md"
+      ],
+      "tests": [
+        "test/update-check.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-node",
+      "name": "Node 22 check and handoff",
+      "summary": "Checks the Node version and hands off to a supported Node 22 or newer.",
+      "cli": [],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [
+        "test/node-upgrade.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-brew",
+      "name": "Homebrew install",
+      "summary": "Installs kya with Homebrew from The-Pixel-Boys tap.",
+      "cli": [
+        "brew install The-Pixel-Boys/tap/shield-kya"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-scoop",
+      "name": "Scoop install",
+      "summary": "Installs kya on Windows with Scoop.",
+      "cli": [
+        "scoop install shield-kya"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-team-init",
+      "name": "Team rollout: commit plugin pin",
+      "summary": "Adds a tag-pinned plugin marketplace and an enabled plugin to the project settings for everyone who opens the repo.",
+      "cli": [
+        "kya team init",
+        "--dry-run"
+      ],
+      "docs": [
+        "README.md",
+        "docs/team-rollout.md"
+      ],
+      "tests": [
+        "test/team.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-team-managed",
+      "name": "Managed-settings JSON for admins",
+      "summary": "Prints the managed-settings JSON an administrator deploys.",
+      "cli": [
+        "kya team managed-settings"
+      ],
+      "docs": [
+        "README.md",
+        "docs/team-rollout.md"
+      ],
+      "tests": [
+        "test/team.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-telemetry",
+      "name": "Opt-in usage stats",
+      "summary": "Anonymous usage stats, off by default. Status, on, off, show and reset.",
+      "cli": [
+        "kya telemetry",
+        "--purge"
+      ],
+      "docs": [
+        "README.md",
+        "docs/telemetry.md"
+      ],
+      "tests": [
+        "test/telemetry.test.ts",
+        "test/telemetry-e2e.test.ts",
+        "../../app/src/test/java/com/shieldagent/app/KyaOssTelemetryE2eIT.java"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-trail",
+      "name": "Global activity record",
+      "summary": "Keeps a global activity log in the KYA home folder. Reports read the last 1 MB of it.",
+      "cli": [
+        "KYA_HOME"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [
+        "test/global-trail.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-receipt",
+      "name": "Activity report",
+      "summary": "Writes the activity report as HTML, JSON or Markdown for the last few days or one session.",
+      "cli": [
+        "kya receipt",
+        "--open",
+        "--days",
+        "--session",
+        "--q",
+        "--json",
+        "--out"
+      ],
+      "docs": [
+        "README.md",
+        "docs/report-design.md"
+      ],
+      "tests": [
+        "test/receipt-render.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-receipt-share",
+      "name": "Redacted share link",
+      "summary": "Publishes a redacted summary of the report and prints a public link.",
+      "cli": [
+        "kya receipt",
+        "--share",
+        "--share-url",
+        "--share-retries",
+        "KYA_SHARE_URL"
+      ],
+      "docs": [
+        "README.md",
+        "docs/oss-vs-hosted.md"
+      ],
+      "tests": [
+        "test/receipt-share.test.ts",
+        "../../app/src/test/java/com/shieldagent/app/ShareToHostedE2eIT.java"
+      ],
+      "status": "beta",
+      "plan": "both"
+    },
+    {
+      "id": "kya-receipt-search",
+      "name": "Natural-language search in report",
+      "summary": "Search box in the activity report.",
+      "cli": [],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-diff-preview",
+      "name": "Redacted change previews",
+      "summary": "Shows clipped, redacted change previews on the report. Set KYA_DIFF_PREVIEW=0 to turn them off.",
+      "cli": [
+        "KYA_DIFF_PREVIEW"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [
+        "test/diff-preview.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-dash",
+      "name": "Terminal desk",
+      "summary": "Terminal view with free panes. Actions work on a TTY; --once prints one frame for CI.",
+      "cli": [
+        "kya dash",
+        "--once",
+        "--pane"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [
+        "test/dash.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-showback",
+      "name": "Cost showback",
+      "summary": "Observe-only cost showback inside the activity report.",
+      "cli": [],
+      "docs": [
+        "README.md",
+        "docs/certify.md"
+      ],
+      "tests": [],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-hook-never-list",
+      "name": "Never-list block",
+      "summary": "Blocks never-list tools in the PreToolUse hook. kya hook exits 2 on DENY.",
+      "cli": [
+        "kya hook"
+      ],
+      "docs": [
+        "README.md",
+        "docs/hosted-hook.md"
+      ],
+      "tests": [
+        "test/hook.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-hook-advisory",
+      "name": "Advisory hook record",
+      "summary": "Records ALLOW and REQUIRE_APPROVE decisions in the hook. The call proceeds.",
+      "cli": [
+        "kya hook"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [
+        "test/hook.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-hook-strict",
+      "name": "Strict hook mode",
+      "summary": "Strict mode denies advisory decisions in the hook.",
+      "cli": [
+        "kya hook",
+        "--strict"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [
+        "test/hook.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-hook-hosted",
+      "name": "Hosted hook",
+      "summary": "Evaluates each Claude Code tool call on the hosted plane. Beta.",
+      "cli": [
+        "kya hook",
+        "--fail-closed",
+        "--plane-config",
+        "--plane-shadow",
+        "--plane-budget-ms",
+        "--plane-allow-http-loopback",
+        "kya connect",
+        "--hosted",
+        "--hooks"
+      ],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-hook"
+      ],
+      "tests": [
+        "test/hosted-hook.test.ts",
+        "test/hosted-hook-net.test.ts",
+        "../../app/src/test/java/com/shieldagent/app/KyaHostedHookE2eIT.java"
+      ],
+      "status": "beta",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-serve-mcp",
+      "name": "Local MCP gate server",
+      "summary": "Serves the local MCP gate over HTTP, or over stdio for hosts.",
+      "cli": [
+        "kya serve-mcp",
+        "--stdio",
+        "--port"
+      ],
+      "docs": [
+        "README.md",
+        "docs/mcp-servers.md"
+      ],
+      "tests": [
+        "test/serve-mcp.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-gate",
+      "name": "Local MCP gateway",
+      "summary": "Governs and audits tool calls to any MCP server through a local gateway.",
+      "cli": [
+        "kya gate",
+        "kya gate init",
+        "kya gate setup",
+        "kya gate run",
+        "kya gate stop",
+        "kya gate status",
+        "kya gate doctor"
+      ],
+      "docs": [
+        "README.md",
+        "docs/mcp-servers.md"
+      ],
+      "tests": [
+        "test/gate-lifecycle.test.ts",
+        "test/gate-config.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-gate-deny",
+      "name": "Destructive names and ADMIN tier denied",
+      "summary": "Gateway policy denies destructive tool names and the ADMIN tier.",
+      "cli": [],
+      "docs": [
+        "README.md",
+        "docs/mcp-servers.md"
+      ],
+      "tests": [],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-gate-import",
+      "name": "Auto-import of host MCP servers",
+      "summary": "kya start imports MCP servers found in host configs into the gateway. Turn off with --no-gate or KYA_GATE=off.",
+      "cli": [
+        "kya start",
+        "--no-gate",
+        "KYA_GATE"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [
+        "test/start-gate.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-wrap",
+      "name": "Evaluate and record a command",
+      "summary": "Evaluates a command and records it in the trail. It never runs the command.",
+      "cli": [
+        "kya wrap",
+        "--offline",
+        "--hold",
+        "--json",
+        "--work-item",
+        "--tool-id",
+        "--irreversible"
+      ],
+      "docs": [
+        "README.md",
+        "docs/host-recipe.md"
+      ],
+      "tests": [
+        "test/wrap.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-eval-tool",
+      "name": "Policy evaluate, exit codes",
+      "summary": "Evaluates a tool call against policy and exits with a code per verdict.",
+      "cli": [
+        "kya eval-tool",
+        "--offline",
+        "--tool-id",
+        "--irreversible",
+        "--args",
+        "--session-risk",
+        "--risk",
+        "--approval-status",
+        "--sandbox-id"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [
+        "test/eval-tool.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-orr",
+      "name": "Read-only ORR board",
+      "summary": "Builds a read-only ORR board from producers and writes a report. It is not a second policy point.",
+      "cli": [
+        "kya orr run",
+        "--path",
+        "--producer",
+        "--out",
+        "--skip-optional-producers",
+        "--agentshield-json",
+        "--commit-sha",
+        "--name",
+        "--rubric",
+        "--disable-category",
+        "--usage",
+        "--scorecard",
+        "--quiet",
+        "--json-stdout",
+        "--fail-on",
+        "--format"
+      ],
+      "docs": [
+        "README.md",
+        "docs/owasp-mcp-governance.md"
+      ],
+      "tests": [
+        "test/orr.test.ts",
+        "test/orr-agentshield.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-certify",
+      "name": "Trust baseline gap report",
+      "summary": "Lists gaps in the Agent Trust Baseline from local evidence.",
+      "cli": [
+        "kya certify",
+        "--window",
+        "--fail-on",
+        "--open",
+        "--json-stdout",
+        "--catalog",
+        "--out",
+        "--format",
+        "--quiet"
+      ],
+      "docs": [
+        "README.md",
+        "docs/certify.md"
+      ],
+      "tests": [
+        "test/certify.test.ts",
+        "test/certify-cli.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-certify-attest",
+      "name": "Local attestation",
+      "summary": "Records a local attestation for one requirement ID.",
+      "cli": [
+        "kya certify",
+        "--attest",
+        "--text"
+      ],
+      "docs": [
+        "README.md",
+        "docs/certify.md"
+      ],
+      "tests": [
+        "test/certify-cli.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-certify-sign",
+      "name": "Self-signed evidence bundle",
+      "summary": "Writes a self-signed evidence bundle. It shows integrity and key continuity, not identity.",
+      "cli": [
+        "kya certify",
+        "--sign"
+      ],
+      "docs": [
+        "README.md",
+        "docs/certify.md"
+      ],
+      "tests": [
+        "test/certify-sign.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-certify-eu",
+      "name": "EU AI Act mapping",
+      "summary": "Maps certify evidence to EU AI Act articles.",
+      "cli": [],
+      "docs": [
+        "README.md",
+        "docs/certify-eu-ai-act.md"
+      ],
+      "tests": [
+        "test/certify-eu-ai-act.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-import",
+      "name": "Import foreign traces",
+      "summary": "Imports traces from other tools into the local trail so the report and certify can read them.",
+      "cli": [
+        "kya import",
+        "--from",
+        "--file"
+      ],
+      "docs": [
+        "README.md",
+        "docs/import-agt.md",
+        "docs/import-adr-sensor.md",
+        "docs/import-openshell.md"
+      ],
+      "tests": [
+        "test/import-agt.test.ts",
+        "test/import-adr-sensor.test.ts",
+        "test/import-openshell.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-investigate",
+      "name": "Detections and fix briefs",
+      "summary": "Finds detections in the trail, groups them into incidents and writes fix briefs for coding agents.",
+      "cli": [
+        "kya investigate",
+        "--json"
+      ],
+      "docs": [
+        "README.md",
+        "docs/import-agt.md"
+      ],
+      "tests": [
+        "test/import-investigate-cli.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-discover",
+      "name": "Endpoint discovery",
+      "summary": "Scans this endpoint for AI agents, IDEs, runtimes and MCP servers.",
+      "cli": [
+        "kya discover",
+        "--json",
+        "--diff",
+        "--push",
+        "--file"
+      ],
+      "docs": [
+        "README.md",
+        "docs/discovery.md"
+      ],
+      "tests": [
+        "test/discover-cli.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-sandbox",
+      "name": "Opt-in Firecracker wrap",
+      "summary": "Opt-in sandbox that runs a command inside a Firecracker VM. Not an MCP tool.",
+      "cli": [
+        "kya sandbox",
+        "--sandbox",
+        "--sandbox-id",
+        "--cmd",
+        "--path",
+        "--offline",
+        "KYA_SANDBOX"
+      ],
+      "docs": [
+        "README.md",
+        "docs/sandbox.md"
+      ],
+      "tests": [
+        "test/sandbox.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-alerts",
+      "name": "Alert webhooks",
+      "summary": "Sends decision alerts to webhooks set in the config file.",
+      "cli": [],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-otlp",
+      "name": "OTLP export",
+      "summary": "Exports metrics to an OpenTelemetry collector through the gateway OTLP receiver.",
+      "cli": [
+        "otlpPort"
+      ],
+      "docs": [
+        "README.md",
+        "docs/otlp.md"
+      ],
+      "tests": [
+        "test/gate-config-gen.test.ts"
+      ],
+      "status": "beta",
+      "plan": "both"
+    },
+    {
+      "id": "kya-sdk-shims",
+      "name": "In-process SDK shims",
+      "summary": "Adapters for in-process agent SDKs: Claude Agent SDK, LangGraph, Mastra, OpenAI Agents and Vercel AI.",
+      "cli": [],
+      "docs": [
+        "README.md",
+        "docs/sdk-integrations.md"
+      ],
+      "tests": [],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-python",
+      "name": "Python framework shim",
+      "summary": "Python package shield-kya that gives agent frameworks the KYA checks.",
+      "cli": [
+        "pip install shield-kya"
+      ],
+      "docs": [
+        "README.md",
+        "docs/sdk-integrations.md"
+      ],
+      "tests": [],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-plugin-claude",
+      "name": "Claude Code plugin",
+      "summary": "Claude Code plugin for kya, installed from the shield-kya marketplace.",
+      "cli": [
+        "/plugin install kya@shield-kya"
+      ],
+      "docs": [
+        "README.md",
+        "docs/hosts/claude-plugin.md"
+      ],
+      "tests": [
+        "test/claude-plugin.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-plugin-codex",
+      "name": "Codex plugin",
+      "summary": "Codex plugin for kya.",
+      "cli": [
+        "codex plugin add kya@shield-kya"
+      ],
+      "docs": [
+        "README.md",
+        "docs/hosts/codex.md"
+      ],
+      "tests": [
+        "test/codex-plugin.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-plugin-copilot",
+      "name": "Copilot CLI plugin",
+      "summary": "Copilot CLI plugin for kya.",
+      "cli": [
+        "copilot plugin install kya@shield-kya"
+      ],
+      "docs": [
+        "README.md",
+        "docs/hosts/copilot.md"
+      ],
+      "tests": [
+        "test/copilot-plugin.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-extension-gemini",
+      "name": "Gemini CLI extension",
+      "summary": "Gemini CLI extension for kya.",
+      "cli": [
+        "gemini extensions install"
+      ],
+      "docs": [
+        "README.md",
+        "docs/hosts/gemini.md"
+      ],
+      "tests": [
+        "test/gemini-extension.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-plugin-cursor",
+      "name": "Cursor plugin",
+      "summary": "Cursor plugin manifest for kya.",
+      "cli": [],
+      "docs": [
+        "README.md",
+        "docs/hosts/cursor.md"
+      ],
+      "tests": [
+        "test/cursor-plugin.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-vscode",
+      "name": "VS Code extension",
+      "summary": "VS Code extension for kya, published on the Visual Studio Marketplace.",
+      "cli": [],
+      "docs": [
+        "README.md",
+        "vscode/README.md",
+        "docs/hosts/vscode.md"
+      ],
+      "tests": [],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-action",
+      "name": "GitHub Action kya-certify",
+      "summary": "GitHub Action that runs kya certify in a workflow.",
+      "cli": [
+        "uses: The-Pixel-Boys/kya-action"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-devcontainer",
+      "name": "Dev Container feature",
+      "summary": "Dev Container feature for kya. Not published yet.",
+      "cli": [],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [],
+      "status": "planned",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-register-agent",
+      "name": "Register an agent",
+      "summary": "Registers an agent on the hosted plane. A human mints the agent.",
+      "cli": [
+        "kya register-agent",
+        "--name",
+        "--version-hash",
+        "--break-glass-reason"
+      ],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-hook"
+      ],
+      "tests": [
+        "test/register-agent.test.ts"
+      ],
+      "status": "stable",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-invoke",
+      "name": "Authorize after APPROVED",
+      "summary": "Authorizes a call on the hosted plane after it is allowed or approved. It never runs the write.",
+      "cli": [
+        "kya invoke",
+        "--tool-id",
+        "--args-hash",
+        "--irreversible",
+        "--risk",
+        "--action-class",
+        "--offline"
+      ],
+      "docs": [],
+      "tests": [
+        "test/cli.test.ts"
+      ],
+      "status": "stable",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-approve",
+      "name": "Human approve or reject",
+      "summary": "Lets a person approve or reject an approval ID on the hosted plane.",
+      "cli": [
+        "kya approve",
+        "kya reject",
+        "--id"
+      ],
+      "docs": [],
+      "tests": [
+        "test/ops.test.ts"
+      ],
+      "status": "stable",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-approvals",
+      "name": "Human approval queue",
+      "summary": "Lists the human approval queue on the hosted plane.",
+      "cli": [
+        "kya approvals"
+      ],
+      "docs": [],
+      "tests": [
+        "test/ops.test.ts"
+      ],
+      "status": "stable",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-agents",
+      "name": "List agents, show one, passport",
+      "summary": "Lists registered agents, shows one agent and prints its observational passport JSON.",
+      "cli": [
+        "kya agents",
+        "kya agent",
+        "kya passport",
+        "--id"
+      ],
+      "docs": [],
+      "tests": [
+        "test/ops.test.ts"
+      ],
+      "status": "stable",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-kill",
+      "name": "Pause an agent",
+      "summary": "Pauses one agent on the hosted plane.",
+      "cli": [
+        "kya kill",
+        "--id"
+      ],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-hook"
+      ],
+      "tests": [
+        "test/ops.test.ts"
+      ],
+      "status": "stable",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-shrink",
+      "name": "Drop session clearance",
+      "summary": "Lowers the clearance of one observed session on the hosted plane.",
+      "cli": [
+        "kya shrink",
+        "--id",
+        "--to"
+      ],
+      "docs": [],
+      "tests": [
+        "test/ops.test.ts"
+      ],
+      "status": "stable",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-sessions",
+      "name": "Observed sessions",
+      "summary": "Lists observed sessions on the hosted plane.",
+      "cli": [
+        "kya sessions"
+      ],
+      "docs": [],
+      "tests": [
+        "test/ops.test.ts"
+      ],
+      "status": "stable",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-hold",
+      "name": "Org Hold",
+      "summary": "Holds a call for an org approval path instead of observing it.",
+      "cli": [
+        "KYA_HOLD",
+        "--hold"
+      ],
+      "docs": [
+        "README.md",
+        "docs/certify.md"
+      ],
+      "tests": [
+        "test/certify.test.ts"
+      ],
+      "status": "stable",
+      "plan": "both"
+    },
+    {
+      "id": "kya-plane-auth",
+      "name": "Plane connection and keys",
+      "summary": "Connects the CLI to the hosted plane with an API key, a base URL, a host and an agent ID.",
+      "cli": [
+        "KYA_API_KEY",
+        "KYA_BASE_URL",
+        "KYA_HOST",
+        "--base-url",
+        "--api-key",
+        "--host",
+        "--agent-id"
+      ],
+      "docs": [
+        "README.md"
+      ],
+      "tests": [
+        "test/config.test.ts"
+      ],
+      "status": "stable",
+      "plan": "both"
+    },
+    {
+      "id": "kya-login",
+      "name": "Hosted login (device code)",
+      "summary": "Links this machine to the hosted console with a device code. Saves a full-workspace key with mode 0600 in ~/.kya/hosted-credentials.json.",
+      "cli": [
+        "kya login",
+        "--base-url"
+      ],
+      "docs": [
+        "README.md",
+        "docs/login.md"
+      ],
+      "tests": [
+        "test/login-cli-e2e.test.ts",
+        "test/login-device-flow.test.ts"
+      ],
+      "status": "beta",
+      "plan": "both"
+    },
+    {
+      "id": "kya-logout",
+      "name": "Sign out on this machine",
+      "summary": "Deletes the saved hosted key file on this machine. The key stays active on the server until revoked.",
+      "cli": [
+        "kya logout"
+      ],
+      "docs": [
+        "README.md",
+        "docs/login.md"
+      ],
+      "tests": [
+        "test/login-cli-e2e.test.ts"
+      ],
+      "status": "beta",
+      "plan": "both"
+    },
+    {
+      "id": "kya-cta",
+      "name": "Hosted calls to action",
+      "summary": "One line, at most once a day, after kya certify (gaps) and kya receipt. Silent in CI, non-TTY, KYA_QUIET, KYA_CTA=0 and config opt-out.",
+      "cli": [
+        "KYA_QUIET",
+        "KYA_CTA"
+      ],
+      "docs": [
+        "README.md",
+        "docs/login.md"
+      ],
+      "tests": [
+        "test/cta.test.ts"
+      ],
+      "status": "beta",
+      "plan": "both"
+    },
+    {
+      "id": "kya-incidents",
+      "name": "Incidents and detections (console)",
+      "summary": "Incident and detection screens in the hosted console.",
+      "cli": [],
+      "docs": [],
+      "tests": [],
+      "status": "beta",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-gateway-console",
+      "name": "Gateway console",
+      "summary": "Gateway screens in the hosted console: listeners, routes, backends, policies and playground.",
+      "cli": [],
+      "docs": [],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/KyaGatewayConsoleE2eIT.java"
+      ],
+      "status": "beta",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-endpoints",
+      "name": "Endpoint inventory (console)",
+      "summary": "Endpoint inventory screens in the hosted console.",
+      "cli": [],
+      "docs": [],
+      "tests": [],
+      "status": "beta",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-mcp-assets",
+      "name": "MCP asset inventory (console)",
+      "summary": "MCP asset inventory screens in the hosted console.",
+      "cli": [],
+      "docs": [],
+      "tests": [],
+      "status": "beta",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-notify-slack",
+      "name": "Slack decision alerts",
+      "summary": "Sends decision alerts to Slack from the hosted plane.",
+      "cli": [],
+      "docs": [],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/SlackNotifyE2eIT.java"
+      ],
+      "status": "beta",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-notify-teams",
+      "name": "Teams decision alerts (bot)",
+      "summary": "Sends decision alerts to Microsoft Teams through a bot. Off by default.",
+      "cli": [],
+      "docs": [],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/TeamsNotifyE2eIT.java"
+      ],
+      "status": "beta",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-shared-report",
+      "name": "Shared report page",
+      "summary": "A report page shared from the hosted console.",
+      "cli": [],
+      "docs": [],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/ShareToHostedE2eIT.java"
+      ],
+      "status": "stable",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-sso",
+      "name": "SSO sign-in",
+      "summary": "Single sign-on for the hosted console.",
+      "cli": [],
+      "docs": [],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/OidcSsoRedirectE2eIT.java",
+        "../../app/src/test/java/com/shieldagent/app/SamlAcsE2eIT.java"
+      ],
+      "status": "beta",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-metrics",
+      "name": "Kill and decision metrics",
+      "summary": "Kill and decision metrics screens in the hosted console.",
+      "cli": [],
+      "docs": [],
+      "tests": [],
+      "status": "beta",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-claude-connector",
+      "name": "Claude connector",
+      "summary": "Connects Claude to the hosted KYA tools.",
+      "cli": [],
+      "docs": [],
+      "tests": [],
+      "status": "beta",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-hosted-console",
+      "name": "Hosted console",
+      "summary": "The hosted KYA console, where teams manage agents, approvals and reports.",
+      "cli": [],
+      "docs": [],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/ConsoleKyaJourneysE2eIT.java"
+      ],
+      "status": "beta",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-drata",
+      "name": "Drata link",
+      "summary": "Drata link. Not live: gated by a feature flag.",
+      "cli": [],
+      "docs": [],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/DrataPushE2eIT.java"
+      ],
+      "status": "flagged",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-chat-link",
+      "name": "Chat link",
+      "summary": "Chat link. Not live: gated by a feature flag.",
+      "cli": [],
+      "docs": [],
+      "tests": [],
+      "status": "flagged",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-aws-marketplace",
+      "name": "AWS Marketplace billing",
+      "summary": "AWS Marketplace billing. Not live: gated by a feature flag.",
+      "cli": [],
+      "docs": [],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/AwsMarketplaceE2eIT.java"
+      ],
+      "status": "flagged",
+      "plan": "hosted"
+    }
+  ],
+  "knownGaps": [
+    {
+      "rule": "R3-literal",
+      "id": "kya-update",
+      "literal": "kya update",
+      "reason": "README has no kya update line. docs/hosts/codex.md mentions it only.",
+      "clearedBy": "B2"
+    },
+    {
+      "rule": "R3-literal",
+      "id": "kya-team-init",
+      "literal": "kya team",
+      "reason": "README has no team init line. It ships in npm 0.32.7 and is documented in docs/team-rollout.md only.",
+      "clearedBy": "B2"
+    },
+    {
+      "rule": "R3-literal",
+      "id": "kya-team-managed",
+      "literal": "kya team",
+      "reason": "README has no team managed-settings line. It is documented in docs/team-rollout.md only.",
+      "clearedBy": "B2"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-invoke",
+      "reason": "Hosted command documented only in DocsHubController text. No public URL is confirmed in the registry.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-approve",
+      "reason": "Hosted command with no public hosted docs URL confirmed. README mention is not a hosted doc.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-approvals",
+      "reason": "Hosted command with no public docs page.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-agents",
+      "reason": "Hosted commands (agents, agent, passport) with no public docs page.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-shrink",
+      "reason": "Hosted command with no public docs page.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-sessions",
+      "reason": "Hosted command with no public docs page.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-incidents",
+      "reason": "Hosted console screen. No public docs URL. Console pages are login-only.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-gateway-console",
+      "reason": "Hosted console screen. No public docs URL. Console pages are login-only.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-endpoints",
+      "reason": "Hosted console screen. No public docs URL. Console pages are login-only.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-mcp-assets",
+      "reason": "Hosted console screen. No public docs URL. Console pages are login-only.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-notify-slack",
+      "reason": "Hosted alert feature with no public docs URL.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-notify-teams",
+      "reason": "Hosted alert feature with no public docs URL. Teams flag is off.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-shared-report",
+      "reason": "Hosted report page with no public docs URL. shield-agent.com/r/ is a route, not a doc.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-sso",
+      "reason": "Hosted console sign-in with no public docs URL.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-metrics",
+      "reason": "Hosted console screen with no public docs URL.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-claude-connector",
+      "reason": "Hosted connector with no public hosted docs URL confirmed. README section is not a hosted doc.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R3-docs",
+      "id": "kya-hosted-console",
+      "reason": "Hosted console with no public docs URL confirmed.",
+      "clearedBy": "B4"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-brew",
+      "reason": "No test names the Homebrew install line. Clears when install-channel tests cover it.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-scoop",
+      "reason": "No test names the Scoop install line. Clears when install-channel tests cover it.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-receipt",
+      "reason": "test/receipt-render.test.ts exists but does not run kya receipt by name. Clears when a test names the command.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-receipt-search",
+      "reason": "No test names the search box. It has no command or flag. Clears when a UI test covers it.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-showback",
+      "reason": "No test names showback. It has no command or flag. Clears when a test covers the showback section by id.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-gate-deny",
+      "reason": "No test names gateway deny rules by id. It has no command or flag. Clears when a policy test covers it by id.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-certify-eu",
+      "reason": "test/certify-eu-ai-act.test.ts exists but names neither the feature id nor a cli entry. Clears when it names kya-certify-eu.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-alerts",
+      "reason": "No test names alert webhooks by id. It has no command or flag. Clears when a notify test covers it by id.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-sdk-shims",
+      "reason": "No test names the SDK shims by id. Clears when an integration test per SDK adapter names it.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-python",
+      "reason": "Python shim tests live in sdks/kya-python, outside this package. Clears when they are referenced from this registry or named here.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-plugin-claude",
+      "reason": "test/claude-plugin.test.ts exists but does not name the install line. Clears when it names the install line.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-plugin-codex",
+      "reason": "test/codex-plugin.test.ts exists but does not name the install line. Clears when it names the install line.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-plugin-copilot",
+      "reason": "test/copilot-plugin.test.ts exists but does not name the install line. Clears when it names the install line.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-extension-gemini",
+      "reason": "test/gemini-extension.test.ts exists but does not name the install line. Clears when it names the install line.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-plugin-cursor",
+      "reason": "test/cursor-plugin.test.ts exists but names no cli entry (manifest only). Clears when it names kya-plugin-cursor.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-vscode",
+      "reason": "No test names the VS Code extension. Clears when an extension test names it.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-action",
+      "reason": "Action tests live in The-Pixel-Boys/kya-action, outside this tree. Clears when they are referenced from this registry.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-approvals",
+      "reason": "test/ops.test.ts exists but does not run kya approvals by name. Clears when a test names the command.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-sessions",
+      "reason": "test/ops.test.ts exists but does not run kya sessions by name. Clears when a test names the command.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-incidents",
+      "reason": "No test names the incident screens by id. Console pages are login-only. Clears when an e2e test names the id.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-gateway-console",
+      "reason": "KyaGatewayConsoleE2eIT.java exists but does not name kya-gateway-console. Clears when it names the id.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-endpoints",
+      "reason": "No test names the endpoint inventory by id. Clears when an e2e test names the id.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-mcp-assets",
+      "reason": "No test names the MCP asset inventory by id. Clears when an e2e test names the id.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-notify-slack",
+      "reason": "SlackNotifyE2eIT.java exists but does not name kya-notify-slack. Clears when it names the id.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-notify-teams",
+      "reason": "TeamsNotifyE2eIT.java exists but does not name kya-notify-teams. Clears when it names the id.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-shared-report",
+      "reason": "ShareToHostedE2eIT.java covers the share path but does not name kya-shared-report. Clears when it names the id.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-sso",
+      "reason": "OidcSsoRedirectE2eIT.java and SamlAcsE2eIT.java exist but do not name kya-sso. Clears when a test names the id.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-metrics",
+      "reason": "No test names the metrics screens by id. Clears when an e2e test names the id.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-claude-connector",
+      "reason": "No test names the Claude connector by id. Clears when an e2e test names the id.",
+      "clearedBy": "B6"
+    },
+    {
+      "rule": "R6-tests",
+      "id": "kya-hosted-console",
+      "reason": "ConsoleKyaJourneysE2eIT.java exists but does not name kya-hosted-console. Clears when it names the id.",
+      "clearedBy": "B6"
+    }
+  ]
+}

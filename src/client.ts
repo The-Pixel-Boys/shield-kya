@@ -54,6 +54,8 @@ export interface PolicyEvaluateResponse {
   readonly host?: string;
   readonly opaAllow?: boolean;
   readonly opaReason?: string;
+  /** Never-list input rule that denied the call (rule id only, never the command or path). */
+  readonly ruleId?: string;
 }
 
 export interface RegisterAgentRequest {
@@ -223,7 +225,7 @@ export class KyaHttpClient {
         agentId: this.agentId,
       },
     };
-    if (otlpEnabled()) ensureOtlpMetrics();
+    if (otlpEnabled()) await ensureOtlpMetrics();
     const started = Date.now();
     const response = await this.request<PolicyEvaluateResponse>(
       "/api/v1/kya/policy/evaluate",

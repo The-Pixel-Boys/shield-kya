@@ -12,7 +12,7 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PIN_RE, manifestVersions, packagingVersions, readText, relPosix, walkPinFiles } from "./lib/version-pins.mjs";
+import { PIN_RE, manifestVersions, packagingVersions, pythonVersionProblems, readText, relPosix, walkPinFiles } from "./lib/version-pins.mjs";
 
 const SHA256_RE = /^[0-9a-f]{64}$/;
 
@@ -64,6 +64,8 @@ export function findVersionDrift(root) {
   }
   const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
   if (manifest.version !== version) problems.push(`manifest.json: version ${manifest.version} (package.json is ${version})`);
+
+  problems.push(...pythonVersionProblems(root, version));
 
   return problems;
 }

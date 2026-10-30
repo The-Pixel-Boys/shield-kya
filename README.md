@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/@shield-agent/kya.svg?logo=npm&label=npm)](https://www.npmjs.com/package/@shield-agent/kya)
 [![npm downloads/week](https://img.shields.io/npm/dw/@shield-agent/kya.svg?logo=npm&label=downloads%2Fweek)](https://www.npmjs.com/package/@shield-agent/kya)
-[![npm downloads](https://img.shields.io/npm/dt/@shield-agent/kya.svg?logo=npm&label=total%20downloads)](https://www.npmjs.com/package/@shield-agent/kya)
+[![npm downloads, 18 months](https://img.shields.io/npm/d18m/@shield-agent/kya.svg?logo=npm&label=downloads%2C%2018%20months)](https://www.npmjs.com/package/@shield-agent/kya)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Install](https://img.shields.io/badge/install-shield--agent.com%2Finstall-0A0A0A)](https://shield-agent.com/install)
 [![X](https://img.shields.io/badge/X-%40coscosmico-000000?logo=x&logoColor=white)](https://x.com/coscosmico)
@@ -50,7 +50,7 @@ More ways to install (same package; npm stays the reference path):
 
 ```bash
 # Homebrew. Homebrew 7 may ask you to trust a third-party tap: run `brew tap The-Pixel-Boys/tap` first.
-# The formula installs about 270MB because of the optional semantic-search runtime.
+# The formula does not install the semantic-search runtime. Search stays lexical until you opt in (see Natural-language search).
 brew install The-Pixel-Boys/tap/shield-kya
 
 # Scoop (not yet verified on Windows)
@@ -122,7 +122,7 @@ This repo is also a Claude Code plugin marketplace named `shield-kya` with one p
 /plugin install kya@shield-kya
 ```
 
-The plugin is **advisory and fails open**: it records every tool call on the local record (`~/.kya/trail.jsonl`) and blocks only the small never-list. If kya is missing, crashes or times out, the tool call proceeds and nothing is recorded. It evaluates offline, so it has no Hold and no approval. Hosted enforcement is the MCP gate path.
+The plugin is **advisory and fails open**: it records every tool call on the local record (`~/.kya/trail.jsonl`) and blocks only the small never-list. If kya is missing, crashes or times out, the tool call proceeds and nothing is recorded. It evaluates offline, so it has no Hold and no approval. Hosted enforcement is the MCP policy path against a hosted workspace.
 
 Team rollout: commit `extraKnownMarketplaces` (the `shield-kya` GitHub source) and `enabledPlugins` (`"kya@shield-kya": true`) to the repository's `.claude/settings.json`, or force it org-wide with managed settings. Details and limits: [docs/hosts/claude-plugin.md](docs/hosts/claude-plugin.md).
 
@@ -196,7 +196,7 @@ Install hub: [https://shield-agent.com/install](https://shield-agent.com/install
 
 ## Activity record (global)
 
-One record (trail) for all projects: `~/.kya/trail.jsonl` (`KYA_HOME` overrides `~`). `kya receipt --open` from any directory shows activity from every project. Each event carries its project folder name. The report adds a Projects rollup once two or more projects appear, and shows the project on each feed entry. Older per-project `<project>/.kya/trail.jsonl` files are still read and merged; no migration. The record is capped at 1 MB (tail-read: oldest events drop away) and shared across all projects.
+One record (trail) for all projects: `~/.kya/trail.jsonl` (`KYA_HOME` overrides `~`). `kya receipt --open` from any directory shows activity from every project. Each event carries its project folder name. The report adds a Projects rollup once two or more projects appear, and shows the project on each feed entry. Older per-project `<project>/.kya/trail.jsonl` files are still read and merged; no migration. Reports read only the last 1 MB of the record (oldest events drop out of the view); it is shared across all projects.
 
 The report itself is a dashboard. A hero row on top shows the live **Certify** result, the decision mix, an activity sparkline, and showback (cost per agent). Tabbed sections sit below: **Overview** (analytics, sessions, reasons), **Certify** (the full live requirement table: every requirement grouped by domain with status, evidence, and attestation), **Activity** (the filterable event feed), **System** (wired hosts, sandboxes, ORR). Everything is one standalone offline HTML page. The live view adds a single external link: "Star on GitHub". The live daemon from `kya start` re-renders it on every event.
 
@@ -208,13 +208,36 @@ Sharing is a single attempt by design (storm-proof: no silent retries against th
 
 ### Natural-language search
 
-The **Activity** search box understands plain English. It runs a hybrid of BM25 over tool IDs, summaries, reason codes, decisions, projects, and MCP server labels, plus local MiniLM semantic reranking (shipped as an optional dependency; the report falls back to lexical-only if the model runtime is unavailable). A built-in concept glossary maps everyday words to the vocabulary events actually use, so `dangerous` finds rm/kill/delete/sudo calls, `blocked` finds denials, and `held` finds approval requests. You can also type things like `failed stripe transfers`, `files written by grok`, or `approval required production`. Stopwords and stemming are handled automatically, and the same search works across the global record.
+The **Activity** search box understands plain English. It runs a hybrid of BM25 over tool IDs, summaries, reason codes, decisions, projects, and MCP server labels, plus local MiniLM semantic reranking, which is opt-in. The runtime is not part of the default install. Without it, search stays lexical (BM25) and the live report server writes one line to its log (for `kya start`, the background report daemon log) that names the install command. Install it once:
+
+```bash
+# macOS and Linux (bash or zsh)
+npm install --prefix "$HOME/.kya/semantic" @shield-agent/fastembed@3.0.0
+```
+
+```bat
+:: Windows cmd
+npm install --prefix "%USERPROFILE%\.kya\semantic" @shield-agent/fastembed@3.0.0
+```
+
+```powershell
+# Windows PowerShell
+npm install --prefix "$env:USERPROFILE\.kya\semantic" @shield-agent/fastembed@3.0.0
+```
+
+If `KYA_HOME` is set, the prefix is `$KYA_HOME/.kya/semantic` (`%KYA_HOME%\.kya\semantic` on Windows). A built-in concept glossary maps everyday words to the vocabulary events actually use, so `dangerous` finds rm/kill/delete/sudo calls, `blocked` finds denials, and `held` finds approval requests. You can also type things like `failed stripe transfers`, `files written by grok`, or `approval required production`. Stopwords and stemming are handled automatically, and the same search works across the global record.
 
 - Offline or `KYA_OFFLINE=1` keeps search purely lexical (no model download).
-- By default the live server downloads `BAAI/bge-small-en-v1.5` once into `~/.kya/models` and caches event vectors in `~/.kya/search-index.json`.
+- After you opt in, the live server downloads `BAAI/bge-small-en-v1.5` once into `~/.kya/models` and caches event vectors in `~/.kya/search-index.json`.
 - `KYA_SEARCH_SEMANTIC=off` disables the model while still keeping BM25.
 
 The hosted console uses the same hybrid search on the server side (Postgres full-text + optional OpenAI-compatible embeddings), so queries typed in either place behave the same way.
+
+## Upgrade notes
+
+- Semantic search is no longer installed by default (about 230 MB less on disk). After upgrading, activity search is lexical (BM25) only until you run the install command in [Natural-language search](#natural-language-search).
+- The CLI loads the OpenTelemetry SDK only when an OTLP endpoint is set. A start error is logged once to stderr; metrics stay off and the command continues.
+- Hook verdicts and fail-open rules are unchanged.
 
 ## Dual plane
 
@@ -228,6 +251,22 @@ The hosted console uses the same hybrid search on the server side (Postgres full
 ```
 
 Tag sessions with `KYA_HOST=ide` or `KYA_HOST=runtime`. Same policy path either way.
+
+## Plans (hosted, plan tiers v2)
+
+The rows below apply only when the hosted service turns plan tiers v2 on. Until then the hosted plans are Free, Starter, Pro and Scale.
+
+The hosted console has these plans. The CLI works on every plan. Solo and the no-card trial appear only when the hosted service turns plan tiers on.
+
+| Plan | Price | Seats | Trail history | Notes |
+|---|---|---|---|---|
+| Free | $0 | 2 | 30 days | Start here |
+| Solo | $90 a year | 1 | 90 days | CSV evidence export. Yearly only |
+| Team | $29 a month | 5 | 90 days | Formerly "Starter" |
+| Pro | $149 a month | 25 | 90 days | Compliance report PDF, signed evidence bundles |
+| Scale | $499 a month | Unlimited | 365 days | SSO and SCIM |
+
+n8n and Zapier access is included in every paid plan. There is no add-on price.
 
 ## Environment
 
@@ -247,6 +286,9 @@ Tag sessions with `KYA_HOST=ide` or `KYA_HOST=runtime`. Same policy path either 
 | `KYA_SHARE_URL` | No | `kya receipt --share` collector base (default `https://shield-agent.com`) |
 | `KYA_TELEMETRY` | No | `0`/`off` forces anonymous usage stats off ([docs/telemetry.md](docs/telemetry.md)); they are off unless you opted in |
 | `DO_NOT_TRACK` | No | `1` forces anonymous usage stats off, same as `KYA_TELEMETRY=0` |
+| `KYA_BASE_URL` | No | Hosted console for `kya login` (default `https://shield-agent.com`; https or loopback only) |
+| `KYA_QUIET` | No | Any true value hides the one-line hosted calls to action (`kya certify`, `kya receipt`) |
+| `KYA_CTA` | No | `0`/`off` turns off the one-line hosted calls to action ([docs/login.md](docs/login.md#calls-to-action-one-line)) |
 
 Gate mode can also be set in the project's `.kya/config.json`:
 `{"gateMode": "hold"}` or `{"gateMode": "offline"}` (exact values only;
@@ -270,7 +312,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.32.7", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.32.9", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -304,7 +346,9 @@ const run = governed({ toolId: "write_file", server: "filesystem", fn: myWrite }
 await run({ path: "out.txt", content: "hi" }); // throws KyaDeniedError on DENY
 ```
 
-Offline evaluate by default (no network, no hosted plane); an explicit config uses the live plane. `governA2aSend` gates in-process agent-to-agent sends. A fail-open Python shim with a LangChain middleware is in development and not yet released. Support matrix and recipes: `docs/sdk-integrations.md`; runnable scripts: `examples/sdk/`.
+Offline evaluate by default (no network, no hosted plane); an explicit config uses the live plane. `governA2aSend` gates in-process agent-to-agent sends. The `shield-kya` Python package on PyPI ships framework hooks (LangChain, CrewAI, OpenAI Agents SDK and others), fail-open like `kya hook`. Support matrix and recipes: `docs/sdk-integrations.md`; runnable scripts: `examples/sdk/`.
+
+Framework recipes (each one tested with a scripted model and the published CLI): [LangChain](docs/sdk-integrations.md#langchain-python) · [OpenAI Agents SDK](docs/sdk-integrations.md#openai-agents-sdk-python) · [CrewAI](docs/sdk-integrations.md#crewai-python) · [LlamaIndex](docs/sdk-integrations.md#llamaindex-python) · [Mastra](docs/sdk-integrations.md#mastra-typescript) · [Vercel AI SDK](docs/sdk-integrations.md#vercel-ai-sdk-typescript)
 
 ## Claude connector
 
@@ -312,7 +356,7 @@ Offline evaluate by default (no network, no hosted plane); an explicit config us
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.32.7 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.32.9 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -323,7 +367,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.32.7 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.32.9 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -496,6 +540,7 @@ pnpm build
 - [Top-20 MCP server support matrix (taxonomy + gate recipes)](docs/mcp-servers.md)
 - [OTLP metrics (OSS + hosted)](docs/otlp.md)
 - [Anonymous usage stats (opt-in): what is sent, controls, retention](docs/telemetry.md)
+- [Link this machine to the hosted console (kya login)](docs/login.md)
 - [OWASP MCP governance map](docs/owasp-mcp-governance.md)
 - [Claude Code plugin](docs/hosts/claude-plugin.md) · [Copilot CLI plugin](docs/hosts/copilot.md#plugin) · [Codex plugin](docs/hosts/codex.md#codex-plugin) · [Gemini CLI extension](docs/hosts/gemini.md#gemini-cli-extension)
 - [Import the AGT audit log (CLI)](docs/import-agt.md) · [hosted](docs/import-agt-hosted.md)
@@ -507,6 +552,10 @@ pnpm build
 - [Hosted operator SSO / SCIM (not in OSS CLI)](docs/hosted-operator-sso.md)
 - [What is open source and what is hosted](docs/oss-vs-hosted.md)
 - See also `LIMITATIONS.md` in this repo
+
+## Hosted console (`kya login`, optional)
+
+`kya login` links this machine to your hosted Shield KYA workspace. It uses the device code flow: the CLI shows a short code, you approve it in the hosted console, and the CLI saves a full-workspace API key with mode 0600 in `~/.kya/hosted-credentials.json`. `kya logout` deletes that file. It does not revoke the key on the server, so revoke it in the console too. The OSS CLI works without an account, and `kya certify` and the hook never read the saved key. Details, failure cases and the one-line calls to action: [docs/login.md](docs/login.md).
 
 ## Anonymous usage stats (opt-in, off by default)
 
