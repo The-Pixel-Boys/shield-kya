@@ -1,6 +1,7 @@
 # Dependabot policy: docs/operations/dependency-security-policy.md in The-Pixel-Boys/shield-agent (CVE first).
 # Version updates run daily at 03:00 Europe/Bucharest. Security updates open when an alert is raised,
-# outside this schedule. No auto-merge: the owner merges.
+# outside this schedule. Merges: the nightly merge job, only when every gate passes
+# (owner authorised, shield-agent docs/operations/dependency-security-policy.md section 2b).
 version: 2
 updates:
   - package-ecosystem: "npm"
