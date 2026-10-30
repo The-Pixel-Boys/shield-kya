@@ -151,6 +151,80 @@ describe("check-version-pins.mjs CLI", () => {
   });
 });
 
+describe("Python shim (sdks/kya-python) moves with package.json", () => {
+  // root = <base>/kya (the npm package), sibling = <base>/kya-python (the monorepo layout).
+  let base: string;
+  let root: string;
+  let py: string;
+  const write = (path: string, body: string): void => {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, body);
+  };
+  const pyproject = (v: string) => `[project]\nname = "shield-kya"\nversion = "${v}"  # old note\ndescription = "x"\n`;
+  const init = (v: string) => `import logging\n\n__version__ = "${v}"\n__all__ = []\n`;
+  const lockstep = (v: string, pyV = v, initV = v) => {
+    write(join(root, "package.json"), JSON.stringify({ name: "@shield-agent/kya", version: v }));
+    write(join(root, "server.json"), JSON.stringify({ version: v, packages: [{ version: v }] }));
+    write(join(root, "manifest.json"), JSON.stringify({ version: v }));
+    write(join(py, "pyproject.toml"), pyproject(pyV));
+    write(join(py, "shield_kya/__init__.py"), init(initV));
+  };
+
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "kya-py-"));
+    root = join(base, "kya");
+    py = join(base, "kya-python");
+    mkdirSync(root, { recursive: true });
+    cpSync(join(PACKAGE_ROOT, "scripts"), join(root, "scripts"), { recursive: true });
+  });
+  afterEach(() => {
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("is clean when pyproject.toml and __version__ equal package.json", () => {
+    lockstep("1.2.3");
+    expect(findVersionDrift(root)).toEqual([]);
+  });
+
+  it("names a stale pyproject version and a stale __version__", () => {
+    lockstep("1.2.3", "0.17.0", "0.9.0");
+    expect(findVersionDrift(root)).toEqual([
+      "../kya-python/pyproject.toml: version 0.17.0 (package.json is 1.2.3)",
+      "../kya-python/shield_kya/__init__.py: version 0.9.0 (package.json is 1.2.3)",
+    ]);
+  });
+
+  it("fails when the version line is gone or the file is missing", () => {
+    lockstep("1.2.3");
+    write(join(py, "pyproject.toml"), "[project]\nname = \"shield-kya\"\n");
+    rmSync(join(py, "shield_kya/__init__.py"));
+    expect(findVersionDrift(root)).toEqual([
+      "../kya-python/pyproject.toml: no version line",
+      "../kya-python/shield_kya/__init__.py: missing",
+    ]);
+  });
+
+  it("sync-version.mjs rewrites both lines, drops the stale comment and keeps the rest of the file", () => {
+    lockstep("1.2.3", "0.17.0", "0.17.0");
+    const out = execFileSync("node", [join(root, "scripts/sync-version.mjs")], { encoding: "utf8" });
+    expect(out).toContain("../kya-python/pyproject.toml");
+    expect(readFileSync(join(py, "pyproject.toml"), "utf8")).toBe(
+      '[project]\nname = "shield-kya"\nversion = "1.2.3"\ndescription = "x"\n',
+    );
+    expect(readFileSync(join(py, "shield_kya/__init__.py"), "utf8")).toBe(init("1.2.3"));
+    expect(findVersionDrift(root)).toEqual([]);
+  });
+
+  it("a checkout without ../kya-python (the public mirror) is clean, and sync leaves no sibling behind", () => {
+    write(join(root, "package.json"), JSON.stringify({ name: "@shield-agent/kya", version: "1.2.3" }));
+    write(join(root, "server.json"), JSON.stringify({ version: "1.2.3", packages: [{ version: "1.2.3" }] }));
+    write(join(root, "manifest.json"), JSON.stringify({ version: "1.2.3" }));
+    expect(findVersionDrift(root)).toEqual([]);
+    execFileSync("node", [join(root, "scripts/sync-version.mjs")]);
+    expect(() => readFileSync(join(py, "pyproject.toml"))).toThrow();
+  });
+});
+
 describe("this repository", () => {
   it("has no stale version pins (pnpm sync:version fixes any)", () => {
     expect(findVersionDrift(PACKAGE_ROOT)).toEqual([]);

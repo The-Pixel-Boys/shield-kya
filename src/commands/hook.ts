@@ -15,6 +15,7 @@ import { runEvalTool } from "./eval-tool.js";
 import { appendTrail, defaultSessionId, hostToProduct } from "../trail.js";
 import { deriveWireChangeFields } from "../diff-preview.js";
 import { matchesNeverList } from "../offline-evaluate.js";
+import { neverListInputMatch } from "../never-list-input.js";
 import { maybeSpawnNotifyFlush } from "../notify/dispatch.js";
 import { computeArgsHash } from "../hash.js";
 import { evaluateHosted, hostedDecision, hostedEnvProblem, loadPlaneConfig, PlaneError, scrubNetworkEnv, type PlaneConfig, type PlaneTransport } from "./hosted-hook.js";
@@ -157,6 +158,13 @@ function parsePayload(stdinText: string): HookPayload | undefined {
 
 const ALLOW: HookResult = { exitCode: 0, stdout: "", stderr: "" };
 
+/** Deny text. An input-rule hit names its rule id; the never-list cannot be overridden. */
+function denyReason(toolName: string, reasonCode: string, ruleId?: string): string {
+  return reasonCode === "NEVER_EVENT" && ruleId
+    ? `KYA denied ${toolName}: NEVER_EVENT (rule ${ruleId}; never-list rules cannot be overridden)`
+    : `KYA denied ${toolName}: ${reasonCode}`;
+}
+
 function deny(reason: string, gemini = false): HookResult {
   // Gemini parses stdout JSON whatever the exit code, and a JSON body without `decision` means allow.
   const body = gemini
@@ -244,6 +252,7 @@ function auditedDeny(
   input: HookInput,
   payload?: HookPayload,
   dedupe = false,
+  ruleId?: string,
 ): HookResult {
   try {
     // Only for NEVER_EVENT: every hook copy reaches the same never-list verdict,
@@ -262,6 +271,7 @@ function auditedDeny(
       reasonCode,
       mode: "offline" as const,
       neverEvent: reasonCode === "NEVER_EVENT",
+      ...(ruleId ? { neverRule: ruleId } : {}),
     };
     try { appendTrail(trailCwd, ev, input.env); } catch { /* audit is best effort */ }
     maybeSpawnNotifyFlush({ env: input.env, cwd: trailCwd, event: ev });
@@ -336,6 +346,7 @@ export async function runHook(input: HookInput): Promise<HookResult> {
         reasonCode: response.reasonCode ?? "",
         mode: "offline" as const,
         neverEvent: response.reasonCode === "NEVER_EVENT",
+        ...(response.ruleId ? { neverRule: response.ruleId } : {}),
         argsHash: response.argsHash,
         ...(changeFields ?? {}),
         ...(payload.usage?.tokensIn !== undefined ? { tokensIn: payload.usage.tokensIn } : {}),
@@ -357,7 +368,7 @@ export async function runHook(input: HookInput): Promise<HookResult> {
     }
 
     if (response.verdict === "DENY") {
-      return { ...deny(`KYA denied ${toolName}: ${response.reasonCode}`, geminiShape(input, payload)), firstSeen };
+      return { ...deny(denyReason(toolName, response.reasonCode, response.ruleId), geminiShape(input, payload)), firstSeen };
     }
     if (input.strict && response.verdict === "REQUIRE_APPROVE") {
       return { ...deny(`KYA strict mode: ${toolName} requires approval (${response.reasonCode})`, geminiShape(input, payload)), firstSeen };
@@ -371,8 +382,11 @@ export async function runHook(input: HookInput): Promise<HookResult> {
     // --fail-closed (hosted): enforcement must not silently lapse.
     try {
       // A never-list tool is logged as such in both modes (hosted counts stay right).
-      if (payload?.toolName && matchesNeverList(payload.toolName)) {
-        return auditedDeny(`KYA denied ${payload.toolName}: NEVER_EVENT`, "NEVER_EVENT", input, payload, true);
+      if (payload?.toolName) {
+        const inputHit = neverListInputMatch(payload.toolName, payload.toolInput);
+        if (inputHit || matchesNeverList(payload.toolName)) {
+          return auditedDeny(denyReason(payload.toolName, "NEVER_EVENT", inputHit?.rule), "NEVER_EVENT", input, payload, true, inputHit?.rule);
+        }
       }
     } catch { /* fall through */ }
     if (input.failClosed) {
@@ -392,6 +406,8 @@ interface HostedVerdict {
   readonly reason: string;
   /** Whether every hook copy reaches this verdict (dedupe the row) or it is this copy's own failure. */
   readonly dedupe: boolean;
+  /** Never-list input rule id, when the local rule denied the call. */
+  readonly ruleId?: string;
 }
 
 /**
@@ -435,11 +451,13 @@ async function runHostedHook(input: HookInput, plane: HostedHookOptions): Promis
   }
   const toolName = payload?.toolName;
   let neverListed = false;
+  let neverRule: string | undefined;
   // The local never-list runs first, before any env, config or plane code, and is stored so a
   // crash later can never lower it (crashDecision). A throw leaves it "unknown", which denies.
   try {
     if (toolName) {
-      neverListed = matchesNeverList(toolName);
+      neverRule = neverListInputMatch(toolName, payload?.toolInput)?.rule;
+      neverListed = matchesNeverList(toolName) || neverRule !== undefined;
       hostedDecision.neverList = neverListed ? "deny" : "clear";
     }
   } catch { /* stays unknown */ }
@@ -486,7 +504,7 @@ async function runHostedHook(input: HookInput, plane: HostedHookOptions): Promis
     }
     // Raise-only merge: the local never-list beats any plane answer or failure.
     if (neverListed) {
-      verdict = { verdict: "DENY", reasonCode: "NEVER_EVENT", reason: `KYA denied ${toolName}: NEVER_EVENT`, dedupe: true };
+      verdict = { verdict: "DENY", reasonCode: "NEVER_EVENT", reason: denyReason(toolName, "NEVER_EVENT", neverRule), dedupe: true, ruleId: neverRule };
     } else if (failure || !response) {
       const f = failure ?? { code: "FAIL_CLOSED", message: "internal error" };
       verdict = {
@@ -563,6 +581,7 @@ function recordHostedRow(
     reasonCode: verdict.reasonCode,
     mode: input.strict ? ("hold" as const) : ("observe" as const),
     neverEvent: verdict.reasonCode === "NEVER_EVENT",
+    ...(verdict.ruleId ? { neverRule: verdict.ruleId } : {}),
     ...(argsHash ? { argsHash } : {}),
     ...(changeFields ?? {}),
     ...(payload?.usage?.tokensIn !== undefined ? { tokensIn: payload.usage.tokensIn } : {}),

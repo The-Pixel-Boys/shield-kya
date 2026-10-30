@@ -31,11 +31,28 @@ import { KyaError } from "./errors.js";
  * config into the umask default.
  */
 export function atomicWriteSync(target: string, content: string, beforeRename?: () => void): void {
+  writeAtomic(target, content, { beforeRename });
+}
+
+/**
+ * Same crash-safe write, but the file is always mode 0600 (owner read and write only), both
+ * when created and when it already existed. Used for hosted credentials. The mode is set at
+ * create (open flag) and again with fchmod on the fd, so there is no window with a wider mode.
+ */
+export function atomicWriteSecretSync(target: string, content: string): void {
+  writeAtomic(target, content, { forceMode: 0o600 });
+}
+
+function writeAtomic(
+  target: string,
+  content: string,
+  opts: { readonly beforeRename?: () => void; readonly forceMode?: number },
+): void {
   const tmp = `${target}.kya-tmp-${randomBytes(16).toString("hex")}`;
-  let mode: number | undefined;
+  let mode: number | undefined = opts.forceMode;
   try {
     const st = lstatSync(target);
-    if (st.isFile()) mode = st.mode & 0o7777;
+    if (st.isFile() && mode === undefined) mode = st.mode & 0o7777;
   } catch {
     /* new file - keep default mode */
   }
@@ -54,7 +71,7 @@ export function atomicWriteSync(target: string, content: string, beforeRename?: 
     writeSync(fd, content, null, "utf8");
     closeSync(fd);
     fd = undefined;
-    beforeRename?.();
+    opts.beforeRename?.();
     renameSync(tmp, target);
   } catch (err) {
     if (fd !== undefined) {

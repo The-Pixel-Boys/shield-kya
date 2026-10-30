@@ -9,7 +9,7 @@ This page lists which is which, so you can decide what you need.
 | Feature | Notes |
 |---|---|
 | Offline policy evaluate | Built-in sample evaluator plus the never-list. No network. |
-| Never-list | A tool on a known MCP server whose name contains `drop`, `truncate`, `purge` or `transfer` is denied locally. The sample never tool is denied too. By default the hooks block only the never-list. Shell commands such as `rm -rf` are recorded, not blocked. |
+| Never-list | A tool on a known MCP server whose name contains `drop`, `truncate`, `purge` or `transfer` is denied locally, except inside a harmless word listed in [never-list](never-list.md) (for example `dropdown_select` is allowed). The sample never tool is denied too. By default the hooks block only the never-list: the tool-name rules, plus the shell and file input rules in [never-list](never-list.md) (for example `rm -rf ~`, a force push to `main`, a read of `~/.ssh/id_rsa`). Other shell commands are recorded, not blocked. |
 | Advisory hooks for supported hosts | Claude Code, Codex, Gemini CLI, Grok, Kimi Code and the GitHub Copilot CLI plugin. Every tool call is recorded. Hooks fail open: if kya breaks or times out, the call goes ahead. The Copilot plugin records MCP calls but does not block never-list MCP calls. |
 | Local trail | `~/.kya/trail.jsonl`. Reports read the newest 1 MB of it. |
 | `kya certify` | Local report against the Agent Trust Baseline. "pass" means local evidence shows no gap. It is not a certification by a third party. See [certify.md](certify.md). |
@@ -33,7 +33,7 @@ This page lists which is which, so you can decide what you need.
 | Fail-closed hosted hook mode (beta) | When the workspace cannot answer, the call is denied. See [hosted-hook.md](hosted-hook.md). |
 | Plan limits | Caps on agents, seats and trail visibility depend on your plan. |
 
-The short version: the open source client is advisory and fails open, apart from the never-list. Enforcement lives on the MCP gate path and on the hosted service, and the hosted service fails closed.
+The short version: the open source client is advisory and fails open, apart from the never-list. Real blocking runs on the MCP policy path against a hosted workspace, and the hosted service fails closed. The local `kya gate` observes: it records allowed calls and stops only its deny set.
 
 ## Signatures and the verified badge, plainly
 

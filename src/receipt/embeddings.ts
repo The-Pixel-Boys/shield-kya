@@ -1,13 +1,17 @@
 /**
  * Optional local semantic embeddings for activity search.
  *
- * fastembed is imported lazily so that production installs without the
- * package remain lightweight. The provider is gated by environment variables
- * and never throws: any failure logs once to stderr and returns undefined.
+ * The runtime (@shield-agent/fastembed) is NOT a dependency of kya. It is opt-in:
+ * install it under `globalConfigDir()/semantic` (the hint printed when it is
+ * missing shows the command). It is loaded lazily from that prefix only, and a
+ * missing runtime degrades to lexical search. The provider is gated by environment
+ * variables and never throws: any failure logs once to stderr and returns undefined.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
+import { globalConfigDir } from "../config.js";
 import { eventDocumentText, eventKey, eventTextSha1 } from "./search.js";
 import type { TrailEvent } from "../trail.js";
 
@@ -38,7 +42,63 @@ function modelDisabled(env: NodeJS.ProcessEnv): boolean {
   return env.KYA_SEARCH_SEMANTIC === "off";
 }
 
-/** Local MiniLM provider via fastembed; loaded on first use. */
+/** Opt-in install prefix for the semantic runtime. */
+export function semanticRuntimeDir(env: NodeJS.ProcessEnv = process.env): string {
+  return join(globalConfigDir(env), "semantic");
+}
+
+/** The one command that enables semantic search (printed by the degrade hint). */
+export function semanticInstallCommand(env: NodeJS.ProcessEnv = process.env): string {
+  return `npm install --prefix "${semanticRuntimeDir(env)}" @shield-agent/fastembed@3.0.0`;
+}
+
+const RUNTIME_PKG = "@shield-agent/fastembed";
+let hintShown = false;
+
+/** True only when the requested runtime package itself is missing (not a nested dependency). */
+function isNotInstalled(err: unknown): boolean {
+  const e = err as NodeJS.ErrnoException;
+  return e?.code === "MODULE_NOT_FOUND" && typeof e.message === "string" && e.message.includes(`'${RUNTIME_PKG}'`);
+}
+
+/**
+ * Load the runtime from the opt-in prefix only. The resolver is not allowed to walk
+ * parent directories or NODE_PATH: a result outside <prefix>/node_modules is refused
+ * before any of its code runs. Returns undefined when the runtime is not installed.
+ */
+function importFastEmbed(env: NodeJS.ProcessEnv): FastEmbedModule | undefined {
+  const root = semanticRuntimeDir(env);
+  let nodeModules: string;
+  try {
+    nodeModules = join(realpathSync(root), "node_modules");
+  } catch {
+    return undefined;
+  }
+  const req = createRequire(join(root, "package.json"));
+  let file: string;
+  try {
+    file = realpathSync(req.resolve(RUNTIME_PKG));
+  } catch (err) {
+    if (isNotInstalled(err)) return undefined;
+    throw err;
+  }
+  if (!file.startsWith(nodeModules + sep)) return undefined;
+  try {
+    return req(file) as FastEmbedModule;
+  } catch (err) {
+    if (isNotInstalled(err)) return undefined;
+    throw err;
+  }
+}
+
+/** One stderr line per process. Search keeps working without the runtime (lexical only). */
+function hintMissingRuntime(env: NodeJS.ProcessEnv): void {
+  if (hintShown) return;
+  hintShown = true;
+  console.error(`KYA semantic search is off (optional runtime not installed). Enable: ${semanticInstallCommand(env)}`);
+}
+
+/** Local MiniLM provider via the opt-in fastembed runtime; loaded on first use. */
 export class LocalMiniLmProvider implements EmbeddingProvider {
   private queryModel: FastEmbedModel | undefined;
   private batchModel: FastEmbedModel | undefined;
@@ -62,8 +122,11 @@ export class LocalMiniLmProvider implements EmbeddingProvider {
       const triedProp = which === "query" ? "queryTried" : "batchTried";
       if (this[triedProp] && !this[modelProp]) return undefined;
       this[triedProp] = true;
-      const fastembed = (await import("fastembed").catch(() => undefined)) as FastEmbedModule | undefined;
-      if (!fastembed) return undefined;
+      const fastembed = importFastEmbed(this.env);
+      if (!fastembed) {
+        hintMissingRuntime(this.env);
+        return undefined;
+      }
       const EmbeddingModel =
         fastembed.EmbeddingModel?.[MODEL_NAME] ??
         fastembed.EmbeddingModel?.AllMiniLML6V2 ??

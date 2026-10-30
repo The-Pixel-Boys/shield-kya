@@ -1,5 +1,5 @@
 {
   "name": "shield-kya",
-  "version": "0.32.7",
+  "version": "0.32.8",
   "description": "Audit trail and traceability for AI agents. See what every coding agent did. Advisory: records every tool call, blocks only the never-list, fails open."
 }

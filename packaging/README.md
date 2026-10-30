@@ -49,11 +49,10 @@ Tests: `test/packaging-bump.test.ts`, `test/version-pins-packaging.test.ts` (`pn
 
 ## Homebrew
 
-`depends_on "node"` (kya needs Node >= 22; `node` is the current line). The install pulls the optional
-`fastembed` / `onnxruntime-node` dependency, about 260MB on disk, so offline semantic search works. Both
-resolve to the script-free forks `@shield-agent/fastembed` / `@shield-agent/onnxruntime-node` (installed
-under the upstream names via npm: aliases), so no install scripts run.
-This size was accepted by the owner on 2026-10-10; `--omit=optional` would drop semantic search.
+`depends_on "node"` (kya needs Node >= 22; `node` is the current line). The install does not pull the
+semantic-search runtime (`@shield-agent/fastembed`, about 230MB on disk). Semantic search is opt-in: see the
+README section "Natural-language search". The owner accepted the old 260MB install on 2026-10-10; the
+runtime moved out of the default install on 2026-10-29.
 
 The formula test asserts the usage output, because `kya --version` does not exist yet (kya prints usage
 and exits 0). Follow-up when the flag lands: replace the two assertions marked in the test block with
@@ -83,7 +82,7 @@ Written against the Scoop App Manifests wiki and the Scoop sources (`lib/install
   writes `kya.cmd` (`@node "%~dp0dist\cli.js" %*`), which Scoop shims natively. `pre_install` runs after
   extraction and before shim creation. `["kya.cmd", "shield-kya"]` adds the second bin name.
 - `post_install` runs `npm install --omit=dev` in `$dir` (runtime dependencies are not in the tarball)
-  and throws on a non-zero exit. Same optional `fastembed` size note as Homebrew.
+  and throws on a non-zero exit. Same note as Homebrew: no semantic runtime in the default install.
 - `checkver` / `autoupdate` read npm `latest`; `bump-scoop.mjs` leaves them alone.
 
 Needs a Windows run before the next release claims support:
@@ -171,7 +170,7 @@ Checked in this repo: `package.json`, `manifest.json`, `server.json` (MCP regist
 chars), `.claude-plugin/marketplace.json` (top level and every plugin entry),
 `plugins/kya/.claude-plugin/plugin.json`, `plugins/kya/.codex-plugin/plugin.json`, `gemini-extension.json`, `.cursor-plugin/plugin.json` (mirrored from this package
 to the public repo, so the checked copy is the one Cursor reads), the monorepo copy of the Python
-shim's `pyproject.toml` (`[project]` table only; not the PyPI source, see below), `homebrew/shield-kya.rb` `desc` (brew audit style: no trailing period, no leading
+shim's `pyproject.toml` (`[project]` table only; it is the PyPI source, built by `pypi-publish.yml`), `homebrew/shield-kya.rb` `desc` (brew audit style: no trailing period, no leading
 article, at most 80 chars), `scoop/shield-kya.json`, the newest `winget/` locale manifest, the
 README lead paragraph, README image links (must stay inside the package, or they 404 in the public
 mirror), and the shield-agent.com install / how-kya-works meta
@@ -190,7 +189,7 @@ Channels CI cannot edit. Paste this text by hand when it drifts:
 | GitHub repo description | `The-Pixel-Boys/shield-kya` settings, About | `long` |
 | VS Code Marketplace / Open VSX | extension listing (built from the extension's own manifest) | `long` |
 | Claude plugin directory / Cursor marketplace pages | listing forms | `variants.plugin` (Claude, hooks only) / `long` (Cursor) |
-| PyPI `shield-kya` | published from the public repo's own `kya-python/` (kept on the public side, not mirrored from here, so its `pyproject.toml` is not checked); set its `[project].description` at the next Python shim release | `variants.python` |
+| PyPI `shield-kya` | published by `pypi-publish.yml` from `sdks/kya-python` on each stable `kya-v*` tag, after npm serves the version (version lockstep with `package.json`); the monorepo `pyproject.toml` description is checked here | `variants.python` |
 | npm, MCP registry | update on the next kya release (from `package.json` / `server.json`) | `long` / `variants.mcp` |
 | Homebrew tap, Scoop bucket | updated by the release pipeline at the next stable release (templates `homebrew/` and `scoop/`) | `short` without the period / `long` |
 

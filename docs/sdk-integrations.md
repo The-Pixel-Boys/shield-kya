@@ -52,12 +52,91 @@ await run({ path: "out.txt", content: "hi" }); // throws KyaDeniedError on DENY
 
 Runnable scripts per adapter live in `examples/sdk/`.
 
-### Python (in development)
+### Python (PyPI `shield-kya`)
 
-A fail-open Python shim with agent-wide hooks for LangChain / LangGraph,
-Pydantic AI, CrewAI, Google ADK and Microsoft Agent Framework is in development and not yet released. It follows the same rules as `kya hook`:
-advisory, fails open on errors (an error lets the call through), and the never-list still blocks. This page
-will carry install and usage steps once it ships.
+The `shield-kya` package on PyPI ships agent-wide hooks for LangChain / LangGraph,
+Pydantic AI, CrewAI, Google ADK, Microsoft Agent Framework and OpenAI Agents SDK. Install the
+extra for your framework, for example `pip install 'shield-kya[langchain]'`. The hooks follow
+the same rules as `kya hook`: advisory, fails open on errors (an error lets the call through),
+and the never-list still blocks. The Python recipes in Tier 1b pin `shield-kya` 0.17.0.
+
+## Tier 1b: framework recipes
+
+Each recipe below runs a small agent with a scripted model (no API key). The check
+asserts three things: a never-list tool does not run, an allowed tool runs, and the trail
+holds one row per call. The Python recipes use the published `shield-kya` 0.17.0 package and
+the published `kya` CLI (0.32.7). The TypeScript recipes use the published `@shield-agent/kya`
+0.32.7 in-process. CI runs all six.
+
+### LangChain (Python)
+
+```python
+from langchain.agents import create_agent
+from shield_kya.integrations.langchain import KyaMiddleware
+
+agent = create_agent(model, tools, middleware=[KyaMiddleware()])
+```
+
+`DENY`: the tool is skipped. The model gets an error tool message with the reason.
+Install the `shield-kya` package with the `langchain` extra.
+
+### OpenAI Agents SDK (Python)
+
+```python
+from shield_kya.integrations.openai_agents import attach
+
+agent = attach(agent)  # one KYA tool input guardrail per function tool
+```
+
+`DENY`: the tool output is the KYA reason, and the run continues.
+
+### CrewAI (Python)
+
+```python
+from shield_kya.integrations import crewai as kya_crewai
+
+kya_crewai.register()  # one global pre-tool hook for every crew in the process
+```
+
+`DENY`: the tool does not run. The model sees the reason and the crew continues.
+
+### LlamaIndex (Python)
+
+No shipped adapter. Wrap each tool function with `shield_kya.decide()` before you build the
+`FunctionTool`. A `DENY` returns the reason as the tool output, and the function does not run.
+
+```python
+import shield_kya
+from llama_index.core.tools import FunctionTool
+
+def gated(name, fn):
+    def run(**kwargs):
+        decision = shield_kya.decide(name, kwargs)
+        return fn(**kwargs) if decision.allowed else decision.reason
+    return FunctionTool.from_defaults(fn=run, name=name, description=fn.__doc__)
+```
+
+### Mastra (TypeScript)
+
+```ts
+import { governMastraTool } from "@shield-agent/kya/sdk";
+
+tools: { postgres__drop_table: governMastraTool(dropTable) }
+```
+
+`DENY`: `KyaDeniedError` is thrown before `execute` runs.
+
+### Vercel AI SDK (TypeScript)
+
+```ts
+import { governVercelAiTool } from "@shield-agent/kya/sdk";
+
+const tools = {
+  postgres__drop_table: governVercelAiTool(dropTable, { name: "postgres__drop_table" }),
+};
+```
+
+`DENY`: the tool body does not run. The model gets the error as the tool result.
 
 ## Tier 2: recipes (no shipped adapter)
 
@@ -96,7 +175,7 @@ boundary, and let the framework see the same-shaped callable.
 - **Vercel AI SDK (UI-only apps)**: if you only use the AI SDK for UI
   streaming and execute tools server-side, govern the server-side handler with
   `governed()` at the route/action boundary; the UI layer needs no change.
-- **Microsoft Agent Framework (AF)**: a fail-open Python shim for Agent Framework is in development, not yet released; for C#, shell out to `kya wrap --offline --json` before the function body runs (DENY must prevent the side effect, not just annotate it).
+- **Microsoft Agent Framework (AF)**: for Python, use the `agent-framework` extra of `shield-kya` (PyPI). For C#, shell out to `kya wrap --offline --json` before the function body runs (DENY must prevent the side effect, not just annotate it).
 
 ## Agent-to-agent (A2A)
 

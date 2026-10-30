@@ -173,9 +173,8 @@ export function channels(root, copy) {
     { path: ".plugin/marketplace.json", channel: "Copilot marketplace plugin", key: "variants.plugin", field: jsonField("plugins[*].description"), many: true },
     { path: "gemini-extension.json", channel: "Gemini CLI extension", key: "variants.plugin", field: jsonField("description") },
     { path: ".cursor-plugin/plugin.json", channel: "Cursor plugin", key: "long", field: jsonField("description") },
-    // Monorepo copy of the Python shim. PyPI publishes from the public repo's own kya-python/, which is
-    // public-only (mirror excludes): that copy is a hand-paste channel, see packaging/README.md.
-    { path: "../kya-python/pyproject.toml", channel: "kya-python pyproject (monorepo copy, not the PyPI source)", key: "variants.python", field: pyprojectDescription },
+    // The Python shim, monorepo copy = the PyPI source: pypi-publish.yml builds sdks/kya-python on the kya-v* tag.
+    { path: "../kya-python/pyproject.toml", channel: "kya-python pyproject (PyPI source, monorepo copy)", key: "variants.python", field: pyprojectDescription },
     { path: "packaging/homebrew/shield-kya.rb", channel: "Homebrew", key: "short", norm: noPeriod, brew: true, field: lineField("desc", /^(\s*desc\s+)("((?:[^"\\]|\\.)*)")/m, (v) => JSON.stringify(noPeriod(v))) },
     { path: "packaging/scoop/shield-kya.json", channel: "Scoop", key: "long", field: jsonField("description") },
     { path: winget, channel: "winget ShortDescription", key: "short", norm: noPeriod, field: lineField("ShortDescription", /^(ShortDescription:[ \t]*)(.*)$/m, (v) => noPeriod(v)) },

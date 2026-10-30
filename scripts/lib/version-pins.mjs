@@ -176,3 +176,58 @@ export function syncTree(root, version) {
   }
   return changed;
 }
+
+// Python shim (sdks/kya-python, PyPI shield-kya). It moves in lockstep with package.json, like the npm
+// side. The monorepo has it next to sdks/kya; the public mirror does not (no ../kya-python), so a
+// missing directory is skipped, as EXTRA_ROOTS are. Each entry is the one line that carries the version.
+export const PYTHON_DIR = "../kya-python";
+export const PYTHON_VERSION_LINES = [
+  { file: "pyproject.toml", re: /^version = "[^"\n]*".*$/m, line: (v) => `version = "${v}"` },
+  { file: "shield_kya/__init__.py", re: /^__version__ = "[^"\n]*".*$/m, line: (v) => `__version__ = "${v}"` },
+];
+
+/** Absolute path of the Python package next to `root`, or null when this checkout has none. */
+export function pythonDir(root) {
+  const dir = join(root, PYTHON_DIR);
+  return existsSync(dir) && statSync(dir).isDirectory() ? dir : null;
+}
+
+/** Rewrites the Python version lines to `version`; returns the changed files (relative to root). */
+export function syncPython(root, version) {
+  const dir = pythonDir(root);
+  if (!dir) return [];
+  const changed = [];
+  for (const { file, re, line } of PYTHON_VERSION_LINES) {
+    const path = join(dir, file);
+    const before = readText(path);
+    const after = before.replace(re, line(version));
+    if (after !== before) {
+      writeFileSync(path, after);
+      changed.push(relative(root, path));
+    }
+  }
+  return changed;
+}
+
+/** Problems with the Python version lines (missing file, no version line, a value other than `version`). */
+export function pythonVersionProblems(root, version) {
+  const dir = pythonDir(root);
+  if (!dir) return [];
+  const problems = [];
+  for (const { file, re } of PYTHON_VERSION_LINES) {
+    const label = `${PYTHON_DIR}/${file}`;
+    const path = join(dir, file);
+    if (!existsSync(path)) {
+      problems.push(`${label}: missing`);
+      continue;
+    }
+    const m = re.exec(readText(path));
+    if (!m) {
+      problems.push(`${label}: no version line`);
+      continue;
+    }
+    const got = /"([^"]*)"/.exec(m[0])[1];
+    if (got !== version) problems.push(`${label}: version ${got} (package.json is ${version})`);
+  }
+  return problems;
+}

@@ -30,7 +30,7 @@ kya hook --host claude --plane-config /Users/you/.kya/hosted.json
 | TLS, CA, proxy or code-loading env override (`PLANE_ENV_REFUSED`) | deny | deny | allow, recorded |
 | Unreadable hook payload (`FAIL_CLOSED`) | deny | deny | allow, recorded |
 
-- **The local never-list always wins.** It runs on the tool name before any plane answer is used, and a plane ALLOW cannot override it. The plane is still asked, so the attempt shows up in the hosted record (trail).
+- **The local never-list always wins.** It runs on the tool name and on the tool input (shell command, file path; see [never-list](never-list.md)) before any plane answer is used, and a plane ALLOW cannot override it. The plane is still asked, so the attempt shows up in the hosted record (trail).
 - **Hold.** A held call is allowed and recorded unless you pass `--strict`. Under `--strict` it is denied with a link to your console. No approval request is opened in this beta, so tell the agent not to retry until an operator has changed the policy.
 - **Shadow** (`--plane-shadow`) is for pilots. It evaluates and records, and never blocks except for the local never-list. Every row it writes carries `"shadow": true`. Shadow can only be set on the command line; no env var or file turns it on.
 - A deny exits 2 with Claude Code's `permissionDecision: "deny"` JSON on stdout and the reason on stderr, exactly like the local hook.
