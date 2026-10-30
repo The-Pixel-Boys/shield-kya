@@ -115,7 +115,7 @@ const DRIFT: Array<[string, string, string]> = [
   [".plugin/marketplace.json", COPY.variants.plugin, ".plugin/marketplace.json: Copilot marketplace:"],
   ["gemini-extension.json", COPY.variants.plugin, "gemini-extension.json: Gemini CLI extension:"],
   [".cursor-plugin/plugin.json", COPY.long, ".cursor-plugin/plugin.json: Cursor plugin:"],
-  ["../kya-python/pyproject.toml", COPY.variants.python, "../kya-python/pyproject.toml: kya-python pyproject (monorepo copy, not the PyPI source):"],
+  ["../kya-python/pyproject.toml", COPY.variants.python, "../kya-python/pyproject.toml: kya-python pyproject (PyPI source, monorepo copy):"],
   ["packaging/homebrew/shield-kya.rb", '"Tagline for agents"', "packaging/homebrew/shield-kya.rb: Homebrew:"],
   ["packaging/scoop/shield-kya.json", COPY.long, "packaging/scoop/shield-kya.json: Scoop:"],
   [`${WINGET}/0.10.0/The-Pixel-Boys.ShieldKYA.locale.en-US.yaml`, "ShortDescription: Tagline for agents", "winget ShortDescription:"],
@@ -311,7 +311,7 @@ describe("review fixes", () => {
     // A correct description in another table neither satisfies nor hides a wrong [project] one.
     put(py, `[tool.fake]\ndescription = ${right}\n\n[project]\nname = "x"\ndescription = "WRONG copy"\n`);
     expect(problems()).toEqual([
-      `${py}: kya-python pyproject (monorepo copy, not the PyPI source): expected ${right}, found "WRONG copy"`,
+      `${py}: kya-python pyproject (PyPI source, monorepo copy): expected ${right}, found "WRONG copy"`,
     ]);
     checkChannelCopy(dir, { write: true });
     expect(read(py)).toBe(`[tool.fake]\ndescription = ${right}\n\n[project]\nname = "x"\ndescription = ${right}\n`);
@@ -320,7 +320,7 @@ describe("review fixes", () => {
     expect(problems()).toEqual([]);
     // [project] without a description fails even when another table has one.
     put(py, `[project]\nname = "x"\n\n[tool.other]\ndescription = ${right}\n`);
-    expect(problems()).toEqual([`${py}: kya-python pyproject (monorepo copy, not the PyPI source): expected ${right}, found no description field`]);
+    expect(problems()).toEqual([`${py}: kya-python pyproject (PyPI source, monorepo copy): expected ${right}, found no description field`]);
   });
 
   it.each(["shot.webp", "shot.jpg", "shot.jpeg", "shot.gif", "icon.svg"])("requires a listed sha256 for assets/%s", (name) => {

@@ -1,6 +1,6 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.32.7",
+  "version": "0.32.9",
   "description": "Audit trail and traceability for AI agents. See what every coding agent did and check each tool call against policy.",
   "license": "MIT",
   "type": "module",
@@ -80,9 +80,6 @@
     "@vitest/coverage-v8": "^3.2.6",
     "typescript": "^5.7.2",
     "vitest": "^3.2.6"
-  },
-  "optionalDependencies": {
-    "fastembed": "npm:@shield-agent/fastembed@3.0.0"
   },
   "publishConfig": {
     "access": "public"

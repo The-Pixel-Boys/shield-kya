@@ -1,5 +1,5 @@
 {
-  "note": "Shared never-list vectors: asserted by test/never-list-vectors.test.ts and by kya-python tests/test_never_list.py. The MCP tool id parser is a linear string scan shared by TS (mcp-servers.ts splitMcpBody) and Python (_never_list.py _split_mcp_body), so the vectors below are the contract. Regenerate when the never-list, MCP servers or sample tools change.",
+  "note": "Shared never-list vectors: asserted by test/never-list-vectors.test.ts and by kya-python tests/test_never_list.py. The MCP tool id parser is a linear string scan shared by TS (mcp-servers.ts splitMcpBody) and Python (_never_list.py _split_mcp_body), so the vectors below are the contract. Regenerate when the never-list, MCP servers or sample tools change. A verb (neverListVerbs) matches inside a tool name, except inside a harmless word (neverListHarmless). Run-together names such as postgres__droptable are denied (default deny).",
   "denySampleIds": [
     "org.sample.never.event"
   ],
@@ -8,6 +8,21 @@
     "truncate",
     "purge",
     "transfer"
+  ],
+  "neverListHarmless": [
+    "dropdown",
+    "dropdowns",
+    "dropbox",
+    "dropboxes",
+    "droplet",
+    "droplets",
+    "dropout",
+    "dropouts",
+    "dropzone",
+    "purgeable",
+    "transferable",
+    "transference",
+    "transferor"
   ],
   "mcpServerKeys": [
     "atlassian",
@@ -250,6 +265,290 @@
     },
     {
       "toolId": "postgres__truncate",
+      "never": true
+    },
+    {
+      "toolId": "postgres__DropDatabase",
+      "never": true
+    },
+    {
+      "toolId": "postgres__DROP_TABLE",
+      "never": true
+    },
+    {
+      "toolId": "postgres__drop-table",
+      "never": true
+    },
+    {
+      "toolId": "postgresql__truncate-table",
+      "never": true
+    },
+    {
+      "toolId": "postgres__TruncateLogs",
+      "never": true
+    },
+    {
+      "toolId": "postgres__purge_queue",
+      "never": true
+    },
+    {
+      "toolId": "postgres__purgeQueue",
+      "never": true
+    },
+    {
+      "toolId": "supabase__PurgeBucket",
+      "never": true
+    },
+    {
+      "toolId": "n8n__transfer_funds",
+      "never": true
+    },
+    {
+      "toolId": "zapier__transfer_funds",
+      "never": true
+    },
+    {
+      "toolId": "mcp__supabase__dropped_table",
+      "never": true
+    },
+    {
+      "toolId": "mcp__postgres__truncated_rows",
+      "never": true
+    },
+    {
+      "toolId": "mcp__postgres__purged_rows",
+      "never": true
+    },
+    {
+      "toolId": "mcp__postgres__drops_schema",
+      "never": true
+    },
+    {
+      "toolId": "postgres__HTTPDropSchema",
+      "never": true
+    },
+    {
+      "toolId": "postgres__drop2table",
+      "never": true
+    },
+    {
+      "toolId": "postgres__x_drop",
+      "never": true
+    },
+    {
+      "toolId": "postgres__drop",
+      "never": true
+    },
+    {
+      "toolId": "postgres__Drop",
+      "never": true
+    },
+    {
+      "toolId": "postgres__TRUNCATE",
+      "never": true
+    },
+    {
+      "toolId": "postgres__purge",
+      "never": true
+    },
+    {
+      "toolId": "postgres__Transfer",
+      "never": true
+    },
+    {
+      "toolId": "confluence__purge_space",
+      "never": true
+    },
+    {
+      "toolId": "notion__transfer_page",
+      "never": true
+    },
+    {
+      "toolId": "linear__drop_project",
+      "never": true
+    },
+    {
+      "toolId": "slack__purge_channel",
+      "never": true
+    },
+    {
+      "toolId": "figma__transfer_file",
+      "never": true
+    },
+    {
+      "toolId": "firecrawl__truncate_crawl",
+      "never": true
+    },
+    {
+      "toolId": "playwright__drop_table",
+      "never": true
+    },
+    {
+      "toolId": "ms-playwright__purge_cache",
+      "never": true
+    },
+    {
+      "toolId": "sentry__purge_events",
+      "never": true
+    },
+    {
+      "toolId": "fs__drop_all",
+      "never": true
+    },
+    {
+      "toolId": "jira__DeleteAndDrop",
+      "never": true
+    },
+    {
+      "toolId": "postgres__TransferFunds",
+      "never": true
+    },
+    {
+      "toolId": "postgres__dropdown_select",
+      "never": false
+    },
+    {
+      "toolId": "postgres__dropdownSelect",
+      "never": false
+    },
+    {
+      "toolId": "postgres__dropbox_upload",
+      "never": false
+    },
+    {
+      "toolId": "postgres__droplet_list",
+      "never": false
+    },
+    {
+      "toolId": "postgres__truncation_report",
+      "never": false
+    },
+    {
+      "toolId": "postgres__purgatory_status",
+      "never": false
+    },
+    {
+      "toolId": "postgres__transference_map",
+      "never": false
+    },
+    {
+      "toolId": "postgres__transferable_licence",
+      "never": false
+    },
+    {
+      "toolId": "postgres__select_dropdown_items",
+      "never": false
+    },
+    {
+      "toolId": "postgres__get_dropdown",
+      "never": false
+    },
+    {
+      "toolId": "github__dropdown_options",
+      "never": false
+    },
+    {
+      "toolId": "supabase__purger",
+      "never": true
+    },
+    {
+      "toolId": "slack__post_message",
+      "never": false
+    },
+    {
+      "toolId": "linear__list_issues",
+      "never": false
+    },
+    {
+      "toolId": "notion__query_database",
+      "never": false
+    },
+    {
+      "toolId": "figma__export_frame",
+      "never": false
+    },
+    {
+      "toolId": "firecrawl__scrape_page",
+      "never": false
+    },
+    {
+      "toolId": "zapier__run_zap",
+      "never": false
+    },
+    {
+      "toolId": "n8n__execute_workflow",
+      "never": false
+    },
+    {
+      "toolId": "fetch__get_url",
+      "never": false
+    },
+    {
+      "toolId": "sentry__list_events",
+      "never": false
+    },
+    {
+      "toolId": "confluence__search_pages",
+      "never": false
+    },
+    {
+      "toolId": "jira__add_comment",
+      "never": false
+    },
+    {
+      "toolId": "exa__search_web",
+      "never": false
+    },
+    {
+      "toolId": "context7__resolve_library_id",
+      "never": false
+    },
+    {
+      "toolId": "serena__find_symbol",
+      "never": false
+    },
+    {
+      "toolId": "playwright__take_screenshot",
+      "never": false
+    },
+    {
+      "toolId": "postgres__droppable_items",
+      "never": true
+    },
+    {
+      "toolId": "postgres__undropped",
+      "never": true
+    },
+    {
+      "toolId": "postgres__sdrop",
+      "never": true
+    },
+    {
+      "toolId": "postgres__droppy",
+      "never": true
+    },
+    {
+      "toolId": "postgres__truncator",
+      "never": false
+    },
+    {
+      "toolId": "postgres__purgeable",
+      "never": false
+    },
+    {
+      "toolId": "postgres__droptable",
+      "never": true
+    },
+    {
+      "toolId": "postgres__DROPTABLE",
+      "never": true
+    },
+    {
+      "toolId": "postgres__dropdown_drop_table",
+      "never": true
+    },
+    {
+      "toolId": "postgres__drop_down_list",
       "never": true
     }
   ]

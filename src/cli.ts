@@ -13,118 +13,10 @@ import { fileURLToPath } from "node:url";
 import { resolveConfig } from "./config.js";
 import { KyaError } from "./errors.js";
 import { flagBool, flagString, parseArgs } from "./parse-args.js";
-import { initFromArgs } from "./commands/init.js";
-import {
-  registerAgentInputFromArgs,
-  runRegisterAgent,
-} from "./commands/register-agent.js";
-import {
-  evalToolInputFromArgs,
-  formatEvalHuman,
-  runEvalTool,
-} from "./commands/eval-tool.js";
-import {
-  runServeMcp,
-  serveMcpOptionsFromArgs,
-} from "./commands/serve-mcp.js";
-import {
-  orrRunOptionsFromArgs,
-  runOrr,
-} from "./commands/orr.js";
-import {
-  certifyOptionsFromArgs,
-  formatCertifySummary,
-  runCertify,
-} from "./commands/certify.js";
-import { runDash } from "./commands/dash.js";
-import {
-  formatAgentTable,
-  formatApprovalTable,
-  formatSessionTable,
-  requireId,
-  runGetAgent,
-  runGetPassport,
-  runKillAgent,
-  runListAgents,
-  runListApprovals,
-  runListSessions,
-  runShrinkSession,
-  shrinkToFromArgs,
-} from "./commands/ops.js";
-import {
-  formatWrapHuman,
-  runWrap,
-  verdictExitCode,
-  wrapExitCode,
-  wrapInputFromArgs,
-} from "./commands/wrap.js";
-import {
-  formatReceiptHuman,
-  openPath,
-  receiptInputFromArgs,
-  runReceipt,
-  runReceiptShare,
-} from "./commands/receipt.js";
-import { formatShareLine, SHARE_HOSTED_HINT } from "./receipt/share.js";
-import { formatStartHuman, runStart } from "./commands/start.js";
-import {
-  connectableHosts,
-  formatConnectHuman,
-  runConnect,
-} from "./commands/connect.js";
-import { appendTrail, defaultSessionId } from "./trail.js";
-import { deriveTargetPath } from "./trail-summary.js";
-import { decideIdFromArgs, runDecide } from "./commands/decide.js";
-import {
-  formatInvokeHuman,
-  invokeInputFromArgs,
-  runInvoke,
-} from "./commands/invoke.js";
-import { runSandboxCommand } from "./commands/sandbox.js";
-import { runHook } from "./commands/hook.js";
-import { crashDecision, guardStream, hostedCrashHandler, planeBudgetMs } from "./commands/hosted-hook.js";
-import { importOptionsFromArgs, runImport } from "./commands/import-traces.js";
-import {
-  investigateOptionsFromArgs,
-  runInvestigate,
-} from "./commands/investigate.js";
-import {
-  discoverOptionsFromArgs,
-  runDiscover,
-} from "./commands/discover.js";
-import { runNotifyFlush } from "./commands/notify-flush.js";
-import { formatStopHuman, runStop } from "./commands/stop.js";
-import { runReceiptServe } from "./commands/receipt-serve.js";
-import { maybePrintStarCta } from "./star-cta.js";
-import {
-  formatGateDoctorHuman,
-  gateMcpUrl,
-  gateSubcommand,
-  runGateDoctor,
-  runGateInit,
-  runGateRun,
-  runGateSetup,
-  runGateStop,
-} from "./commands/gate.js";
-import { triggerHostedSyncFromEnv } from "./gate/hosted-sync.js";
-import { runGateServe } from "./commands/gate-serve.js";
 import { ensureSupportedNode } from "./node-upgrade.js";
 import { CLI_VERSION } from "./version.js";
-import {
-  checkForUpdate,
-  formatUpdateBanner,
-  shouldSkipUpdateCheck,
-} from "./update-check.js";
-import { runUpdate } from "./commands/update.js";
-import { formatTeamInitHuman, managedSettings, runTeamInit } from "./commands/team.js";
-import {
-  maybePromptConsent,
-  maybeSpawnHookPing,
-  runTelemetryCommand,
-  startSessionBeacon,
-} from "./telemetry.js";
 
-const HELP = `Shield KYA light CLI - Know Your Agent (provider-agnostic)
+const helpFor = (hosts: string): string => `Shield KYA light CLI - Know Your Agent (provider-agnostic)
 
 Usage:
   kya <command> [options]
@@ -139,7 +31,7 @@ Commands:
                     (--all also stops orphaned report daemons from other
                     directories or older installs)
   connect <host>    Wire KYA MCP into a coding host config
-                    (${connectableHosts().join("|")}; --project for project scope, --force to overwrite)
+                    (${hosts}; --project for project scope, --force to overwrite)
                     --hooks also wires the host's PreToolUse hook (claude|grok|kimi)
                     --hooks --hosted --plane-config <abs path> wires the hosted hook (claude, beta)
                     --gate points the host at the local kya gateway (kya gate run)
@@ -150,6 +42,9 @@ Commands:
                     merges a tag-pinned marketplace + enabledPlugins into the project's
                     .claude/settings.json (--dry-run shows the change, writes nothing)
   team managed-settings  Print the managed-settings JSON an admin deploys
+  login             Link this machine to the hosted console (device code). Saves a 0600
+                    key in ~/.kya/hosted-credentials.json. --base-url <url> or KYA_BASE_URL
+  logout            Delete the saved hosted key (the key stays active until you revoke it)
   update            Self-update to the latest npm version (kya start warns when
                     a newer release exists; --no-update-check / KYA_UPDATE_CHECK=0 opts out)
   register-agent    POST /api/v1/kya/agents (human mint; server applies allow/break-glass/approve)
@@ -260,6 +155,12 @@ Docs: https://shield-agent.com/install · docs/guides/kya-light-install.md
 Doctrine: sole PEP is Shield; DENY is hard; missing APPROVED ⇒ no irreversible side effect.
 `;
 
+/** Help text. The host list comes from the connect registry, loaded on demand so `kya hook` stays light. */
+async function helpText(): Promise<string> {
+  const { connectableHosts } = await import("./commands/connect.js");
+  return helpFor(connectableHosts().join("|"));
+}
+
 export interface CliIo {
   readonly log: (msg: string) => void;
   readonly error: (msg: string) => void;
@@ -312,7 +213,7 @@ export async function runCli(
     parsed.flags["help"] === true ||
     parsed.flags["h"] === true
   ) {
-    io.log(HELP);
+    io.log(await helpText());
     return 0;
   }
 
@@ -322,6 +223,10 @@ export async function runCli(
 
     switch (parsed.command) {
       case "start": {
+        const { formatStartHuman, runStart } = await import("./commands/start.js");
+        const { maybePrintStarCta } = await import("./star-cta.js");
+        const { checkForUpdate, formatUpdateBanner, shouldSkipUpdateCheck } = await import("./update-check.js");
+        const { maybePromptConsent } = await import("./telemetry.js");
         const config = resolveConfig({
           cwd,
           env,
@@ -352,11 +257,29 @@ export async function runCli(
         return 0;
       }
 
+      case "login": {
+        const { loginBrowserOpener, runLogin } = await import("./commands/login.js");
+        const { openPath } = await import("./commands/receipt.js");
+        return await runLogin({
+          io,
+          env,
+          baseUrl: flagString(parsed.flags, "base-url"),
+          open: loginBrowserOpener(env, io.isTty ?? Boolean(process.stdout.isTTY), (url) => openPath(url)),
+        });
+      }
+
+      case "logout": {
+        const { runLogout } = await import("./commands/login.js");
+        return runLogout({ io, env });
+      }
+
       case "update": {
+        const { runUpdate } = await import("./commands/update.js");
         return await runUpdate();
       }
 
       case "stop": {
+        const { formatStopHuman, runStop } = await import("./commands/stop.js");
         const result = await runStop(cwd, { all: flagBool(parsed.flags, "all") });
         if (parsed.flags["json"] === true || parsed.flags["json"] === "true") {
           io.log(JSON.stringify(result, null, 2));
@@ -367,6 +290,9 @@ export async function runCli(
       }
 
       case "receipt-serve": {
+        const { receiptInputFromArgs } = await import("./commands/receipt.js");
+        const { runReceiptServe } = await import("./commands/receipt-serve.js");
+        const { startSessionBeacon } = await import("./telemetry.js");
         // Internal: detached child of `kya start` / `kya receipt --open`.
         const config = resolveConfig({
           cwd,
@@ -390,6 +316,9 @@ export async function runCli(
       }
 
       case "connect": {
+        const { formatConnectHuman, runConnect } = await import("./commands/connect.js");
+        const { gateMcpUrl } = await import("./commands/gate.js");
+        const { maybePromptConsent } = await import("./telemetry.js");
         if (parsed.flags["plane-config"] !== undefined && !flagBool(parsed.flags, "hosted")) {
           // Without --hosted this would quietly wire the local, fail-open hook.
           io.error("--plane-config needs --hosted (kya connect claude --hooks --hosted --plane-config <absolute path>)");
@@ -397,6 +326,7 @@ export async function runCli(
         }
         const host = parsed.positionals[0];
         if (!host) {
+          const { connectableHosts } = await import("./commands/connect.js");
           io.error(
             `Usage: kya connect <host>  (${connectableHosts().join("|")})`,
           );
@@ -441,6 +371,8 @@ export async function runCli(
       }
 
       case "gate": {
+        const { formatGateDoctorHuman, gateSubcommand, runGateDoctor, runGateInit, runGateRun, runGateSetup, runGateStop } = await import("./commands/gate.js");
+        const { triggerHostedSyncFromEnv } = await import("./gate/hosted-sync.js");
         const sub = gateSubcommand(parsed);
         if (sub === "init") {
           const result = runGateInit(env);
@@ -511,6 +443,8 @@ export async function runCli(
       }
 
       case "gate-serve": {
+        const { runGateServe } = await import("./commands/gate-serve.js");
+        const { startSessionBeacon } = await import("./telemetry.js");
         // Internal: detached supervisor child of `kya gate run`.
         const beacon = startSessionBeacon("gateway", { env, cwd });
         try {
@@ -522,6 +456,8 @@ export async function runCli(
       }
 
       case "init": {
+        const { initFromArgs } = await import("./commands/init.js");
+        const { maybePromptConsent } = await import("./telemetry.js");
         if (!flagBool(parsed.flags, "json")) await maybePromptConsent(io, env);
         const result = initFromArgs(parsed, cwd);
         if (parsed.flags["json"] === true || parsed.flags["json"] === "true") {
@@ -536,6 +472,7 @@ export async function runCli(
       }
 
       case "team": {
+        const { formatTeamInitHuman, managedSettings, runTeamInit } = await import("./commands/team.js");
         const sub = parsed.positionals[0];
         if (sub === "managed-settings") {
           io.log(JSON.stringify(managedSettings(), null, 2));
@@ -554,6 +491,7 @@ export async function runCli(
       }
 
       case "register-agent": {
+        const { registerAgentInputFromArgs, runRegisterAgent } = await import("./commands/register-agent.js");
         const config = resolveConfig({
           cwd,
           env,
@@ -573,6 +511,10 @@ export async function runCli(
       }
 
       case "eval-tool": {
+        const { evalToolInputFromArgs, formatEvalHuman, runEvalTool } = await import("./commands/eval-tool.js");
+        const { verdictExitCode } = await import("./commands/wrap.js");
+        const { appendTrail, defaultSessionId } = await import("./trail.js");
+        const { deriveTargetPath } = await import("./trail-summary.js");
         const input = evalToolInputFromArgs(parsed);
         const config = resolveConfig({
           cwd,
@@ -610,6 +552,9 @@ export async function runCli(
       }
 
       case "receipt": {
+        const { formatReceiptHuman, receiptInputFromArgs, runReceipt, runReceiptShare } = await import("./commands/receipt.js");
+        const { SHARE_HOSTED_HINT, formatShareLine } = await import("./receipt/share.js");
+        const { maybePrintStarCta } = await import("./star-cta.js");
         const config = resolveConfig({
           cwd,
           env,
@@ -648,11 +593,20 @@ export async function runCli(
         } else {
           io.log(formatReceiptHuman(result));
           if (result.liveUrl) maybePrintStarCta(cwd, result.days, io.log);
+          // One CTA per day at most: the truncation pitch wins over the --share hint.
+          const { maybeCta } = await import("./cta.js");
+          const { trailTruncated } = await import("./trail.js");
+          maybeCta(
+            trailTruncated(cwd, env) ? "receipt-truncated" : "receipt-share",
+            { env, cwd, isTty: io.isTty ?? Boolean(process.stdout.isTTY) },
+            io.log,
+          );
         }
         return 0;
       }
 
       case "wrap": {
+        const { formatWrapHuman, runWrap, wrapExitCode, wrapInputFromArgs } = await import("./commands/wrap.js");
         const input = wrapInputFromArgs(parsed);
         const config = resolveConfig({
           cwd,
@@ -682,6 +636,8 @@ export async function runCli(
       }
 
       case "invoke": {
+        const { verdictExitCode } = await import("./commands/wrap.js");
+        const { formatInvokeHuman, invokeInputFromArgs, runInvoke } = await import("./commands/invoke.js");
         const input = invokeInputFromArgs(parsed);
         const config = resolveConfig({
           cwd,
@@ -700,6 +656,7 @@ export async function runCli(
 
       case "approve":
       case "reject": {
+        const { decideIdFromArgs, runDecide } = await import("./commands/decide.js");
         const id = decideIdFromArgs(parsed, parsed.command);
         const config = resolveConfig({
           cwd,
@@ -720,6 +677,8 @@ export async function runCli(
       }
 
       case "serve-mcp": {
+        const { runServeMcp, serveMcpOptionsFromArgs } = await import("./commands/serve-mcp.js");
+        const { startSessionBeacon } = await import("./telemetry.js");
         const config = resolveConfig({
           cwd,
           env,
@@ -764,6 +723,7 @@ export async function runCli(
       }
 
       case "orr": {
+        const { orrRunOptionsFromArgs, runOrr } = await import("./commands/orr.js");
         const sub = parsed.positionals[0];
         if (sub !== "run") {
           io.error('Usage: kya orr run --path <dir> [options]');
@@ -789,6 +749,8 @@ export async function runCli(
       }
 
       case "certify": {
+        const { certifyOptionsFromArgs, formatCertifySummary, runCertify } = await import("./commands/certify.js");
+        const { openPath } = await import("./commands/receipt.js");
         // Local-first, evidence-only: no resolveConfig, no API key, no network.
         const opts = certifyOptionsFromArgs(parsed);
         const result = runCertify({ ...opts, cwd, env });
@@ -803,6 +765,11 @@ export async function runCli(
           io.log(
             "(evidence only - sole PEP remains Shield KYA; certify never allows or blocks)",
           );
+          if (result.report.overall.result === "gap") {
+            // One-line CTA, silent in CI, non-TTY, quiet, opt-out and within 24 h of the last one. Never changes exit code.
+            const { maybeCta } = await import("./cta.js");
+            maybeCta("certify-gaps", { env, cwd, isTty: io.isTty ?? Boolean(process.stdout.isTTY), json: jsonOut, quiet: opts.quiet }, io.log);
+          }
         }
         // Attestation confirmation is safety-relevant (proof the attest write
         // happened): it prints even under --quiet, like the key notice;
@@ -828,6 +795,7 @@ export async function runCli(
       }
 
       case "agents": {
+        const { formatAgentTable, runListAgents } = await import("./commands/ops.js");
         const config = resolveConfig({
           cwd,
           env,
@@ -840,6 +808,7 @@ export async function runCli(
       }
 
       case "agent": {
+        const { formatAgentTable, requireId, runGetAgent } = await import("./commands/ops.js");
         const id = requireId(parsed, "agent");
         const config = resolveConfig({
           cwd,
@@ -853,6 +822,7 @@ export async function runCli(
       }
 
       case "passport": {
+        const { requireId, runGetPassport } = await import("./commands/ops.js");
         const id = requireId(parsed, "passport");
         const config = resolveConfig({
           cwd,
@@ -866,6 +836,7 @@ export async function runCli(
       }
 
       case "kill": {
+        const { requireId, runKillAgent } = await import("./commands/ops.js");
         const id = requireId(parsed, "kill");
         const config = resolveConfig({
           cwd,
@@ -880,6 +851,7 @@ export async function runCli(
       }
 
       case "approvals": {
+        const { formatApprovalTable, runListApprovals } = await import("./commands/ops.js");
         const config = resolveConfig({
           cwd,
           env,
@@ -892,6 +864,7 @@ export async function runCli(
       }
 
       case "sessions": {
+        const { formatSessionTable, runListSessions } = await import("./commands/ops.js");
         const config = resolveConfig({
           cwd,
           env,
@@ -904,6 +877,7 @@ export async function runCli(
       }
 
       case "shrink": {
+        const { requireId, runShrinkSession, shrinkToFromArgs } = await import("./commands/ops.js");
         const id = requireId(parsed, "shrink");
         const to = shrinkToFromArgs(parsed);
         const config = resolveConfig({
@@ -919,6 +893,7 @@ export async function runCli(
       }
 
       case "dash": {
+        const { runDash } = await import("./commands/dash.js");
         const config = resolveConfig({
           cwd,
           env,
@@ -931,10 +906,12 @@ export async function runCli(
       }
 
       case "sandbox": {
+        const { runSandboxCommand } = await import("./commands/sandbox.js");
         return await runSandboxCommand(parsed);
       }
 
       case "telemetry": {
+        const { runTelemetryCommand } = await import("./telemetry.js");
         return runTelemetryCommand(
           {
             sub: parsed.positionals[0],
@@ -948,6 +925,9 @@ export async function runCli(
       }
 
       case "hook": {
+        const { runHook } = await import("./commands/hook.js");
+        const { crashDecision, guardStream, hostedCrashHandler, planeBudgetMs } = await import("./commands/hosted-hook.js");
+        const { maybeSpawnHookPing } = await import("./telemetry.js");
         const host = flagString(parsed.flags, "host") ?? "other";
         const strict = flagBool(parsed.flags, "strict");
         // Strict boolean: parseArgs would otherwise swallow a following word
@@ -1021,25 +1001,29 @@ export async function runCli(
       }
 
       case "import": {
+        const { importOptionsFromArgs, runImport } = await import("./commands/import-traces.js");
         return await runImport(importOptionsFromArgs(parsed), io, cwd, env);
       }
 
       case "investigate": {
+        const { investigateOptionsFromArgs, runInvestigate } = await import("./commands/investigate.js");
         return await runInvestigate(investigateOptionsFromArgs(parsed), io, cwd, env);
       }
 
       case "discover": {
+        const { discoverOptionsFromArgs, runDiscover } = await import("./commands/discover.js");
         return await runDiscover(discoverOptionsFromArgs(parsed), io, cwd, env);
       }
 
       case "notify-flush": {
+        const { runNotifyFlush } = await import("./commands/notify-flush.js");
         // Internal: spawned detached by hook/wrap (src/notify/dispatch.ts).
         return await runNotifyFlush(env, cwd);
       }
 
       default:
         io.error(`Unknown command: ${parsed.command}`);
-        io.log(HELP);
+        io.log(await helpText());
         return 2;
     }
   } catch (err) {

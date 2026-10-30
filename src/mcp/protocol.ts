@@ -250,7 +250,7 @@ async function callPolicyEvaluate(
   if (ctx.offline) {
     // Same local evaluator as `kya eval-tool --offline` - a verdict, never a
     // network error, so the wired (keyless) path still lands on the trail.
-    response = evaluateOffline(request, host);
+    response = evaluateOffline(request, host, argsObj);
   } else {
     try {
       response = await ctx.client.evaluatePolicy(request);

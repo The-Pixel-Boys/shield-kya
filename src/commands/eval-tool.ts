@@ -58,7 +58,7 @@ export async function runEvalTool(
       : req;
 
   if (input.offline || config.offline) {
-    const response = evaluateOffline(request, config.host);
+    const response = evaluateOffline(request, config.host, input.args);
     return {
       response,
       toolId,
