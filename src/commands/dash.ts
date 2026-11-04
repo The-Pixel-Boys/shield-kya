@@ -14,6 +14,8 @@ import { runWrap, wrapExitCode } from "./wrap.js";
 import { runInvoke } from "./invoke.js";
 import { runKillAgent, runShrinkSession } from "./ops.js";
 import { runOrr } from "./orr.js";
+import { postureCard, setPostureShare } from "../posture/card.js";
+import { shareOn } from "../posture/store.js";
 
 const AUTO_REFRESH_MS = 5_000;
 
@@ -41,6 +43,7 @@ const PANES: DashPane[] = [
   "orr",
   "mcp",
   "sandbox",
+  "ioc",
   "dashboard",
   "cases",
   "metrics",
@@ -95,6 +98,8 @@ export async function runDash(
   const policyCache = new PolicySampleCache();
   let forcePolicyEval = false;
   let autoRefresh = false;
+  // Developer setup: P shows the preview, a second P turns sharing on. P while on turns it off.
+  let postureArmed = false;
   let pending: PendingConfirm | undefined;
   let busy = false;
 
@@ -331,7 +336,7 @@ export async function runDash(
       }
       if (action.type === "help") {
         io.log(
-          "1-8 panes · j/k · e eval · p auto-refresh · w wrap · k kill · i invoke · b/R shrink · o orr · t passport · a/x decide (y confirm; sk_* refused) · O offline · q",
+          "1-9 panes · j/k · e eval · p auto-refresh · w wrap · k kill · i invoke · b/R shrink · o orr · t passport · a/x decide (y confirm; sk_* refused) · O offline · q",
         );
         return;
       }
@@ -349,6 +354,24 @@ export async function runDash(
         forcePolicyEval = true;
         policyCache.invalidate();
         pane = "policy";
+      } else if (action.type === "posture-toggle") {
+        if (shareOn(env)) {
+          postureArmed = false;
+          setPostureShare(env, false);
+          io.log("Posture sharing is off. Nothing is sent.");
+        } else if (!postureArmed) {
+          const card = postureCard(env);
+          postureArmed = true;
+          io.log(
+            `Posture preview: ${card.hosts.length} host(s), ${card.extensions.length} extension(s), ${card.mcpServers.length} MCP server(s). Press P again to turn sharing on. Advisory; the workspace must also allow it.`,
+          );
+        } else {
+          postureArmed = false;
+          const r = setPostureShare(env, true);
+          io.log(r.ok ? "Posture sharing is on. The workspace must also allow it." : `Not switched on: ${r.error}.`);
+        }
+        void paint({ clear: false });
+        return;
       } else if (action.type === "toggle-auto-refresh") {
         autoRefresh = !autoRefresh;
         io.log(autoRefresh ? `auto-refresh ${AUTO_REFRESH_MS / 1000}s` : "auto-refresh off");

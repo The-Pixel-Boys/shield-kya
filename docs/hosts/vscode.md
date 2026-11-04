@@ -2,7 +2,7 @@
 
 The `vscode/` folder of this repo is a VS Code extension, **Shield KYA**. It shows what kya recorded for every coding-agent tool call, inside the editor. It works in VS Code 1.101+ and in forks that install extensions from Open VSX, such as Cursor.
 
-It is a viewer and a launcher, not a gate. Local kya is advisory: it records every tool call, blocks only the never-list and fails open (an error lets the call through). Enforcement (fail-closed hooks, Hold tickets, approvals) is the hosted product.
+It is a viewer and a launcher, not a gate. Local kya is advisory: it records every tool call, blocks the never-list and the guard pack and fails open (an error lets the call through). Enforcement (fail-closed hooks, Hold tickets, approvals) is the hosted product.
 
 ## Install
 

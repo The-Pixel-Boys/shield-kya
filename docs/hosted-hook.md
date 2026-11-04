@@ -1,6 +1,6 @@
-# Hosted-plane hook (beta)
+# Hosted-plane hook (preview)
 
-> **Beta.** Hosted mode is new and its limits are listed below. Read them before you rely on it.
+> **Preview.** Hosted mode is new and its limits are listed below. Read them before you rely on it.
 > Any API key you create today has write scope, not just evaluate scope. A key that can only
 > evaluate is planned and not available yet.
 
@@ -17,6 +17,7 @@ kya hook --host claude --plane-config /Users/you/.kya/hosted.json
 | Plane answer or condition | Hosted (default) | `--strict` | `--plane-shadow` |
 |---|---|---|---|
 | Local never-list match (for example `mcp__postgres__drop_table`) | deny | deny | deny |
+| Local guard pack match (for example `terraform destroy`, a read of `~/.kube/config`) | deny | deny | deny |
 | ALLOW | allow | allow | allow |
 | DENY (registered DENY tool, workspace policy, session clearance) | deny | deny | allow, recorded |
 | REQUIRE_APPROVE (hold; every unregistered tool such as Read or Bash today) | allow, recorded | deny, with a console link | allow, recorded |
@@ -31,8 +32,9 @@ kya hook --host claude --plane-config /Users/you/.kya/hosted.json
 | Unreadable hook payload (`FAIL_CLOSED`) | deny | deny | allow, recorded |
 
 - **The local never-list always wins.** It runs on the tool name and on the tool input (shell command, file path; see [never-list](never-list.md)) before any plane answer is used, and a plane ALLOW cannot override it. The plane is still asked, so the attempt shows up in the hosted record (trail).
-- **Hold.** A held call is allowed and recorded unless you pass `--strict`. Under `--strict` it is denied with a link to your console. No approval request is opened in this beta, so tell the agent not to retry until an operator has changed the policy.
-- **Shadow** (`--plane-shadow`) is for pilots. It evaluates and records, and never blocks except for the local never-list. Every row it writes carries `"shadow": true`. Shadow can only be set on the command line; no env var or file turns it on.
+- **The local guard pack wins next.** After the never-list, the hook runs the guard pack ([guard-pack](guard-pack.md#hosted-mode)): destructive shell commands, credential reads, secret-shaped writes, exfiltration, and writes to the guard config. Same rules, rule ids and reason codes (`NEVER_SHELL`, `NEVER_SECRET_READ`, `NEVER_SECRET_WRITE`, `NEVER_EXFIL`) as the local hook. A guard deny beats a plane ALLOW and beats a plane failure, so a dead plane still reports the guard code. The plane is still asked, except that a denied secret-shaped write sends no summary, preview or path. The guard reads the user-level `<HOME>/.kya/config.json` (switches and `guardAllow`); a project config and `KYA_HOME` are ignored. A lifted local rule never lowers the plane's verdict. Fail-closed stays: a crash after a guard hit still exits 2.
+- **Hold.** A held call is allowed and recorded unless you pass `--strict`. Under `--strict` it is denied with a link to your console. No approval request is opened in this preview, so tell the agent not to retry until an operator has changed the policy.
+- **Shadow** (`--plane-shadow`) is for pilots. It evaluates and records, and never blocks the plane's own denies; the local never-list and guard pack still block. Every row it writes carries `"shadow": true`. Shadow can only be set on the command line; no env var or file turns it on.
 - A deny exits 2 with Claude Code's `permissionDecision: "deny"` JSON on stdout and the reason on stderr, exactly like the local hook.
 
 ## Retries and the latency budget
@@ -70,7 +72,7 @@ chmod 600 ~/.kya/hosted.json
   - it lies inside the project directory the agent runs in or that directory's git work tree (found by walking up to the nearest `.git`; the home directory itself is exempt, including a repository rooted at the home directory);
   - it is not valid JSON, or `agentId` is not a UUID;
   - `baseUrl` is not a plain `https:` origin: no credentials, query, fragment or port 0, ASCII only, no punycode, written in canonical form (so `0x7f.1` or `2130706433` are refused), and no IP address or `localhost` name. `--plane-allow-http-loopback` (command line only, for local testing) admits exactly `127.0.0.1` and `[::1]`, over http or https.
-- Windows is not supported in this beta, because the owner and mode checks need POSIX.
+- Windows is not supported in this preview, because the owner and mode checks need POSIX.
 - kya never prints, logs or writes the key to the record, and error messages never echo the file. Node's own debug output (`NODE_DEBUG`, which would print request headers) is refused, see below. As a best-effort last resort, once the config file is loaded, hosted mode redacts the key from string and Buffer writes to `process.stdout` and `process.stderr`: the exact key, the exact key split across two writes, and its URL-encoded or base64 form only when that whole encoded form lies within one write (base64 only when aligned to the key's start). It does not cover a key it has not loaded yet, `Uint8Array` writes, direct `fs.writeSync` to fd 1 or 2, hex or other encodings, unaligned base64, or any other transformation, and a held-back partial key prefix that never completes is released as written at exit.
 
 ## Environment: what is ignored and what is refused
@@ -96,7 +98,7 @@ The record goes to `$HOME/.kya/trail.jsonl`. User-level notify and OTLP settings
 
 **What the refusal cannot do.** A `NODE_OPTIONS` preload (`--require`, `--import`), `NODE_PATH`/`OPENSSL_CONF` code, or a loader-level injection (`DYLD_INSERT_LIBRARIES`, `LD_PRELOAD`) has already run before the hook's own check, before any JavaScript, so the check can only refuse to send the key and deny the call afterwards; it cannot stop that code from running. This is the same class as anyone who controls the process environment. Do not let repositories or users set env overrides for agent sessions (prefer managed settings).
 
-A corporate setup that needs a custom CA or a proxy cannot use hosted mode in this beta. Managed settings can also set `env` for every session; if an administrator puts one of the refused variables there, every hosted hook call is denied. That is the administrator's responsibility to avoid.
+A corporate setup that needs a custom CA or a proxy cannot use hosted mode in this preview. Managed settings can also set `env` for every session; if an administrator puts one of the refused variables there, every hosted hook call is denied. That is the administrator's responsibility to avoid.
 
 Privacy opt-outs are still honoured, because they can only send less. `KYA_SEND_PREVIEWS=0` keeps `summary`, `diffPreview` and `targetPath` off the wire.
 
@@ -121,7 +123,7 @@ The same fields connected mode sends, plus four record fields:
 kya connect claude --hooks --hosted --plane-config /Users/you/.kya/hosted.json
 ```
 
-This validates the file first, then writes the PreToolUse hook into `~/.claude/settings.json` with `"onFailure": "block"` (Claude Code 2.1.295 or later), so a crash or a host timeout also blocks. It replaces an existing kya hook instead of adding a second copy. `--plane-config` without `--hosted` is refused rather than silently wiring the local hook. The reverse is also refused: `kya connect claude --hooks` without `--hosted` (even with `--force`) will not swap a hosted hook back to the local one; remove the entry by hand if that is what you want. Add `--strict` or `--plane-shadow` to put that flag on the hook command. The key is never written to the settings file. Only Claude Code is supported for hosted wiring in this beta.
+This validates the file first, then writes the PreToolUse hook into `~/.claude/settings.json` with `"onFailure": "block"` (Claude Code 2.1.295 or later), so a crash or a host timeout also blocks. It replaces an existing kya hook instead of adding a second copy. `--plane-config` without `--hosted` is refused rather than silently wiring the local hook. The reverse is also refused: `kya connect claude --hooks` without `--hosted` (even with `--force`) will not swap a hosted hook back to the local one; remove the entry by hand if that is what you want. Add `--strict` or `--plane-shadow` to put that flag on the hook command. The key is never written to the settings file. Only Claude Code is supported for hosted wiring in this preview.
 
 **A fleet (managed settings):** a user-level hook can be removed by the user. Worse, a repository's committed `.claude/settings.json` can set `"disableAllHooks": true`, which turns off user, project and plugin hooks; only managed hooks keep running. For enforcement that a repository or the agent cannot switch off, deploy the hook in Claude Code managed settings. The file goes at `/Library/Application Support/ClaudeCode/managed-settings.json` on macOS, `/etc/claude-code/managed-settings.json` on Linux and WSL, or through MDM or server-managed settings. Add `allowManagedHooksOnly` so that only managed hooks run:
 

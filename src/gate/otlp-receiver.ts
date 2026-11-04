@@ -17,6 +17,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { appendTrail, type TrailEvent } from "../trail.js";
+import { deviceId } from "../device-id.js";
 import { assertNoSecrets } from "../dash/render.js";
 import {
   decodeTraceJson,
@@ -191,7 +192,8 @@ export async function startOtlpReceiver(opts: OtlpReceiverOptions): Promise<Otlp
         }
         try {
           const event = spanToTrailEvent(span, ctx);
-          if (event) append(opts.cwd, event, env);
+          const id = deviceId(env);
+          if (event) append(opts.cwd, id ? { ...event, deviceId: id } : event, env);
         } catch {
           // Secret-scanner trip or append failure: drop the event, keep serving.
         }

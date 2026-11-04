@@ -10,15 +10,20 @@ import type { Host } from "../config.js";
 import { computeArgsHash } from "../hash.js";
 import { findSampleTool } from "../sample-tools.js";
 import { evaluateOffline } from "../offline-evaluate.js";
+import { guardContextFrom } from "../guard-pack.js";
+import { isNeverCode } from "../never-code.js";
+import { loadProjectPolicy } from "../project-policy.js";
 import { AuthRequiredError, clientSafeError, HttpError } from "../errors.js";
 import { CLI_VERSION } from "../version.js";
 import { parseUsageRecords } from "../showback/cost-per-task.js";
 import { appendTrail, defaultSessionId } from "../trail.js";
 import { kyaHome, readFileConfig } from "../config.js";
 import { deriveTargetPath } from "../trail-summary.js";
+import { trailMapFields } from "../trail-map-fields.js";
 import { deriveWireChangeFields } from "../diff-preview.js";
 import { notifyOnTrailEvent, type NotifyFileConfig } from "../notify/index.js";
 import { exportVerdictSpan, resolveOtlpExportConfig } from "../otel/exporter.js";
+import { readOptInConfig } from "../otel/map-attrs-optin.js";
 
 export const MCP_SERVER_INFO = {
   name: "shield-kya",
@@ -144,6 +149,8 @@ function recordMcpTrail(
     readonly diffPreview?: string;
     /** Wall latency of the evaluate call in ms (observe-only). */
     readonly latencyMs?: number;
+    /** Raw tool args, read only to derive targetClass. Never stored. */
+    readonly args?: unknown;
   },
 ): void {
   const trail = ctx.trail;
@@ -160,11 +167,13 @@ function recordMcpTrail(
         | "offline"
         | "hold"
         | "observe",
-      neverEvent: event.reasonCode === "NEVER_EVENT",
+      neverEvent: isNeverCode(event.reasonCode),
       ...(event.argsHash ? { argsHash: event.argsHash } : {}),
       ...(event.targetPath ? { targetPath: event.targetPath } : {}),
-      ...(event.summary ? { summary: event.summary } : {}),
-      ...(event.diffPreview ? { diffPreview: event.diffPreview } : {}),
+      ...trailMapFields(event.toolId, event.args, trail.cwd, process.env),
+      // A secret-shaped write is denied because its text is a secret: no summary or preview of it is stored.
+      ...(event.summary && event.reasonCode !== "NEVER_SECRET_WRITE" ? { summary: event.summary } : {}),
+      ...(event.diffPreview && event.reasonCode !== "NEVER_SECRET_WRITE" ? { diffPreview: event.diffPreview } : {}),
       ...(event.latencyMs !== undefined ? { latencyMs: event.latencyMs } : {}),
     };
     appendTrail(trail.cwd, trailEvent);
@@ -175,7 +184,7 @@ function recordMcpTrail(
       ...readFileConfig(trail.cwd),
     } as NotifyFileConfig;
     void notifyOnTrailEvent(trailEvent, fileConfig).catch(() => undefined);
-    const otlp = resolveOtlpExportConfig(process.env, fileConfig);
+    const otlp = resolveOtlpExportConfig(process.env, fileConfig, readOptInConfig(trail.cwd));
     if (otlp) void exportVerdictSpan(trailEvent, otlp).catch(() => undefined);
   } catch {
     /* observe path is never allowed to break the gate */
@@ -250,7 +259,9 @@ async function callPolicyEvaluate(
   if (ctx.offline) {
     // Same local evaluator as `kya eval-tool --offline` - a verdict, never a
     // network error, so the wired (keyless) path still lands on the trail.
-    response = evaluateOffline(request, host, argsObj);
+    // Repo policy (.kya/policy.json) is read from the trail's project folder; no trail context, no repo policy.
+    const policy = ctx.trail ? loadProjectPolicy(ctx.trail.cwd) : undefined;
+    response = evaluateOffline(request, host, argsObj, policy, guardContextFrom(ctx.trail?.cwd ?? process.cwd()));
   } else {
     try {
       response = await ctx.client.evaluatePolicy(request);
@@ -263,6 +274,7 @@ async function callPolicyEvaluate(
         reasonCode: planeFailureReason(err),
         argsHash,
         targetPath,
+        args: argsObj,
         latencyMs: Math.max(1, Date.now() - startedAt),
         ...(changeFields?.summary ? { summary: changeFields.summary } : {}),
         ...(changeFields?.diffPreview ? { diffPreview: changeFields.diffPreview } : {}),
@@ -276,6 +288,7 @@ async function callPolicyEvaluate(
     reasonCode: response.reasonCode,
     argsHash,
     targetPath,
+    args: argsObj,
     latencyMs: Math.max(1, Date.now() - startedAt),
     ...(changeFields?.summary ? { summary: changeFields.summary } : {}),
     ...(changeFields?.diffPreview ? { diffPreview: changeFields.diffPreview } : {}),

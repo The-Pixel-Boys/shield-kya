@@ -5,7 +5,7 @@
  */
 import { bindScopeFromYaml } from "../commands/gate.js";
 import { gateBinaryPath, inspectGateBinary } from "../gate/binary.js";
-import { denyPatternsFor, LOOPBACK_RULE } from "../gate/config-gen.js";
+import { denyPatternsFor, gatewayDenies, LOOPBACK_RULE } from "../gate/config-gen.js";
 import { readGateways, type GateFailureMode } from "../gate/config.js";
 import { readGateState } from "../gate/daemon.js";
 import { mcpServerDefaultTier } from "../mcp-servers.js";
@@ -107,19 +107,6 @@ export function toolNameFromToolId(toolId: string): string | undefined {
 }
 
 /**
- * Build a single deny RegExp from a server's deny patterns. Returns undefined
- * when patterns is empty or invalid so callers can fall back to allow.
- */
-function buildDenyRegex(patterns: readonly string[]): RegExp | undefined {
-  if (patterns.length === 0) return undefined;
-  try {
-    return new RegExp(patterns.map((p) => `(?:${p})`).join("|"));
-  } catch {
-    return undefined;
-  }
-}
-
-/**
  * Evaluate whether a specific tool on a specific server would be allowed or
  * denied by the generated gateway policy. Never throws: invalid regex falls
  * back to allow.
@@ -128,8 +115,7 @@ export function evaluateGatewayTool(
   serverId: string,
   toolName: string,
 ): { verdict: "allow" | "deny"; reason: string } {
-  const re = buildDenyRegex(denyPatternsFor(serverId));
-  if (re && re.test(toolName)) {
+  if (gatewayDenies(serverId, toolName)) {
     return { verdict: "deny", reason: "matches destructive/admin pattern" };
   }
   return { verdict: "allow", reason: "allowed by policy (observe mode)" };
@@ -171,12 +157,10 @@ export function loadGatePage(
     const base = cardServerMap.get(s.id);
     const serverGateEvents = gateEvents.filter((e) => toolServerPrefix(e.toolId) === s.id);
     const denied = new Set<string>();
-    const patterns = denyPatternsFor(s.id);
-    const re = buildDenyRegex(patterns);
     for (const e of serverGateEvents) {
       const tool = toolNameFromToolId(e.toolId);
-      if (!tool || !re) continue;
-      if (re.test(tool)) denied.add(tool);
+      if (!tool) continue;
+      if (gatewayDenies(s.id, tool)) denied.add(tool);
       if (denied.size >= 10) break;
     }
 
@@ -189,7 +173,7 @@ export function loadGatePage(
       importedFrom: s.importedFrom ?? ["manual"],
       policy: {
         defaultTier: mcpServerDefaultTier(s.id),
-        denyPatterns: patterns,
+        denyPatterns: denyPatternsFor(s.id),
       },
       deniedTools: [...denied],
       ...(s.transport === "stdio" ? { cmd: s.cmd } : {}),

@@ -4,7 +4,9 @@
  * init merges two keys into the CURRENT PROJECT's `.claude/settings.json` (never the user's):
  *   extraKnownMarketplaces["shield-kya"] = github The-Pixel-Boys/shield-kya at ref v<version>
  *   enabledPlugins["kya@shield-kya"] = true
- * Every other key is kept. No network, no permissions, nothing auto-accepted: Claude Code still
+ * Every other key is kept. init also scaffolds `<project>/.kya/policy.json` when it is absent (no rules, so no
+ * verdict changes); an existing file is never touched. See src/project-policy.ts for what the file may do.
+ * No network, no permissions, nothing auto-accepted: Claude Code still
  * shows each teammate its folder trust prompt. managed-settings prints the same two keys as an
  * admin policy document. A prerelease kya refuses both (no public tag to pin). Schema: code.claude.com/docs/en/plugins/org and
  * /docs/en/plugins/marketplace-reference (marketplace `github` source: repo, ref, path; no sha).
@@ -12,8 +14,10 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { globalConfigDir } from "../config.js";
 import { KyaError } from "../errors.js";
 import { atomicWriteSync } from "../fs-atomic.js";
+import { POLICY_FILE, POLICY_SCAFFOLD } from "../project-policy.js";
 import { compareVersions } from "../update-check.js";
 import { CLI_VERSION } from "../version.js";
 
@@ -69,25 +73,30 @@ function real(p: string): string | undefined {
   }
 }
 
-/** Refuse anything that would land outside the project: symlinks, or the user-level Claude dir. */
-function guardPaths(cwd: string, env: NodeJS.ProcessEnv): { dir: string; file: string } {
+/** Refuse anything that would land outside the project: symlinks, or the user-level Claude or kya dir. */
+function guardPaths(cwd: string, env: NodeJS.ProcessEnv): { dir: string; file: string; policyDir: string; policyFile: string } {
   const root = real(cwd);
   if (!root) throw refuse(`project directory not found: ${cwd}`);
   const dir = join(root, ".claude");
   const file = join(dir, "settings.json");
+  const policyDir = join(root, ".kya");
+  const policyFile = join(root, POLICY_FILE);
   // Resolve even when the user dir does not exist yet (HOME behind a symlink, fresh machine).
   const loose = (p: string) => real(p) ?? join(real(dirname(p)) ?? dirname(p), basename(p));
   const userDirs = [join(homedir(), ".claude"), env.CLAUDE_CONFIG_DIR].filter((p): p is string => !!p).map(loose);
   if (userDirs.includes(dir)) {
     throw refuse(`${dir} is your user-level Claude Code directory; run kya team init inside a project`);
   }
-  for (const [p, kind] of [[dir, "directory"], [file, "file"]] as const) {
+  if (loose(policyDir) === loose(globalConfigDir(env))) {
+    throw refuse(`${policyDir} is your global kya directory; run kya team init inside a project`);
+  }
+  for (const [p, kind] of [[dir, "directory"], [file, "file"], [policyDir, "directory"], [policyFile, "file"]] as const) {
     const st = lstatSync(p, { throwIfNoEntry: false });
     if (!st) continue;
     if (st.isSymbolicLink()) throw refuse(`${p} is a symlink; refusing to write through it`);
     if (kind === "directory" ? !st.isDirectory() : !st.isFile()) throw refuse(`${p} is not a regular ${kind}`);
   }
-  return { dir, file };
+  return { dir, file, policyDir, policyFile };
 }
 
 function detectIndent(text: string): string | number {
@@ -152,7 +161,7 @@ export function runTeamInit(opts: {
   readonly dryRun?: boolean;
   readonly version?: string;
 }): TeamInitResult {
-  const { dir, file } = guardPaths(opts.cwd, opts.env ?? process.env);
+  const { dir, file, policyDir, policyFile } = guardPaths(opts.cwd, opts.env ?? process.env);
   const before = existsSync(file) ? readFileSync(file, "utf8") : undefined;
   let settings: unknown = {};
   if (before !== undefined && before.trim() !== "") {
@@ -163,21 +172,29 @@ export function runTeamInit(opts: {
     }
   }
   if (!isObj(settings)) throw refuse(`${file} is not a JSON object; nothing was written`);
-  const changes = mergeTeamSettings(settings, opts.version);
+  const settingsChanges = mergeTeamSettings(settings, opts.version);
   const indent = before ? detectIndent(before) : 2;
   // ponytail: re-serializes the whole file; a surgical text insert would keep a hand-made layout.
   const reformatted = !!before?.trim() && `${JSON.stringify(JSON.parse(before), null, indent)}\n` !== before;
   const content = `${JSON.stringify(settings, null, indent)}\n`;
+  // The policy file is created once and never rewritten: a team's rules belong to the team, not to kya.
+  const policyChanges = existsSync(policyFile) ? [] : [`+ ${POLICY_FILE} = empty policy (no rules yet; add tool ids to deny or requireApprove)`];
+  const changes = [...settingsChanges, ...policyChanges];
   const base = { path: file, dryRun: opts.dryRun === true, changes, content, ref: releaseRef(opts.version), reformatted };
   if (base.dryRun || changes.length === 0) return { ...base, written: false };
-  if (!existsSync(dir)) mkdirSync(dir);
+  if (!existsSync(dir) && settingsChanges.length > 0) mkdirSync(dir);
   // Re-check right before the rename that .claude and settings.json are still not symlinks and still the
   // project's. Residual: a same-user process can still swap them between this check and the rename (TOCTOU);
   // a planted temp file or symlink cannot be followed, since atomicWriteSync creates its temp with O_EXCL.
-  atomicWriteSync(file, content, () => {
+  const recheck = () => {
     const again = guardPaths(opts.cwd, opts.env ?? process.env);
-    if (again.file !== file) throw refuse(`${dir} changed while writing; nothing was written`);
-  });
+    if (again.file !== file || again.policyFile !== policyFile) throw refuse(`${dir} changed while writing; nothing was written`);
+  };
+  if (settingsChanges.length > 0) atomicWriteSync(file, content, recheck);
+  if (policyChanges.length > 0) {
+    if (!existsSync(policyDir)) mkdirSync(policyDir);
+    atomicWriteSync(policyFile, POLICY_SCAFFOLD, recheck);
+  }
   return { ...base, written: true };
 }
 
@@ -191,12 +208,12 @@ export function formatTeamInitHuman(r: TeamInitResult): string {
   if (r.dryRun && r.changes.length > 0) lines.push("", "Resulting file:", r.content.trimEnd());
   lines.push(
     "",
-    "Next: commit .claude/settings.json. Teammates see Claude Code's folder trust prompt once;",
+    "Next: commit .claude/settings.json and .kya/policy.json. Teammates see Claude Code's folder trust prompt once;",
     `after they accept it, the ${MARKETPLACE} marketplace is added and ${PLUGIN_ID} installs at the next session.`,
     `Pinned to tag ${r.ref} of ${PUBLIC_REPO}. Rerun kya team init after upgrading kya to move the pin.`,
     `Verify the public tag ${r.ref} exists (git ls-remote https://github.com/${PUBLIC_REPO} refs/tags/${r.ref});`,
     "if it does not, teammates will see the plugin skipped, not an error.",
-    "OSS plugin is advisory and fails open: it records tool calls and blocks only the never-list.",
+    "OSS plugin is advisory and fails open: it records tool calls and blocks the never-list and the guard pack.",
   );
   return lines.join("\n");
 }

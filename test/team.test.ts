@@ -136,7 +136,28 @@ describe("team init: merge", () => {
     const dir = project();
     const r = runTeamInit({ cwd: dir, env: {}, dryRun: true });
     expect(r.written).toBe(false);
-    expect(r.changes.length).toBe(2);
+    // Two settings keys plus the empty .kya/policy.json scaffold.
+    expect(r.changes.length).toBe(3);
+    expect(existsSync(join(dir, ".claude"))).toBe(false);
+    expect(existsSync(join(dir, ".kya"))).toBe(false);
+  });
+
+  it("init scaffolds an empty .kya/policy.json once and never rewrites an existing one", () => {
+    const dir = project();
+    runTeamInit({ cwd: dir, env: {} });
+    expect(JSON.parse(readFileSync(join(dir, ".kya/policy.json"), "utf8"))).toEqual({ version: 1, deny: [], requireApprove: [] });
+    writeFileSync(join(dir, ".kya/policy.json"), JSON.stringify({ version: 1, deny: ["x.tool"], requireApprove: [] }));
+    const again = runTeamInit({ cwd: dir, env: {} });
+    expect(again.changes).toEqual([]);
+    expect(JSON.parse(readFileSync(join(dir, ".kya/policy.json"), "utf8")).deny).toEqual(["x.tool"]);
+  });
+
+  it("refuses a symlinked .kya dir and writes nothing", () => {
+    const dir = project();
+    const elsewhere = tmp();
+    symlinkSync(elsewhere, join(dir, ".kya"));
+    expect(() => runTeamInit({ cwd: dir, env: {} })).toThrow(/symlink/);
+    expect(existsSync(join(elsewhere, "policy.json"))).toBe(false);
     expect(existsSync(join(dir, ".claude"))).toBe(false);
   });
 
@@ -315,8 +336,9 @@ describe("integration: the built CLI in a temp HOME and project", () => {
     expect(r.status, r.stderr).toBe(0);
     assertDocumentedShape(settingsOf(dir));
     expect(readdirSync(home)).toEqual([]);
-    expect(readdirSync(dir)).toEqual([".claude"]);
+    expect(readdirSync(dir).sort()).toEqual([".claude", ".kya"]);
     expect(readdirSync(join(dir, ".claude"))).toEqual(["settings.json"]);
+    expect(readdirSync(join(dir, ".kya"))).toEqual(["policy.json"]);
   });
 
   it.skipIf(!haveDist)("team managed-settings with the real package version: refuses a prerelease, pins a stable tag", () => {

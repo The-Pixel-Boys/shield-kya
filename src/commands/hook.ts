@@ -3,7 +3,7 @@
  * (Claude Code, Codex, Grok, Kimi Code; Gemini CLI BeforeTool). Default: offline local evaluate only, no
  * network, sub-second, fail-open on any internal error unless --fail-closed.
  * DENY (local never-list) blocks; REQUIRE_APPROVE records advisory unless
- * --strict. With --plane-config (beta) it evaluates on the hosted plane and
+ * --strict. With --plane-config (preview) it evaluates on the hosted plane and
  * fails closed (runHostedHook below; --plane-shadow records without blocking).
  */
 import { createHash } from "node:crypto";
@@ -13,9 +13,12 @@ import { configFilePath, globalConfigDir, resolveConfig } from "../config.js";
 import type { PolicyEvaluateResponse } from "../client.js";
 import { runEvalTool } from "./eval-tool.js";
 import { appendTrail, defaultSessionId, hostToProduct } from "../trail.js";
+import { trailMapFields } from "../trail-map-fields.js";
 import { deriveWireChangeFields } from "../diff-preview.js";
 import { matchesNeverList } from "../offline-evaluate.js";
 import { neverListInputMatch } from "../never-list-input.js";
+import { GUARD_DEFAULTS, guardContextFrom, guardHint, guardPackMatch, readGuardConfig, type GuardCode, type GuardContext, type GuardHit } from "../guard-pack.js";
+import { isNeverCode } from "../never-code.js";
 import { maybeSpawnNotifyFlush } from "../notify/dispatch.js";
 import { computeArgsHash } from "../hash.js";
 import { evaluateHosted, hostedDecision, hostedEnvProblem, loadPlaneConfig, PlaneError, scrubNetworkEnv, type PlaneConfig, type PlaneTransport } from "./hosted-hook.js";
@@ -115,7 +118,22 @@ const isBeforeTool = (event?: string): boolean => /^BeforeTool$/i.test(event ?? 
 const geminiShape = (input: HookInput, p?: HookPayload): boolean =>
   input.host.trim().toLowerCase() === "gemini" || isBeforeTool(p?.event);
 
-/** Accept snake_case (Claude/Kimi) and camelCase (Grok) envelopes. */
+/**
+ * Copilot CLI camelCase preToolUse sends `toolArgs` as a JSON string. Parse it so the
+ * input rules and the trail see an object; a bad string stays a string (the rules then
+ * fail open, as for any unparseable input). No size cap: the whole payload was already
+ * parsed above, and a cap here would let padding turn a long command into an allow.
+ */
+function parseToolArgs(v: unknown): unknown {
+  if (typeof v !== "string") return v;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v;
+  }
+}
+
+/** Accept snake_case (Claude/Kimi) and camelCase (Grok, Copilot) envelopes. */
 function parsePayload(stdinText: string): HookPayload | undefined {
   let raw: unknown;
   try {
@@ -151,18 +169,28 @@ function parsePayload(stdinText: string): HookPayload | undefined {
       (typeof p.tool_use_id === "string" && p.tool_use_id) ||
       (typeof p.toolUseId === "string" && p.toolUseId) ||
       undefined,
-    toolInput: p.tool_input ?? p.toolInput,
+    toolInput: p.tool_input ?? p.toolInput ?? parseToolArgs(p.toolArgs),
     usage: readUsageShape(p.usage) ?? readUsageShape(toolResponse?.usage),
   };
 }
 
 const ALLOW: HookResult = { exitCode: 0, stdout: "", stderr: "" };
 
-/** Deny text. An input-rule hit names its rule id; the never-list cannot be overridden. */
+/**
+ * Deny text. An input-rule hit names its rule id; the never-list cannot be overridden. A guard pack
+ * hit names its rule id and says what to do instead. It does not say where the allowlist lives: that file
+ * is writable by the agent, so the text points at the docs for the person. Never carries command text,
+ * a path or a matched secret.
+ */
 function denyReason(toolName: string, reasonCode: string, ruleId?: string): string {
-  return reasonCode === "NEVER_EVENT" && ruleId
-    ? `KYA denied ${toolName}: NEVER_EVENT (rule ${ruleId}; never-list rules cannot be overridden)`
-    : `KYA denied ${toolName}: ${reasonCode}`;
+  if (reasonCode === "NEVER_EVENT" && ruleId) {
+    return `KYA denied ${toolName}: NEVER_EVENT (rule ${ruleId}; never-list rules cannot be overridden)`;
+  }
+  if (isNeverCode(reasonCode) && reasonCode !== "NEVER_EVENT" && ruleId) {
+    const hint = guardHint(ruleId);
+    return `KYA denied ${toolName}: ${reasonCode} (${ruleId}).${hint ? ` ${hint}` : ""} Ask the user; see docs/guard-pack.md.`;
+  }
+  return `KYA denied ${toolName}: ${reasonCode}`;
 }
 
 function deny(reason: string, gemini = false): HookResult {
@@ -248,7 +276,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
  */
 function auditedDeny(
   reason: string,
-  reasonCode: "FAIL_CLOSED" | "NEVER_EVENT",
+  reasonCode: "FAIL_CLOSED" | "NEVER_EVENT" | GuardCode,
   input: HookInput,
   payload?: HookPayload,
   dedupe = false,
@@ -270,13 +298,44 @@ function auditedDeny(
       verdict: "DENY",
       reasonCode,
       mode: "offline" as const,
-      neverEvent: reasonCode === "NEVER_EVENT",
+      neverEvent: isNeverCode(reasonCode),
       ...(ruleId ? { neverRule: ruleId } : {}),
+      ...trailMapFields(payload?.toolName ?? "unknown", payload?.toolInput, trailCwd, input.env),
     };
     try { appendTrail(trailCwd, ev, input.env); } catch { /* audit is best effort */ }
-    maybeSpawnNotifyFlush({ env: input.env, cwd: trailCwd, event: ev });
+    maybeSpawnNotifyFlush({ env: input.env, cwd: trailCwd, event: ev, projectDir: trailCwd });
   } catch { /* never block the deny itself */ }
   return deny(reason, geminiShape(input, payload));
+}
+
+/** cwd and env for the guard pack: the host's cwd when it sent an absolute one, else the hook's. */
+function guardContextFor(payload: HookPayload | undefined, input: HookInput): GuardContext {
+  const c = payload?.cwd?.trim();
+  return guardContextFrom(c && isAbsolute(c) ? c : input.cwd, input.env);
+}
+
+/**
+ * A malformed guard config falls back to the defaults. Say so once an hour in the trail, so a person
+ * who edited `~/.kya/config.json` and sees no effect can find out why. Never throws.
+ */
+function noteGuardConfigProblem(ctx: GuardContext, input: HookInput, payload?: HookPayload): void {
+  try {
+    const { problem } = readGuardConfig(ctx.home);
+    if (!problem) return;
+    const hour = new Date().toISOString().slice(0, 13);
+    if (!claimToolUse(`guard-config:${hour}`, undefined, input.env)) return;
+    appendTrail(payload?.cwd?.trim() || input.cwd, {
+      ts: new Date().toISOString(),
+      sessionId: payload?.sessionId ?? defaultSessionId(input.env),
+      host: "ide",
+      product: hostToProduct(input.host),
+      toolId: "kya:guard-config",
+      verdict: "ALLOW",
+      reasonCode: "GUARD_CONFIG_INVALID",
+      mode: "offline" as const,
+      summary: `guard config ignored (${problem}); defaults in force`,
+    }, input.env);
+  } catch { /* best effort */ }
 }
 
 // Non-PreToolUse hook events that legitimately carry no gate decision.
@@ -317,10 +376,12 @@ export async function runHook(input: HookInput): Promise<HookResult> {
       config = resolve({ host: "ide" });
     }
     const cfg = config;
+    const guardCtx = guardContextFor(payload, input);
+    noteGuardConfigProblem(guardCtx, input, payload);
     const evaluate =
       input.evaluate ??
       (async (toolId: string, args: unknown) =>
-        (await runEvalTool(cfg, { toolId, args, offline: true })).response);
+        (await runEvalTool(cfg, { toolId, args, offline: true, guard: guardCtx })).response);
     const evaluating = Promise.resolve().then(() => evaluate(toolName, payload?.toolInput ?? {}));
     const response = input.failClosed
       ? await withTimeout(evaluating, input.evalTimeoutMs ?? 4000)
@@ -333,9 +394,12 @@ export async function runHook(input: HookInput): Promise<HookResult> {
       // payload.cwd is host-supplied and only feeds the project-basename stamp;
       // the trail path itself comes from env/KYA_HOME - no traversal risk.
       const trailCwd = payload.cwd?.trim() || input.cwd;
+      // Map fields come from the raw input, before the secret strip below: a never deny or a secret read keeps its class.
+      const mapFields = trailMapFields(toolName, payload.toolInput ?? {}, trailCwd, input.env);
       // Wire change fields (summary, diffPreview, targetPath) feed the receipt's
       // Changes tab; redaction + opt-out live inside deriveWireChangeFields.
-      const changeFields = deriveWireChangeFields(toolName, payload.toolInput ?? {}, input.env);
+      // A secret-shaped write is denied because its text is a secret: no preview of that text reaches the trail.
+      const changeFields = response.reasonCode === "NEVER_SECRET_WRITE" ? undefined : deriveWireChangeFields(toolName, payload.toolInput ?? {}, input.env);
       const trailEvent = {
         ts: new Date().toISOString(),
         sessionId: payload.sessionId ?? defaultSessionId(input.env),
@@ -345,9 +409,10 @@ export async function runHook(input: HookInput): Promise<HookResult> {
         verdict: response.verdict,
         reasonCode: response.reasonCode ?? "",
         mode: "offline" as const,
-        neverEvent: response.reasonCode === "NEVER_EVENT",
+        neverEvent: isNeverCode(response.reasonCode),
         ...(response.ruleId ? { neverRule: response.ruleId } : {}),
         argsHash: response.argsHash,
+        ...mapFields,
         ...(changeFields ?? {}),
         ...(payload.usage?.tokensIn !== undefined ? { tokensIn: payload.usage.tokensIn } : {}),
         ...(payload.usage?.tokensOut !== undefined ? { tokensOut: payload.usage.tokensOut } : {}),
@@ -361,7 +426,7 @@ export async function runHook(input: HookInput): Promise<HookResult> {
         }
         // Webhooks + OTLP export ride a detached helper; the hook never waits on
         // the network. No-op unless a sink is configured.
-        maybeSpawnNotifyFlush({ env: input.env, cwd: trailCwd, event: trailEvent });
+        maybeSpawnNotifyFlush({ env: input.env, cwd: trailCwd, event: trailEvent, projectDir: trailCwd });
       }
     } catch {
       /* observe path never breaks the gate */
@@ -383,9 +448,14 @@ export async function runHook(input: HookInput): Promise<HookResult> {
     try {
       // A never-list tool is logged as such in both modes (hosted counts stay right).
       if (payload?.toolName) {
-        const inputHit = neverListInputMatch(payload.toolName, payload.toolInput);
+        const inputHit = neverListInputMatch(payload.toolName, payload.toolInput, undefined, payload.cwd?.trim() || input.cwd);
         if (inputHit || matchesNeverList(payload.toolName)) {
           return auditedDeny(denyReason(payload.toolName, "NEVER_EVENT", inputHit?.rule), "NEVER_EVENT", input, payload, true, inputHit?.rule);
+        }
+        // Guard pack with its defaults: the fallback never reads config, so a broken or hostile one cannot lift a deny here.
+        const guardHit = guardPackMatch(payload.toolName, payload.toolInput, guardContextFor(payload, input), GUARD_DEFAULTS);
+        if (guardHit) {
+          return auditedDeny(denyReason(payload.toolName, guardHit.code, guardHit.rule), guardHit.code, input, payload, true, guardHit.rule);
         }
       }
     } catch { /* fall through */ }
@@ -411,8 +481,10 @@ interface HostedVerdict {
 }
 
 /**
- * Hosted mode. Order: payload, local never-list, env and config checks, plane
- * call, then a raise-only merge in which the local never-list always wins.
+ * Hosted mode. Order: payload, local never-list, local guard pack, env and config checks, plane
+ * call, then a raise-only merge in which the local never-list, then the guard pack, always win.
+ * The guard pack has the same rules, codes and user-level config as the local hook; only the
+ * failure stance differs (hosted fails closed).
  * Every failure is a deny (fail-closed) unless --plane-shadow, which records
  * the would-be verdict and allows. Nothing here reads resolveConfig, the repo's
  * .kya/config.json or KYA_* env, so none of them can downgrade this path.
@@ -435,6 +507,8 @@ async function runHostedHook(input: HookInput, plane: HostedHookOptions): Promis
 
   // Crash path state: unknown until the local never-list has been evaluated below.
   hostedDecision.neverList = "unknown";
+  hostedDecision.code = undefined;
+  hostedDecision.rule = undefined;
   let payload: HookPayload | undefined;
   let verdict: HostedVerdict;
   let response: PolicyEvaluateResponse | undefined;
@@ -452,15 +526,25 @@ async function runHostedHook(input: HookInput, plane: HostedHookOptions): Promis
   const toolName = payload?.toolName;
   let neverListed = false;
   let neverRule: string | undefined;
-  // The local never-list runs first, before any env, config or plane code, and is stored so a
-  // crash later can never lower it (crashDecision). A throw leaves it "unknown", which denies.
+  let guardHit: GuardHit | undefined;
+  // The local never-list and the guard pack run first, before any env, config or plane code, and
+  // are stored so a crash later can never lower them (crashDecision). A throw leaves it "unknown",
+  // which denies. The guard config is the user-level file under the hosted $HOME only.
   try {
     if (toolName) {
-      neverRule = neverListInputMatch(toolName, payload?.toolInput)?.rule;
+      neverRule = neverListInputMatch(toolName, payload?.toolInput, undefined, payload?.cwd?.trim() || input.cwd)?.rule;
       neverListed = matchesNeverList(toolName) || neverRule !== undefined;
-      hostedDecision.neverList = neverListed ? "deny" : "clear";
+      if (!neverListed) {
+        const ctx = guardContextFor(payload, input);
+        guardHit = guardPackMatch(toolName, payload?.toolInput, ctx, readGuardConfig(ctx.home).config);
+        if (homeOk) noteGuardConfigProblem(ctx, { ...input, env: stateEnv }, payload);
+      }
+      hostedDecision.neverList = neverListed || guardHit ? "deny" : "clear";
+      hostedDecision.code = neverListed ? "NEVER_EVENT" : guardHit?.code;
+      hostedDecision.rule = neverListed ? neverRule : guardHit?.rule;
     }
   } catch { /* stays unknown */ }
+  const localDeny = neverListed || guardHit !== undefined;
 
   if (!payload || !toolName) {
     verdict = {
@@ -496,6 +580,7 @@ async function runHostedHook(input: HookInput, plane: HostedHookOptions): Promis
         now: plane.now,
         sleep: plane.sleep,
         random: plane.random,
+        withholdChange: guardHit?.code === "NEVER_SECRET_WRITE",
       });
     } catch (e) {
       failure = e instanceof PlaneError
@@ -505,6 +590,8 @@ async function runHostedHook(input: HookInput, plane: HostedHookOptions): Promis
     // Raise-only merge: the local never-list beats any plane answer or failure.
     if (neverListed) {
       verdict = { verdict: "DENY", reasonCode: "NEVER_EVENT", reason: denyReason(toolName, "NEVER_EVENT", neverRule), dedupe: true, ruleId: neverRule };
+    } else if (guardHit) {
+      verdict = { verdict: "DENY", reasonCode: guardHit.code, reason: denyReason(toolName, guardHit.code, guardHit.rule), dedupe: true, ruleId: guardHit.rule };
     } else if (failure || !response) {
       const f = failure ?? { code: "FAIL_CLOSED", message: "internal error" };
       verdict = {
@@ -523,9 +610,9 @@ async function runHostedHook(input: HookInput, plane: HostedHookOptions): Promis
   const blocks =
     verdict.verdict === "DENY" ||
     (input.strict && verdict.verdict === "REQUIRE_APPROVE");
-  // Shadow never blocks, except the LOCAL never-list. Keyed to the local evaluation, never to the
-  // plane's reason code: the plane answers NEVER_EVENT for every registered DENY-tier tool.
-  const enforce = blocks && (!plane.shadow || neverListed);
+  // Shadow never blocks, except the LOCAL never-list and guard pack. Keyed to the local evaluation,
+  // never to the plane's reason code: the plane answers NEVER_EVENT for every registered DENY-tier tool.
+  const enforce = blocks && (!plane.shadow || localDeny);
   let firstSeen = true;
   try {
     firstSeen = recordHostedRow(input, stateEnv, homeOk, home, payload, verdict, response, plane.shadow, configIgnored);
@@ -569,7 +656,8 @@ function recordHostedRow(
   let changeFields;
   try {
     argsHash ??= payload?.toolName ? computeArgsHash(payload.toolInput ?? {}) : undefined;
-    changeFields = payload?.toolName ? deriveWireChangeFields(toolName, payload.toolInput ?? {}, input.env) : undefined;
+    // A secret-shaped write is denied because its text is a secret: no preview of that text reaches the trail.
+    changeFields = payload?.toolName && verdict.reasonCode !== "NEVER_SECRET_WRITE" ? deriveWireChangeFields(toolName, payload.toolInput ?? {}, input.env) : undefined;
   } catch { /* row without hash or preview */ }
   const ev = {
     ts: new Date().toISOString(),
@@ -580,9 +668,10 @@ function recordHostedRow(
     verdict: verdict.verdict,
     reasonCode: verdict.reasonCode,
     mode: input.strict ? ("hold" as const) : ("observe" as const),
-    neverEvent: verdict.reasonCode === "NEVER_EVENT",
+    neverEvent: isNeverCode(verdict.reasonCode),
     ...(verdict.ruleId ? { neverRule: verdict.ruleId } : {}),
     ...(argsHash ? { argsHash } : {}),
+    ...trailMapFields(toolName, payload?.toolInput, payload?.cwd?.trim() || input.cwd, stateEnv),
     ...(changeFields ?? {}),
     ...(payload?.usage?.tokensIn !== undefined ? { tokensIn: payload.usage.tokensIn } : {}),
     ...(payload?.usage?.tokensOut !== undefined ? { tokensOut: payload.usage.tokensOut } : {}),
@@ -591,6 +680,7 @@ function recordHostedRow(
   };
   try { appendTrail(payload?.cwd?.trim() || input.cwd, ev, stateEnv); } catch { /* best effort */ }
   // cwd = home: only the user-level notify config applies, never a repo's sinks.
-  maybeSpawnNotifyFlush({ env: stateEnv, cwd: home, event: ev });
+  // projectDir is the call's project, so the map-attribute opt-in check sees the repo even though cwd is home.
+  maybeSpawnNotifyFlush({ env: stateEnv, cwd: home, event: ev, projectDir: payload?.cwd?.trim() || input.cwd });
   return true;
 }

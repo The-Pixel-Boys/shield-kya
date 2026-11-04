@@ -16,6 +16,8 @@ import { KyaError } from "../errors.js";
 import { runEvalTool, type EvalToolResult } from "../commands/eval-tool.js";
 import { appendTrail, defaultSessionId } from "../trail.js";
 import { deriveWireChangeFields } from "../diff-preview.js";
+import { trailMapFields } from "../trail-map-fields.js";
+import { isNeverCode } from "../never-code.js";
 
 export class KyaDeniedError extends KyaError {
   readonly verdict: string;
@@ -80,10 +82,12 @@ export function recordSdkTrail(
       verdict: evalResult.response.verdict,
       reasonCode: reason,
       mode,
-      neverEvent: reason === "NEVER_EVENT",
+      neverEvent: isNeverCode(reason),
       argsHash: evalResult.argsHash,
-      ...(fields?.summary ? { summary: fields.summary } : {}),
-      ...(fields?.diffPreview ? { diffPreview: fields.diffPreview } : {}),
+      ...trailMapFields(toolId, args, config.cwd, env),
+      // A secret-shaped write is denied because its text is a secret: no summary or preview of it is stored.
+      ...(fields?.summary && reason !== "NEVER_SECRET_WRITE" ? { summary: fields.summary } : {}),
+      ...(fields?.diffPreview && reason !== "NEVER_SECRET_WRITE" ? { diffPreview: fields.diffPreview } : {}),
       ...(fields?.targetPath ? { targetPath: fields.targetPath } : {}),
     },
     env,

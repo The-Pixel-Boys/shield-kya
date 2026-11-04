@@ -28,10 +28,15 @@ export function notifyDispatchEnabled(env: NodeJS.ProcessEnv, cwd: string): bool
   }
 }
 
+/** The project dir for the map-attribute opt-in check. Always set by the parent here, so a repo env value never survives. */
+export const NOTIFY_PROJECT_DIR_VAR = "KYA_NOTIFY_PROJECT_DIR";
+
 export function maybeSpawnNotifyFlush(deps: {
   readonly env: NodeJS.ProcessEnv;
   readonly cwd: string;
   readonly event: TrailEvent;
+  /** Real project dir of the call (not the child's cwd: the hosted hook spawns from home). Empty: opt-in refused. */
+  readonly projectDir?: string;
   readonly entry?: string;
   readonly spawnImpl?: typeof spawn;
 }): boolean {
@@ -46,7 +51,7 @@ export function maybeSpawnNotifyFlush(deps: {
       {
         detached: true,
         stdio: "ignore",
-        env: { ...deps.env, KYA_NOTIFY_EVENT: JSON.stringify(deps.event) },
+        env: { ...deps.env, KYA_NOTIFY_EVENT: JSON.stringify(deps.event), [NOTIFY_PROJECT_DIR_VAR]: deps.projectDir ?? "" },
         cwd: deps.cwd,
         windowsHide: true,
       },

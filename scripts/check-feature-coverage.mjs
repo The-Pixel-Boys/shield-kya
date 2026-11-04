@@ -31,9 +31,12 @@
 //   R6 tests: every stable or beta row lists at least one `tests` path that exists and contains the
 //      feature id or one of its cli entries as written. Hosted rows cite ../../ paths (the monorepo).
 //      Those are checked only when the monorepo is present; the public mirror skips them.
-//   R7 diff rule (--base only): a change to src/cli.ts or src/commands/*.ts needs features.json changed.
-//      No `Features: n/a` escape in B1; the trailer rule lands with B2.
-//   R8 (generated surfaces must skip flagged rows) has no generated surface yet. It lands with B2/B4.
+//   R7 diff rule (--base only): a change to src/cli.ts or src/commands/*.ts needs features.json changed,
+//      or a commit in the range carries `Features: n/a <reason>` (reason per reasonOk, the same rule as
+//      Docs-Parity in scripts/ci/check-docs-parity.sh).
+//   R8 (generated surfaces skip flagged and planned rows) is enforced by scripts/sync-features.mjs and
+//      its tests. R3 reads each docs file with its generated feature block removed (stripBlock), so the
+//      generator cannot satisfy R3 for a command that the prose does not name.
 //
 // Known gaps: features.json knownGaps lists today's real gaps, each with a reason and the node that
 // clears it. A gap that is not listed fails. A listed gap that is gone fails too (remove the entry).
@@ -43,6 +46,7 @@ import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "n
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FORBIDDEN } from "./check-channel-copy.mjs";
+import { stripBlock } from "./sync-features.mjs";
 
 export const REGISTRY = "features.json";
 const CLI = "src/cli.ts";
@@ -60,6 +64,8 @@ export const INTERNAL_COMMANDS = {
   "receipt-serve": "internal server behind the receipt report",
   "gate-serve": "internal gateway process started by kya gate run",
   "notify-flush": "internal flush of queued notifications",
+  "ioc-scan": "internal detached daily IoC scan started by kya hook",
+  "posture-send": "internal detached daily posture send started by kya hook (only with the local toggle on)",
 };
 
 // Flags every command accepts or that are generic (not a feature row of their own).
@@ -128,6 +134,23 @@ export function parseCodeFlags(files) {
     for (const m of text.matchAll(FLAG_MULTI_RE)) add(m[1]);
   }
   return found;
+}
+
+// Reason rule, a port of reason_ok in scripts/ci/check-docs-parity.sh (test/feature-coverage.test.ts runs both on one corpus):
+// 10 or more non-space characters, not one repeated character, and not one repeated word (a single word is allowed).
+export function reasonOk(reason) {
+  const s = reason.replace(/\s/g, "");
+  if (s.length < 10) return false;
+  if ([...s].every((c) => c === s[0])) return false;
+  const words = reason.split(/\s+/).filter(Boolean);
+  if (words.some((w) => w !== words[0])) return true;
+  return words.length === 1;
+}
+
+// Reasons of every `Features: n/a <reason>` (or `Features: n/a: <reason>`) line; key case-insensitive, as in check-docs-parity.sh.
+export function trailerReasons(logText) {
+  const re = /^\s*features:\s*n\/a(?::|\s|$)(.*)$/gim;
+  return [...logText.matchAll(re)].map((m) => m[1].trim());
 }
 
 const cmdOf = (entry) => (entry.startsWith("kya ") ? entry.split(/\s+/)[1] : undefined);
@@ -275,7 +298,7 @@ export function runChecks(pkg, { base } = {}) {
       bad("R3", row.id, `docs path "${first}" does not exist`);
       continue;
     }
-    const text = readFileSync(firstPath, "utf8");
+    const text = stripBlock(readFileSync(firstPath, "utf8"));
     for (const d of docs.slice(1)) if (!existsSync(join(pkg, d))) bad("R3", row.id, `docs path "${d}" does not exist`);
     for (const lit of literalsOf(row)) {
       if (!text.includes(lit)) gaps.set(gapKey("R3-literal", row.id, lit), `first docs path "${first}" has no "${lit}" literal`);
@@ -352,7 +375,11 @@ export function runChecks(pkg, { base } = {}) {
       const changed = git(pkg, ["diff", "--relative", "--name-only", "-z", mb, "HEAD"]).split("\0").filter(Boolean);
       const codeChanged = changed.some((p) => p === CLI || (p.startsWith("src/commands/") && p.endsWith(".ts")));
       if (codeChanged && !changed.includes(REGISTRY)) {
-        bad("R7", undefined, `src/cli.ts or src/commands changed without ${REGISTRY} (update the registry in this PR)`);
+        const escape = trailerReasons(git(pkg, ["log", "--format=%B", `${mb}..HEAD`]));
+        if (!escape.some(reasonOk)) {
+          const weak = escape.length > 0 ? " A Features: n/a line was found, but its reason is too short or repeated." : "";
+          bad("R7", undefined, `src/cli.ts or src/commands changed without ${REGISTRY}. Update the registry in this PR, or add "Features: n/a <reason>" to a commit message.${weak}`);
+        }
       }
     }
   }

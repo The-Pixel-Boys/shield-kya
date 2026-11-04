@@ -48,17 +48,13 @@ describe("feature coverage: real tree", () => {
   it("passes on sdks/kya with every known gap listed", () => {
     const { problems, summary } = runChecks(PKG);
     expect(problems).toEqual([]);
-    expect(summary).toContain("79 rows");
-    expect(summary).toContain("34 HELP commands");
+    expect(summary).toContain("86 rows");
+    expect(summary).toContain("38 HELP commands");
   });
 
-  it("lists exactly the gaps the design found in 4b and 4c", () => {
+  it("has no R3-literal gap: the README prose names every command with an OSS docs row", () => {
     const { gaps } = runChecks(PKG);
-    expect(gaps.filter((g: string) => g.startsWith("R3-literal|")).sort()).toEqual([
-      "R3-literal|kya-team-init|kya team",
-      "R3-literal|kya-team-managed|kya team",
-      "R3-literal|kya-update|kya update",
-    ]);
+    expect(gaps.filter((g: string) => g.startsWith("R3-literal|"))).toEqual([]);
   });
 
   it("every stable or beta row has a tests path, or is a listed R6 gap", () => {
@@ -79,11 +75,12 @@ describe("feature coverage: real tree", () => {
 });
 
 describe("parsers read text, so lazy command imports do not change them", () => {
-  it("finds the 34 HELP commands and the case labels", () => {
+  it("finds the 38 HELP commands and the case labels", () => {
     const cli = read("src/cli.ts");
     const help = parseHelp(cli);
-    expect(help.commands).toHaveLength(34);
+    expect(help.commands).toHaveLength(38);
     expect(help.commands).toContain("register-agent");
+    expect(help.commands).toContain("export");
     expect(parseCaseLabels(cli)).toContain("notify-flush");
   });
 
@@ -211,16 +208,28 @@ describe("mutants: each change must fail the rule it breaks", () => {
     expect(out).toMatch(/GAP kya-start: NEW GAP: first docs path "README.md" has no "kya start" literal/);
   });
 
-  it("R3 and GAP: a fixed gap whose allowlist entry is kept fails as STALE", () => {
-    write("README.md", read("README.md") + "\nkya update and kya team init are documented here.\n");
+  it("R3 and GAP: an allowlist entry for a gap that prose now covers is STALE", () => {
+    const r = registry();
+    r.knownGaps.push({ rule: "R3-literal", id: "kya-update", literal: "kya update", reason: "Restored only for this test.", clearedBy: "B2" });
+    saveRegistry(r);
+    expect(problemsOf().join("\n")).toMatch(/STALE knownGaps entry R3-literal\|kya-update\|kya update/);
+  });
+
+  it("R3: the generated block does not count, so removing the README prose is a NEW GAP", () => {
+    // Only the prose outside the markers changes; the generated block keeps "kya team".
+    const text = read("README.md");
+    const a = text.indexOf("<!-- features:start -->");
+    const b = text.indexOf("<!-- features:end -->");
+    const prose = (t: string): string => t.split("kya team").join("kya-team-cmd");
+    write("README.md", prose(text.slice(0, a)) + text.slice(a, b) + prose(text.slice(b)));
     const out = problemsOf().join("\n");
-    expect(out).toMatch(/STALE knownGaps entry R3-literal\|kya-update\|kya update/);
-    expect(out).toMatch(/STALE knownGaps entry R3-literal\|kya-team-init\|kya team/);
+    expect(out).toMatch(/GAP kya-team-init: NEW GAP: first docs path "README.md" has no "kya team" literal/);
   });
 
   it("GAP: a hosted row with no docs and no knownGaps entry is a NEW GAP", () => {
     const r = registry();
-    r.knownGaps = r.knownGaps.filter((g) => g.id !== "kya-sessions");
+    const row = r.features.find((x: { id: string }) => x.id === "kya-sessions");
+    row.docs = [];
     saveRegistry(r);
     expect(problemsOf().join("\n")).toMatch(/GAP kya-sessions: NEW GAP: no docs path/);
   });
@@ -290,9 +299,10 @@ describe("mutants: each change must fail the rule it breaks", () => {
 
   it("schema: a knownGaps entry with no reason fails", () => {
     const r = registry();
+    const id = r.knownGaps[0].id;
     r.knownGaps[0].reason = "";
     saveRegistry(r);
-    expect(problemsOf().join("\n")).toMatch(/SCHEMA kya-update: knownGaps entry needs a reason/);
+    expect(problemsOf().join("\n")).toMatch(new RegExp(`SCHEMA ${id}: knownGaps entry needs a reason`));
   });
 
   it("schema: an unknown status fails", () => {

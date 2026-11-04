@@ -97,7 +97,7 @@
     {
       "id": "kya-connect-hooks",
       "name": "Wire PreToolUse hook",
-      "summary": "Writes the PreToolUse hook for claude, grok or kimi.",
+      "summary": "Writes the PreToolUse hook for claude, grok or kimi. With --project, the claude hook goes into the project's .claude/settings.json.",
       "cli": [
         "kya connect",
         "--hooks"
@@ -107,7 +107,8 @@
         "docs/hosts/claude.md"
       ],
       "tests": [
-        "test/connect.test.ts"
+        "test/connect.test.ts",
+        "test/prelaunch-hardening.test.ts"
       ],
       "status": "stable",
       "plan": "oss"
@@ -227,6 +228,22 @@
       "plan": "oss"
     },
     {
+      "id": "kya-project-policy",
+      "name": "Repository policy file",
+      "summary": "Optional .kya/policy.json committed with the repo. Adds deny and requireApprove tool ids for the local gate; it cannot relax a verdict, and an invalid file is ignored with a note.",
+      "cli": [
+        ".kya/policy.json"
+      ],
+      "docs": [
+        "docs/team-rollout.md"
+      ],
+      "tests": [
+        "test/project-policy.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
       "id": "kya-telemetry",
       "name": "Opt-in usage stats",
       "summary": "Anonymous usage stats, off by default. Status, on, off, show and reset.",
@@ -320,6 +337,51 @@
       "plan": "oss"
     },
     {
+      "id": "kya-map",
+      "name": "Map of agent actions",
+      "summary": "Graph and heat views of what KYA recorded for agent actions on this machine. Local only. Advisory.",
+      "cli": [
+        "kya map",
+        "--days",
+        "--json",
+        "--html",
+        "--session"
+      ],
+      "docs": [
+        "README.md",
+        "docs/map.md"
+      ],
+      "tests": [
+        "test/map-command.test.ts",
+        "test/map-page.test.ts",
+        "test/map-live.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-export",
+      "name": "Agent-flow export",
+      "summary": "Writes the local trail as an agent-flow JSONL event log. Classes only, no args. Local only. Advisory.",
+      "cli": [
+        "kya export",
+        "--format",
+        "--days",
+        "--session",
+        "--out",
+        "--force"
+      ],
+      "docs": [
+        "README.md",
+        "docs/map.md"
+      ],
+      "tests": [
+        "test/export-command.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
       "id": "kya-diff-preview",
       "name": "Redacted change previews",
       "summary": "Shows clipped, redacted change previews on the report. Set KYA_DIFF_PREVIEW=0 to turn them off.",
@@ -354,6 +416,53 @@
       "plan": "oss"
     },
     {
+      "id": "kya-ioc-scan",
+      "name": "IoC check",
+      "summary": "Scans this machine for known supply-chain indicators. Read-only and offline. Runs once a day in the background from kya hook and shows in kya doctor, kya dash and kya receipt.",
+      "cli": [
+        "kya doctor",
+        "kya doctor --iocs",
+        "--iocs",
+        "--json",
+        "KYA_IOC=0",
+        "ioc.enabled=false"
+      ],
+      "docs": [
+        "docs/ioc-scan.md"
+      ],
+      "tests": [
+        "test/ioc-scan.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-posture",
+      "name": "Developer posture report (opt-in)",
+      "summary": "Off by default. kya posture on prints the exact report and asks; a send needs the local toggle, a hosted login and the workspace policy. Minimised fields only; the client refuses any report with an environment name or value, a path, a user or host name, or an IP address. Advisory.",
+      "cli": [
+        "kya posture",
+        "status",
+        "on",
+        "off",
+        "send",
+        "--dry-run",
+        "--json",
+        "label",
+        "--yes"
+      ],
+      "docs": [
+        "docs/posture.md"
+      ],
+      "tests": [
+        "test/posture-e2e.test.ts",
+        "test/posture-collect.test.ts",
+        "test/posture-validate.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
       "id": "kya-showback",
       "name": "Cost showback",
       "summary": "Observe-only cost showback inside the activity report.",
@@ -375,10 +484,31 @@
       ],
       "docs": [
         "README.md",
+        "docs/hosted-hook.md",
+        "docs/never-list.md"
+      ],
+      "tests": [
+        "test/hook.test.ts",
+        "test/never-list-persistence.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-hook-guard-pack",
+      "name": "Guard pack",
+      "summary": "Second layer of local denies in the PreToolUse hook, local and hosted (--plane-config): destructive shell commands, credential reads, secret-shaped writes and secret exfiltration. Config and guardAllow come from the user-level ~/.kya/config.json only.",
+      "cli": [
+        "kya hook"
+      ],
+      "docs": [
+        "README.md",
+        "docs/guard-pack.md",
         "docs/hosted-hook.md"
       ],
       "tests": [
-        "test/hook.test.ts"
+        "test/guard-pack.test.ts",
+        "test/hosted-guard-pack.test.ts"
       ],
       "status": "stable",
       "plan": "oss"
@@ -419,7 +549,7 @@
     {
       "id": "kya-hook-hosted",
       "name": "Hosted hook",
-      "summary": "Evaluates each Claude Code tool call on the hosted plane. Beta.",
+      "summary": "Evaluates each Claude Code tool call on the hosted plane.",
       "cli": [
         "kya hook",
         "--fail-closed",
@@ -519,7 +649,7 @@
     {
       "id": "kya-wrap",
       "name": "Evaluate and record a command",
-      "summary": "Evaluates a command and records it in the trail. It never runs the command.",
+      "summary": "Evaluates a command and records it in the trail. With --tool-id it never runs anything. With `-- <cmd>` it runs the command only when the verdict allows.",
       "cli": [
         "kya wrap",
         "--offline",
@@ -534,7 +664,8 @@
         "docs/host-recipe.md"
       ],
       "tests": [
-        "test/wrap.test.ts"
+        "test/wrap.test.ts",
+        "test/prelaunch-hardening.test.ts"
       ],
       "status": "stable",
       "plan": "oss"
@@ -789,6 +920,25 @@
       "plan": "both"
     },
     {
+      "id": "kya-otlp-map-attrs",
+      "name": "OTLP map attributes",
+      "summary": "Adds the target class and the hashed device id to decision spans. Opt-in in the user-level config only. Default off.",
+      "cli": [
+        "otlpExport.mapAttrs"
+      ],
+      "docs": [
+        "README.md",
+        "docs/otlp.md"
+      ],
+      "tests": [
+        "test/otel-map-attrs.test.ts",
+        "test/export-command.test.ts",
+        "test/otlp-optin-hosted.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
       "id": "kya-sdk-shims",
       "name": "In-process SDK shims",
       "summary": "Adapters for in-process agent SDKs: Claude Agent SDK, LangGraph, Mastra, OpenAI Agents and Vercel AI.",
@@ -971,7 +1121,9 @@
         "--action-class",
         "--offline"
       ],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-invoke"
+      ],
       "tests": [
         "test/cli.test.ts"
       ],
@@ -987,7 +1139,9 @@
         "kya reject",
         "--id"
       ],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-approve"
+      ],
       "tests": [
         "test/ops.test.ts"
       ],
@@ -1001,7 +1155,9 @@
       "cli": [
         "kya approvals"
       ],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-approvals"
+      ],
       "tests": [
         "test/ops.test.ts"
       ],
@@ -1018,7 +1174,9 @@
         "kya passport",
         "--id"
       ],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-agents"
+      ],
       "tests": [
         "test/ops.test.ts"
       ],
@@ -1051,7 +1209,9 @@
         "--id",
         "--to"
       ],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-shrink"
+      ],
       "tests": [
         "test/ops.test.ts"
       ],
@@ -1065,7 +1225,9 @@
       "cli": [
         "kya sessions"
       ],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-sessions"
+      ],
       "tests": [
         "test/ops.test.ts"
       ],
@@ -1171,7 +1333,9 @@
       "name": "Incidents and detections (console)",
       "summary": "Incident and detection screens in the hosted console.",
       "cli": [],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-incidents"
+      ],
       "tests": [],
       "status": "beta",
       "plan": "hosted"
@@ -1181,7 +1345,9 @@
       "name": "Gateway console",
       "summary": "Gateway screens in the hosted console: listeners, routes, backends, policies and playground.",
       "cli": [],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-gateway-console"
+      ],
       "tests": [
         "../../app/src/test/java/com/shieldagent/app/KyaGatewayConsoleE2eIT.java"
       ],
@@ -1193,7 +1359,9 @@
       "name": "Endpoint inventory (console)",
       "summary": "Endpoint inventory screens in the hosted console.",
       "cli": [],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-endpoints"
+      ],
       "tests": [],
       "status": "beta",
       "plan": "hosted"
@@ -1203,7 +1371,9 @@
       "name": "MCP asset inventory (console)",
       "summary": "MCP asset inventory screens in the hosted console.",
       "cli": [],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-mcp-assets"
+      ],
       "tests": [],
       "status": "beta",
       "plan": "hosted"
@@ -1213,7 +1383,9 @@
       "name": "Slack decision alerts",
       "summary": "Sends decision alerts to Slack from the hosted plane.",
       "cli": [],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-notify-slack"
+      ],
       "tests": [
         "../../app/src/test/java/com/shieldagent/app/SlackNotifyE2eIT.java"
       ],
@@ -1225,7 +1397,9 @@
       "name": "Teams decision alerts (bot)",
       "summary": "Sends decision alerts to Microsoft Teams through a bot. Off by default.",
       "cli": [],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-notify-teams"
+      ],
       "tests": [
         "../../app/src/test/java/com/shieldagent/app/TeamsNotifyE2eIT.java"
       ],
@@ -1237,7 +1411,9 @@
       "name": "Shared report page",
       "summary": "A report page shared from the hosted console.",
       "cli": [],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-shared-report"
+      ],
       "tests": [
         "../../app/src/test/java/com/shieldagent/app/ShareToHostedE2eIT.java"
       ],
@@ -1249,7 +1425,9 @@
       "name": "SSO sign-in",
       "summary": "Single sign-on for the hosted console.",
       "cli": [],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-sso"
+      ],
       "tests": [
         "../../app/src/test/java/com/shieldagent/app/OidcSsoRedirectE2eIT.java",
         "../../app/src/test/java/com/shieldagent/app/SamlAcsE2eIT.java"
@@ -1262,7 +1440,9 @@
       "name": "Kill and decision metrics",
       "summary": "Kill and decision metrics screens in the hosted console.",
       "cli": [],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-metrics"
+      ],
       "tests": [],
       "status": "beta",
       "plan": "hosted"
@@ -1272,7 +1452,9 @@
       "name": "Claude connector",
       "summary": "Connects Claude to the hosted KYA tools.",
       "cli": [],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-claude-connector"
+      ],
       "tests": [],
       "status": "beta",
       "plan": "hosted"
@@ -1282,7 +1464,9 @@
       "name": "Hosted console",
       "summary": "The hosted KYA console, where teams manage agents, approvals and reports.",
       "cli": [],
-      "docs": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-hosted-console"
+      ],
       "tests": [
         "../../app/src/test/java/com/shieldagent/app/ConsoleKyaJourneysE2eIT.java"
       ],
@@ -1325,129 +1509,6 @@
     }
   ],
   "knownGaps": [
-    {
-      "rule": "R3-literal",
-      "id": "kya-update",
-      "literal": "kya update",
-      "reason": "README has no kya update line. docs/hosts/codex.md mentions it only.",
-      "clearedBy": "B2"
-    },
-    {
-      "rule": "R3-literal",
-      "id": "kya-team-init",
-      "literal": "kya team",
-      "reason": "README has no team init line. It ships in npm 0.32.7 and is documented in docs/team-rollout.md only.",
-      "clearedBy": "B2"
-    },
-    {
-      "rule": "R3-literal",
-      "id": "kya-team-managed",
-      "literal": "kya team",
-      "reason": "README has no team managed-settings line. It is documented in docs/team-rollout.md only.",
-      "clearedBy": "B2"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-invoke",
-      "reason": "Hosted command documented only in DocsHubController text. No public URL is confirmed in the registry.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-approve",
-      "reason": "Hosted command with no public hosted docs URL confirmed. README mention is not a hosted doc.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-approvals",
-      "reason": "Hosted command with no public docs page.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-agents",
-      "reason": "Hosted commands (agents, agent, passport) with no public docs page.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-shrink",
-      "reason": "Hosted command with no public docs page.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-sessions",
-      "reason": "Hosted command with no public docs page.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-incidents",
-      "reason": "Hosted console screen. No public docs URL. Console pages are login-only.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-gateway-console",
-      "reason": "Hosted console screen. No public docs URL. Console pages are login-only.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-endpoints",
-      "reason": "Hosted console screen. No public docs URL. Console pages are login-only.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-mcp-assets",
-      "reason": "Hosted console screen. No public docs URL. Console pages are login-only.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-notify-slack",
-      "reason": "Hosted alert feature with no public docs URL.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-notify-teams",
-      "reason": "Hosted alert feature with no public docs URL. Teams flag is off.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-shared-report",
-      "reason": "Hosted report page with no public docs URL. shield-agent.com/r/ is a route, not a doc.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-sso",
-      "reason": "Hosted console sign-in with no public docs URL.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-metrics",
-      "reason": "Hosted console screen with no public docs URL.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-claude-connector",
-      "reason": "Hosted connector with no public hosted docs URL confirmed. README section is not a hosted doc.",
-      "clearedBy": "B4"
-    },
-    {
-      "rule": "R3-docs",
-      "id": "kya-hosted-console",
-      "reason": "Hosted console with no public docs URL confirmed.",
-      "clearedBy": "B4"
-    },
     {
       "rule": "R6-tests",
       "id": "kya-brew",

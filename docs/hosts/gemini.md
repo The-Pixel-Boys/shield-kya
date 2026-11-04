@@ -24,7 +24,7 @@ What it does, and does not do:
 - It needs Node.js 22+ (24 recommended) and `npm` on the PATH that Gemini CLI sees. Node 20 and 21 work with a one-line `unsupported but works` notice at session start; Node 18 and older are not supported.
 - MCP calls are matched against the never-list through the `mcp_context` Gemini sends with them. If Gemini sends an MCP call without it (it omits it when it cannot look up the server config), the call is recorded under Gemini's own `mcp_<server>_<tool>` name and is not matched against the never-list. Known limit.
 - Gemini sends no tool-call id, so if you also wire a kya hook by hand, both copies record the call.
-- The hosted-plane hook (beta, [hosted-hook.md](../hosted-hook.md)) supports Claude Code only. Do not wire `kya hook --plane-config` into Gemini CLI: its deny body is Claude Code's, which Gemini does not treat as a block.
+- The hosted-plane hook (preview, [hosted-hook.md](../hosted-hook.md)) supports Claude Code only. Do not wire `kya hook --plane-config` into Gemini CLI: its deny body is Claude Code's, which Gemini does not treat as a block.
 - The extension bundles no MCP server; add one with the examples below. Gemini also loads the repo's `skills/kya-wrap` skill from the extension; the skill tells the model it applies only when the kya MCP tools are connected, so without them the model does not wait for approvals.
 - `gemini extensions install <github url>` installs from the repo's Latest GitHub Release, not a clone. It takes a release asset when one is named for the platform (`darwin.*`, `linux.*`, `win32.*`, optionally with the architecture) whatever the number of assets, or the only asset when there is exactly one; otherwise it uses the source archive of that release's tag. The kya releases carry no assets, so the source archive is used, and it contains the extension only from the kya release that ships it. The kya gateway binary releases (`gate-v*`) must stay off Latest (they are published with `--latest=false` once shield-kya #116 is merged, which has to happen before the next `gate-v` release); otherwise Gemini would install from a gateway tag that has no extension.
 - The SessionStart hook passes its data folder through the hook `env` field. That field exists in Gemini CLI's source (v0.63.0, `packages/core/src/hooks/types.ts`) but is not in its hooks documentation, so a future Gemini release could drop it; the bootstrap then reports `Shield KYA is NOT recording`.
@@ -80,7 +80,7 @@ Delete the `shield-kya` block from the settings file you merged into and restart
 
 ### Honesty note
 
-On the MCP path, Gemini's built-in tools only reach KYA when they go through MCP. The extension's hook also sees native tool calls, but it is advisory: it records them and blocks only the never-list. `trust: false` keeps Gemini's own confirmation layer intact on top.
+On the MCP path, Gemini's built-in tools only reach KYA when they go through MCP. The extension's hook also sees native tool calls, but it is advisory: it records them and blocks the never-list and the guard pack. `trust: false` keeps Gemini's own confirmation layer intact on top.
 
 ### Wrap fallback
 

@@ -9,11 +9,15 @@
  * Privacy: only verdict metadata ships (tool id, verdict, reason code, mode,
  * host, session id, token counts when known). Tool args, prompts, approval
  * bodies, and API keys are never exported - same rule as docs/otlp.md.
+ * Map attributes (target class, device id) ship only when mapAttrs is on (default off).
  *
  * No new dependencies: one hand-built OTLP/JSON payload and the global fetch.
  */
 
 import { randomBytes } from "node:crypto";
+import { deviceId as localDeviceId, installSalt } from "../device-id.js";
+import { SAFE_CLASS, sessionHash } from "../map/build.js";
+import { detectProduct } from "../trail.js";
 import { CLI_VERSION } from "../version.js";
 import { recordOtlpExport } from "./stats.js";
 
@@ -28,6 +32,8 @@ export interface OtlpExportConfig {
   readonly headers?: Readonly<Record<string, string>>;
   /** Permit plaintext http to a non-loopback host. Default false. */
   readonly insecure?: boolean;
+  /** Add kya.target.class and kya.device to each span. Default false. Only the user-level otlpExport.mapAttrs with the user-level endpoint sets it. */
+  readonly mapAttrs?: boolean;
 }
 
 export interface VerdictEvent {
@@ -41,12 +47,19 @@ export interface VerdictEvent {
   /** GenAI usage, when the caller knows it. */
   readonly tokensIn?: number;
   readonly tokensOut?: number;
+  /** Target class from the trail row (a class, never a raw path). Sent only with mapAttrs. */
+  readonly targetClass?: string;
+  /** Hashed device id (16 hex) from the trail row. Sent only with mapAttrs. */
+  readonly deviceId?: string;
+  /** Trail product. With mapAttrs, the session hash uses it (absent: detected the way the trail writer does). */
+  readonly product?: string;
 }
 
 interface OtlpExportFileKey {
   readonly endpoint?: unknown;
   readonly headers?: unknown;
   readonly insecure?: unknown;
+  readonly mapAttrs?: unknown;
 }
 
 const stats = { attempted: 0, exported: 0, failed: 0 };
@@ -60,18 +73,27 @@ export function otlpExportStats(): { attempted: number; exported: number; failed
  * Resolve export config from env > parsed .kya/config.json. Accepts the parsed
  * config object so callers that already read the file (resolveConfig) need no
  * config.ts change. Returns undefined when disabled (no endpoint anywhere).
+ * `userConfigJson` is the validated passwd-home config (readOptInConfig) alone: only it can turn on the map attributes.
  */
 export function resolveOtlpExportConfig(
   env: NodeJS.ProcessEnv = process.env,
   configJson?: unknown,
+  userConfigJson?: unknown,
 ): OtlpExportConfig | undefined {
   const file = readFileKey(configJson);
   const endpoint = env.KYA_OTLP_EXPORT_ENDPOINT?.trim() || file?.endpoint;
   if (!endpoint) return undefined;
+  // A repo can set env (.claude/settings.json) and the project config. Neither may add data or pick the receiver for it:
+  // map attributes need mapAttrs in the user-level file AND the endpoint in use must be that file's endpoint.
+  const user = readFileKey(userConfigJson);
+  const mapAttrs = !env.KYA_OTLP_EXPORT_ENDPOINT?.trim() && user?.mapAttrs === true && user.endpoint === endpoint;
+  // With map attributes on, the endpoint, headers and insecure flag all come from that same validated file.
+  const src = mapAttrs ? user : file;
   return {
     endpoint,
-    ...(file?.headers ? { headers: file.headers } : {}),
-    insecure: file?.insecure === true,
+    ...(src?.headers ? { headers: src.headers } : {}),
+    insecure: src?.insecure === true,
+    ...(mapAttrs ? { mapAttrs: true } : {}),
   };
 }
 
@@ -98,6 +120,7 @@ function readFileKey(configJson: unknown): OtlpExportConfig | undefined {
     endpoint,
     ...(headers ? { headers } : {}),
     insecure: key.insecure === true,
+    ...(key.mapAttrs === true ? { mapAttrs: true } : {}),
   };
 }
 
@@ -150,8 +173,28 @@ function intAttr(key: string, value: number | undefined): ReturnType<typeof attr
   return attr(key, { intValue: String(Math.floor(value)) });
 }
 
+const DEVICE_ID = /^[0-9a-f]{16}$/;
+const CLASS_MAX = 128;
+
+/** A project class names the project folder. That name stays in the local view, so the span gets only the family. */
+function offMachineClass(cls: string | undefined): string | undefined {
+  if (typeof cls !== "string" || cls.length > CLASS_MAX || !SAFE_CLASS.test(cls)) return undefined;
+  return cls.startsWith("project:") ? "project" : cls;
+}
+
+/** The two map attributes. Fields are picked one by one: a trail row passed as the event also has argsHash and paths. */
+function mapAttributes(event: VerdictEvent): ReturnType<typeof attr>[] {
+  // Same trust rule as the map: only a class with the shape the trail writer produces.
+  const cls = offMachineClass(event.targetClass);
+  const dev = typeof event.deviceId === "string" && DEVICE_ID.test(event.deviceId) ? event.deviceId : undefined;
+  return [strAttr("kya.target.class", cls), strAttr("kya.device", dev)].filter((a): a is NonNullable<typeof a> => a !== undefined);
+}
+
 /** One OTLP/JSON ExportTraceServiceRequest carrying exactly one verdict span. */
-export function buildVerdictTracePayload(event: VerdictEvent): unknown {
+export function buildVerdictTracePayload(
+  event: VerdictEvent,
+  opts: { readonly mapAttrs?: boolean; readonly sessionHash?: string } = {},
+): unknown {
   const start = nano(event.ts);
   const attributes = [
     strAttr("gen_ai.tool.name", event.toolId),
@@ -159,10 +202,12 @@ export function buildVerdictTracePayload(event: VerdictEvent): unknown {
     strAttr("kya.reason_code", event.reasonCode),
     strAttr("kya.mode", event.mode),
     strAttr("kya.host", event.host),
-    strAttr("kya.session_id", event.sessionId),
+    // With map attributes on, the raw host session id never leaves: the map's session hash, or no attribute.
+    strAttr("kya.session_id", opts.mapAttrs === true ? opts.sessionHash : event.sessionId),
     intAttr("gen_ai.usage.input_tokens", event.tokensIn),
     intAttr("gen_ai.usage.output_tokens", event.tokensOut),
   ].filter((a): a is NonNullable<typeof a> => a !== undefined);
+  if (opts.mapAttrs === true) attributes.push(...mapAttributes(event));
 
   const denied = event.verdict === "DENY";
   return {
@@ -199,6 +244,21 @@ export function buildVerdictTracePayload(event: VerdictEvent): unknown {
   };
 }
 
+/** With mapAttrs on, a row without deviceId (MCP gate, older rows) gets this install's id. */
+function withDevice(event: VerdictEvent, config: OtlpExportConfig, env: NodeJS.ProcessEnv): VerdictEvent {
+  if (config.mapAttrs !== true || event.deviceId !== undefined) return event;
+  const id = localDeviceId(env);
+  return id ? { ...event, deviceId: id } : event;
+}
+
+/** Payload options. With mapAttrs, the session id goes out as the same salted hash as `kya map` and `kya export`. */
+function payloadOpts(event: VerdictEvent, config: OtlpExportConfig, env: NodeJS.ProcessEnv): { mapAttrs?: boolean; sessionHash?: string } {
+  if (config.mapAttrs !== true) return { mapAttrs: config.mapAttrs };
+  const salt = installSalt(env);
+  const product = event.product ?? detectProduct(env, event.host);
+  return { mapAttrs: true, ...(salt ? { sessionHash: sessionHash(salt, product, event.sessionId) } : {}) };
+}
+
 /**
  * Export one verdict span. Never throws, never blocks the caller beyond the
  * 2s timeout budget, and never touches the verdict itself. No-op when the
@@ -222,7 +282,7 @@ export async function exportVerdictSpan(
         "content-type": "application/json",
         ...(config.headers ?? {}),
       },
-      body: JSON.stringify(buildVerdictTracePayload(event)),
+      body: JSON.stringify(buildVerdictTracePayload(withDevice(event, config, env), payloadOpts(event, config, env))),
       signal: controller.signal,
     });
     // Drain so the socket is released back to the pool.

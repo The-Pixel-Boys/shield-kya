@@ -7,6 +7,8 @@ export interface ParsedArgs {
   readonly command: string | undefined;
   readonly positionals: readonly string[];
   readonly flags: Readonly<Record<string, string | boolean>>;
+  /** Tokens after a bare `--` (also kept in `positionals`); undefined when there was no `--`. */
+  readonly rest?: readonly string[];
 }
 
 /** Pure switches: never take the next token as their value (`kya --dry-run team init` must not eat `team`). */
@@ -18,11 +20,13 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   const flags: Record<string, string | boolean> = {};
   const positionals: string[] = [];
   let command: string | undefined;
+  let rest: string[] | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const token = args[i]!;
     if (token === "--") {
-      positionals.push(...args.slice(i + 1));
+      rest = args.slice(i + 1);
+      positionals.push(...rest);
       break;
     }
     if (token.startsWith("--")) {
@@ -63,7 +67,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     }
   }
 
-  return { command, positionals, flags };
+  return { command, positionals, flags, ...(rest ? { rest } : {}) };
 }
 
 export function flagString(

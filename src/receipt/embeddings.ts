@@ -7,11 +7,13 @@
  * missing runtime degrades to lexical search. The provider is gated by environment
  * variables and never throws: any failure logs once to stderr and returns undefined.
  */
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join, sep } from "node:path";
-import { globalConfigDir } from "../config.js";
+import { atomicWriteSync } from "../fs-atomic.js";
+import { semanticInstallCommand, semanticRuntimeDir } from "./semantic-status.js";
 import { eventDocumentText, eventKey, eventTextSha1 } from "./search.js";
 import type { TrailEvent } from "../trail.js";
 
@@ -42,15 +44,7 @@ function modelDisabled(env: NodeJS.ProcessEnv): boolean {
   return env.KYA_SEARCH_SEMANTIC === "off";
 }
 
-/** Opt-in install prefix for the semantic runtime. */
-export function semanticRuntimeDir(env: NodeJS.ProcessEnv = process.env): string {
-  return join(globalConfigDir(env), "semantic");
-}
-
-/** The one command that enables semantic search (printed by the degrade hint). */
-export function semanticInstallCommand(env: NodeJS.ProcessEnv = process.env): string {
-  return `npm install --prefix "${semanticRuntimeDir(env)}" @shield-agent/fastembed@3.0.0`;
-}
+export { semanticInstallCommand, semanticRuntimeDir } from "./semantic-status.js";
 
 const RUNTIME_PKG = "@shield-agent/fastembed";
 let hintShown = false;
@@ -194,64 +188,247 @@ export class LocalMiniLmProvider implements EmbeddingProvider {
 }
 
 interface CacheEntry {
-  readonly id: string;
-  readonly sha1: string;
-  readonly vector: number[];
+  /** Hex sha1 of the document sha1 the vector was made from. */
+  readonly check: string;
+  readonly vector: Float32Array;
 }
 
-interface CacheFile {
-  readonly version: number;
-  readonly entries: CacheEntry[];
-}
-
+/**
+ * search-index.bin layout (little endian). The header never changes after create:
+ *   magic "KYAV", u32 format version, u32 dimension, u32 reserved (0).
+ * Then fixed-size records, oldest first:
+ *   4-byte record check (first 4 bytes of sha1 over the rest of the record),
+ *   20-byte sha1 of the event id, 20-byte sha1 of the document sha1, dimension x float32.
+ * The record count comes from the file length: a header count would have to be
+ * rewritten on every append, and after a crash it could disagree with the tail.
+ */
+const MAGIC = "KYAV";
+const FORMAT_VERSION = 1;
+const HEADER_BYTES = 16;
+const HASH_BYTES = 20;
+const CHECK_BYTES = 4;
+const RECORD_BYTES = CHECK_BYTES + 2 * HASH_BYTES + EXPECTED_DIMS * 4;
+const DEFAULT_MAX_ENTRIES = 20_000;
+const LEGACY_VERSION = 1;
 const DEFAULT_CACHE_FILE = join(homedir(), ".kya", "search-index.json");
-const CACHE_VERSION = 1;
 
-/** On-disk cache for event embeddings keyed by event id and document sha1. */
+function sha1(text: string): Buffer {
+  return createHash("sha1").update(text).digest();
+}
+
+function recordCheck(record: Buffer): Buffer {
+  return createHash("sha1").update(record.subarray(CHECK_BYTES)).digest().subarray(0, CHECK_BYTES);
+}
+
+function encodeRecord(idHash: string, check: string, vector: Float32Array): Buffer {
+  const rec = Buffer.alloc(RECORD_BYTES);
+  rec.write(idHash, CHECK_BYTES, HASH_BYTES, "hex");
+  rec.write(check, CHECK_BYTES + HASH_BYTES, HASH_BYTES, "hex");
+  let off = CHECK_BYTES + 2 * HASH_BYTES;
+  for (let i = 0; i < EXPECTED_DIMS; i++, off += 4) rec.writeFloatLE(vector[i]!, off);
+  recordCheck(rec).copy(rec, 0);
+  return rec;
+}
+
+function encodeHeader(): Buffer {
+  const head = Buffer.alloc(HEADER_BYTES);
+  head.write(MAGIC, 0, "latin1");
+  head.writeUInt32LE(FORMAT_VERSION, 4);
+  head.writeUInt32LE(EXPECTED_DIMS, 8);
+  return head;
+}
+
+function headerOk(buf: Buffer): boolean {
+  return (
+    buf.length >= HEADER_BYTES &&
+    buf.toString("latin1", 0, 4) === MAGIC &&
+    buf.readUInt32LE(4) === FORMAT_VERSION &&
+    buf.readUInt32LE(8) === EXPECTED_DIMS
+  );
+}
+
+function maxEntries(env: NodeJS.ProcessEnv): number {
+  const n = Number(env.KYA_SEARCH_INDEX_MAX);
+  return Number.isInteger(n) && n > 0 ? n : DEFAULT_MAX_ENTRIES;
+}
+
+/**
+ * On-disk cache for event embeddings keyed by event id and document sha1.
+ * New vectors are appended to search-index.bin; the whole file is rewritten only
+ * to compact it. A legacy search-index.json is read once, converted, and renamed
+ * to search-index.json.migrated (kept, never deleted).
+ */
 export class EventEmbeddingCache {
-  private data: CacheFile;
-  private readonly cacheFile: string;
+  // Read on first use: the report daemon builds this cache at start even when search is never used.
+  private entries: Map<string, CacheEntry> | undefined;
+  private readonly binFile: string;
+  private readonly legacyFile: string | undefined;
+  private readonly max: number;
+  /** The file exists but could not be read: never write over it with a near-empty index. */
+  private unreadable = false;
+  /** Records in the file as last read or written; undefined = no valid file to append to. */
+  private diskRecords: number | undefined;
+  private window = new Set<string>();
 
-  constructor(cacheFile?: string) {
-    this.cacheFile = cacheFile ?? process.env.KYA_SEARCH_INDEX ?? DEFAULT_CACHE_FILE;
-    this.data = this.load();
+  constructor(cacheFile?: string, env: NodeJS.ProcessEnv = process.env) {
+    const file = cacheFile ?? env.KYA_SEARCH_INDEX ?? DEFAULT_CACHE_FILE;
+    this.binFile = file.endsWith(".json") ? `${file.slice(0, -".json".length)}.bin` : file;
+    this.legacyFile = file.endsWith(".json") ? file : undefined;
+    this.max = maxEntries(env);
   }
 
-  private load(): CacheFile {
+  private loaded(): Map<string, CacheEntry> {
+    if (!this.entries) {
+      this.entries = this.load();
+      this.evictOverCap();
+    }
+    return this.entries;
+  }
+
+  private load(): Map<string, CacheEntry> {
+    const entries = new Map<string, CacheEntry>();
     try {
-      if (!existsSync(this.cacheFile)) return { version: CACHE_VERSION, entries: [] };
-      const raw = JSON.parse(readFileSync(this.cacheFile, "utf8")) as CacheFile;
-      if (raw.version !== CACHE_VERSION) return { version: CACHE_VERSION, entries: [] };
-      return raw;
+      if (existsSync(this.binFile)) this.readBin(entries);
+      else if (this.legacyFile && existsSync(this.legacyFile)) this.migrate(entries);
     } catch {
-      return { version: CACHE_VERSION, entries: [] };
+      this.unreadable = true;
+      entries.clear();
+    }
+    return entries;
+  }
+
+  private readBin(entries: Map<string, CacheEntry>): void {
+    const buf = readFileSync(this.binFile);
+    if (!headerOk(buf)) throw new Error("search index header not recognized");
+    let off = HEADER_BYTES;
+    let records = 0;
+    // A damaged record is skipped and a torn tail is ignored; the next save compacts the file.
+    let damaged = false;
+    for (; off + RECORD_BYTES <= buf.length; off += RECORD_BYTES, records++) {
+      const rec = buf.subarray(off, off + RECORD_BYTES);
+      if (!recordCheck(rec).equals(rec.subarray(0, CHECK_BYTES))) {
+        damaged = true;
+        continue;
+      }
+      const vector = new Float32Array(EXPECTED_DIMS);
+      const base = CHECK_BYTES + 2 * HASH_BYTES;
+      for (let i = 0; i < EXPECTED_DIMS; i++) vector[i] = rec.readFloatLE(base + i * 4);
+      const idHash = rec.toString("hex", CHECK_BYTES, CHECK_BYTES + HASH_BYTES);
+      entries.delete(idHash);
+      entries.set(idHash, { check: rec.toString("hex", CHECK_BYTES + HASH_BYTES, RECORD_BYTES - EXPECTED_DIMS * 4), vector });
+    }
+    this.diskRecords = off === buf.length && !damaged ? records : undefined;
+  }
+
+  private migrate(entries: Map<string, CacheEntry>): void {
+    const legacy = this.legacyFile!;
+    const raw = JSON.parse(readFileSync(legacy, "utf8")) as {
+      version?: number;
+      entries?: { id: string; sha1: string; vector: number[] }[];
+    };
+    // KYA_SEARCH_INDEX can point at any JSON file: touch only a file that is a legacy index.
+    if (raw.version !== LEGACY_VERSION || !Array.isArray(raw.entries)) throw new Error("not a legacy search index");
+    for (const e of raw.entries) {
+      if (e?.vector?.length !== EXPECTED_DIMS) continue;
+      const idHash = sha1(e.id).toString("hex");
+      entries.delete(idHash);
+      entries.set(idHash, { check: sha1(e.sha1).toString("hex"), vector: Float32Array.from(e.vector) });
+    }
+    this.entries = entries;
+    if (!this.rewrite()) return;
+    const kept = `${legacy}.migrated`;
+    // An older .migrated copy is never replaced; the legacy file then stays, and the .bin wins.
+    if (!existsSync(kept)) {
+      try {
+        renameSync(legacy, kept);
+      } catch {
+        /* the .bin is read first, so a legacy file left in place is ignored */
+      }
     }
   }
 
-  private save(): void {
+  /** Write every live entry to a new file in one atomic step. */
+  private rewrite(): boolean {
+    if (this.unreadable || !this.entries) return false;
     try {
-      mkdirSync(dirname(this.cacheFile), { recursive: true });
-      writeFileSync(this.cacheFile, JSON.stringify(this.data, null, 2), "utf8");
+      const parts = [encodeHeader()];
+      for (const [idHash, e] of this.entries) {
+        if (e.vector.length === EXPECTED_DIMS) parts.push(encodeRecord(idHash, e.check, e.vector));
+      }
+      mkdirSync(dirname(this.binFile), { recursive: true });
+      atomicWriteSync(this.binFile, Buffer.concat(parts));
+      this.diskRecords = parts.length - 1;
+      return true;
     } catch {
-      /* best-effort cache */
+      this.diskRecords = undefined;
+      return false;
     }
+  }
+
+  private append(records: Buffer[]): void {
+    if (this.unreadable || records.length === 0) return;
+    try {
+      // Another daemon can append to the same file: check its real length, never trust the count.
+      const size = this.diskRecords === undefined ? -1 : statSync(this.binFile).size;
+      if (size < HEADER_BYTES || (size - HEADER_BYTES) % RECORD_BYTES !== 0) {
+        this.rewrite();
+        return;
+      }
+      appendFileSync(this.binFile, Buffer.concat(records));
+      this.diskRecords = (size - HEADER_BYTES) / RECORD_BYTES + records.length;
+    } catch {
+      this.diskRecords = undefined;
+    }
+  }
+
+  /** Drop the oldest entries above the cap. Ids in the current report window go last. */
+  private evictOverCap(): void {
+    const entries = this.entries!;
+    let over = entries.size - this.max;
+    if (over <= 0) return;
+    for (const pass of [false, true]) {
+      for (const idHash of entries.keys()) {
+        if (over <= 0) return;
+        if (this.window.has(idHash) !== pass) continue;
+        entries.delete(idHash);
+        over--;
+      }
+    }
+  }
+
+  /** Ids of the events in the current report window: pruning keeps these before older ones. */
+  setWindow(eventIds: Iterable<string>): void {
+    this.window = new Set([...eventIds].map((id) => sha1(id).toString("hex")));
   }
 
   getCached(eventId: string, textSha1: string): number[] | undefined {
-    return this.data.entries.find((e) => e.id === eventId && e.sha1 === textSha1)?.vector;
+    const e = this.loaded().get(sha1(eventId).toString("hex"));
+    return e && e.check === sha1(textSha1).toString("hex") ? Array.from(e.vector) : undefined;
   }
 
   setCached(eventId: string, textSha1: string, vector: number[]): void {
     this.setMany([{ id: eventId, sha1: textSha1, vector }]);
   }
 
-  /** Replace many entries in one pass instead of filtering on every item. */
+  /** Add or replace many entries; only the new records are written. */
   setMany(batch: readonly { readonly id: string; readonly sha1: string; readonly vector: number[] }[]): void {
-    const replaced = new Set(batch.map((b) => b.id));
-    const entries = this.data.entries.filter((e) => !replaced.has(e.id));
-    entries.push(...batch);
-    this.data = { version: CACHE_VERSION, entries };
-    this.save();
+    const entries = this.loaded();
+    const records: Buffer[] = [];
+    for (const b of batch) {
+      const idHash = sha1(b.id).toString("hex");
+      const entry = { check: sha1(b.sha1).toString("hex"), vector: Float32Array.from(b.vector) };
+      entries.delete(idHash);
+      entries.set(idHash, entry);
+      // Other sizes stay in memory only: the file holds one fixed dimension.
+      if (b.vector.length === EXPECTED_DIMS) records.push(encodeRecord(idHash, entry.check, entry.vector));
+    }
+    this.evictOverCap();
+    // Compact when stale records (replaced or evicted) pass a quarter of the cap.
+    if (this.diskRecords === undefined || this.diskRecords + records.length - entries.size > this.max / 4) {
+      this.rewrite();
+    } else {
+      this.append(records);
+    }
   }
 }
 
@@ -269,6 +446,7 @@ export async function buildEventEmbeddings(
 ): Promise<Map<string, number[]>> {
   const out = new Map<string, number[]>();
   const pending: { id: string; sha1: string; text: string }[] = [];
+  cache.setWindow(events.map(eventKey));
   for (const e of events) {
     const id = eventKey(e);
     const sha1 = eventTextSha1(e);

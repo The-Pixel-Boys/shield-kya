@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "reportedAt": "2026-10-30T12:00:00.000Z",
+  "kyaVersion": "<kya-version>",
+  "deviceId": "dev-golden-0001",
+  "deviceLabel": "golden-desk",
+  "os": "<host-os>",
+  "arch": "<host-arch>",
+  "hosts": [
+    {
+      "id": "claude-code",
+      "version": null,
+      "kyaHook": false
+    },
+    {
+      "id": "copilot",
+      "version": null,
+      "kyaHook": false
+    }
+  ],
+  "extensions": [
+    {
+      "id": "anthropic.claude-code",
+      "version": "2.1.313",
+      "editor": "vscode"
+    },
+    {
+      "id": "anthropic.claude-code",
+      "version": "2.1.314",
+      "editor": "vscode"
+    },
+    {
+      "id": "github.copilot-chat",
+      "version": "0.22.0",
+      "editor": "cursor"
+    }
+  ],
+  "mcpServers": [
+    {
+      "name": "docs",
+      "transport": "http",
+      "command": null
+    },
+    {
+      "name": "fs",
+      "transport": "stdio",
+      "command": "mcp-filesystem"
+    }
+  ],
+  "ioc": {
+    "listVersion": "2026-10-30.1",
+    "checkedAt": "2026-10-30T12:00:00.000Z",
+    "skipped": 0,
+    "findings": [
+      {
+        "ioc": "ioc-2026-claude-vscode-trojan",
+        "check": "extension",
+        "severity": "critical",
+        "evidence": "~/.vscode/extensions/anthropic.claude-code-2.1.313-darwin-arm64",
+        "hint": "Update the extension to a release that is not listed here, restart the editor, then rotate the credentials it could read."
+      }
+    ]
+  },
+  "never": {
+    "listActive": true,
+    "mode": "advisory"
+  }
+}

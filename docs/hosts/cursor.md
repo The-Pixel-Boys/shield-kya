@@ -1,6 +1,6 @@
 # Cursor (IDE + Agent CLI)
 
-Wire KYA into Cursor so every tool call the agent makes passes Shield's evaluate first. Allow runs, Deny stops, Hold waits for a person. The Cursor IDE and the Cursor Agent CLI share the same MCP config, so one wiring covers both.
+Wire KYA into Cursor so tool calls the agent routes through Shield's MCP gate pass Shield's evaluate first and are recorded. Cursor's built-in tools do not go through the gate and are not evaluated or recorded. Allow runs, Deny stops, Hold waits for a person. The Cursor IDE and the Cursor Agent CLI share the same MCP config, so one wiring covers both.
 
 ## Setup
 
@@ -23,7 +23,7 @@ Two other paths, if you prefer them: merge the repo-root [`.mcp.json`](../../.mc
 
 ## What KYA reports
 
-Every tool call Cursor routes through MCP lands on the receipt: tool id, decision (Allow / Deny / Hold), timestamp, and a clipped, redacted preview of what would change. Open it with `kya receipt --open`, or check Cursor's MCP panel in Settings.
+Each tool call Cursor routes through Shield's MCP gate lands on the receipt: tool id, decision (Allow / Deny / Hold), timestamp, and a clipped, redacted preview of what would change. Open it with `kya receipt --open`, or check Cursor's MCP panel in Settings.
 
 ## Files written
 

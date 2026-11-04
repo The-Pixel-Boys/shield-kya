@@ -196,7 +196,7 @@ export function activate(ctx: vscode.ExtensionContext): TestApi | undefined {
       : `$(shield) KYA ${mode}${hosted ? " +hosted" : ""}  ${c.allow} allow ${c.review} review ${c.hold ? `${c.hold} hold ` : ""}${c.deny} deny`;
     status.tooltip = [
       `Gate mode: ${mode} (from ${gate.hooks} user-level kya hook(s) or Claude Code plugin(s); Codex/Gemini plugins and project-level wiring are not inspected${mode === "unknown" ? ", but the trail has recent rows" : ""}).`,
-      "Advisory: kya records every call and blocks only the never-list; it fails open. Strict/hosted hooks deny REQUIRE_APPROVE.",
+      "Advisory: kya records every call and blocks the never-list and the guard pack; it fails open. Strict/hosted hooks deny REQUIRE_APPROVE.",
       `Counts: the last ${MAX_ROWS} rows of ${tailer.path} (the Verdicts view shows the same rows).`,
       trailError ? `The trail could not be read: ${trailError}. The feed is paused; everything else still works.` : "",
       neverSeen ? `${neverSeen} never-list deny(s) since the trail was last loaded (activation, Refresh, or a truncated/rotated file).` : "",
@@ -295,7 +295,7 @@ export function activate(ctx: vscode.ExtensionContext): TestApi | undefined {
     const host = await ui.pick(picks, "Agent host to wire for this project (kya connect <host> --project)");
     if (!host) return;
     const ok = await ui.confirm(
-      `Run "kya connect ${host.label} --project" in ${folder.name}? It merges a shield-kya MCP server entry into ${host.description} (existing entries are kept). kya is advisory: it records tool calls and blocks only the never-list.`,
+      `Run "kya connect ${host.label} --project" in ${folder.name}? It merges a shield-kya MCP server entry into ${host.description} (existing entries are kept). kya is advisory: it records tool calls and blocks the never-list and the guard pack.`,
       "Connect");
     if (!ok) return;
     const r = await runKya(rt, ["connect", host.label, "--project", "--json"], folder.uri.fsPath);
