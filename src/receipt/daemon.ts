@@ -183,15 +183,15 @@ export function listOwnedProcesses(platform: NodeJS.Platform = process.platform)
 }
 
 /**
- * Pids of running `cli.js receipt-serve` daemons - any install path, any
- * cwd - so `stop --all` can sweep orphans the cwd state file does not know
- * about. Never matches this process. `receipt-serve` must appear as a
- * standalone argv token (the daemon always spawns it as one), so an editor
- * with `receipt-serve-notes.txt` open does not match. Residual risk,
- * accepted: a same-uid process deliberately built to look like the daemon
- * (`node cli.js receipt-serve`) still matches - but the sweep is scoped to
- * the current user's processes and only ever sends SIGTERM, so the worst
- * case is a graceful stop of a same-user lookalike.
+ * Pids of running receipt-serve daemons (`cli.js receipt-serve` or
+ * `kya receipt-serve`) - any install path, any cwd - so `stop --all` can sweep
+ * orphans the cwd state file does not know about. Never matches this process.
+ * `receipt-serve` must appear as a standalone argv token (the daemon always
+ * spawns it as one), so an editor with `receipt-serve-notes.txt` open does not
+ * match. Residual risk, accepted: a same-uid process deliberately built to look
+ * like the daemon still matches - but the sweep is scoped to the current user's
+ * processes and only ever sends SIGTERM, so the worst case is a graceful stop of
+ * a same-user lookalike.
  */
 export function findReceiptDaemonPids(procs: readonly DaemonProc[]): number[] {
   const receiptServeToken = /(^|\s|\/)receipt-serve(\s|$)/;
@@ -199,10 +199,27 @@ export function findReceiptDaemonPids(procs: readonly DaemonProc[]): number[] {
     .filter(
       (p) =>
         p.pid !== process.pid &&
-        p.args.includes("cli.js") &&
-        receiptServeToken.test(p.args),
+        ((p.args.includes("cli.js") && receiptServeToken.test(p.args)) ||
+          isKyaReceiptServe(p.args)),
     )
     .map((p) => p.pid);
+}
+
+/**
+ * `kya receipt-serve` as a binary runs it, or as the npm bin shim runs it
+ * (`node <bin>/kya receipt-serve`). The subcommand must be the argument right
+ * after the program, so `node other.js x receipt-serve` does not match. A path
+ * with a space is missed, never over-matched.
+ */
+function isKyaReceiptServe(args: string): boolean {
+  const argv = args.trim().split(/\s+/);
+  const base = (token: string | undefined): string => token?.split("/").pop() ?? "";
+  if (base(argv[0]) === "kya") return argv[1] === "receipt-serve";
+  return (
+    base(argv[0]) === "node" &&
+    ["kya", "shield-kya", "cli.js"].includes(base(argv[1])) &&
+    argv[2] === "receipt-serve"
+  );
 }
 
 /**

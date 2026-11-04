@@ -240,6 +240,8 @@ export function expandQuery(query: string): string {
 }
 
 /** Stable SHA1 of the searchable document text; used to version embeddings. */
+// Stays SHA-1: a search-index.json written by 0.32.9 stores this value, and the migration compares it.
+// The text holds no session id. The binary index stores only a SHA-256 of this value.
 export function eventTextSha1(e: TrailEvent): string {
   return createHash("sha1").update(eventDocumentText(e)).digest("hex");
 }
@@ -465,6 +467,34 @@ export interface SearchOptions {
   readonly queryEmbedding?: number[];
   /** Soft-boost events whose facets match hinted values. */
   readonly facetBoost?: number;
+  /**
+   * Version of the trail the events came from (see trailVersion). When set, the
+   * BM25 index is reused while the version, the filters and the event window match.
+   */
+  readonly indexVersion?: string;
+}
+
+let bm25Cache: { readonly key: string; readonly index: Bm25Index } | undefined;
+
+/** The BM25 index for the filtered events, reused across queries on the same trail version. */
+function eventIndexFor(
+  filtered: readonly TrailEvent[],
+  filters: SearchOptions["filters"],
+  indexVersion: string | undefined,
+): Bm25Index {
+  if (indexVersion === undefined) return buildEventIndex(filtered);
+  // The window moves with the clock, so the first and last event keys are part of the key.
+  const first = filtered[0];
+  const last = filtered[filtered.length - 1];
+  const key = JSON.stringify([
+    indexVersion,
+    filters ?? {},
+    filtered.length,
+    first ? eventKey(first) : "",
+    last ? eventKey(last) : "",
+  ]);
+  if (bm25Cache?.key !== key) bm25Cache = { key, index: buildEventIndex(filtered) };
+  return bm25Cache.index;
 }
 
 /** Absolute cosine floor for semantic candidates (see rankEvents). */
@@ -477,12 +507,12 @@ export const SEMANTIC_MAX_CANDIDATES = 100;
  * the survivors; optional semantic embeddings are merged with RRF.
  */
 export function rankEvents(events: readonly TrailEvent[], options: SearchOptions): RankedEvent[] {
-  const { query, filters, embeddings, queryEmbedding, facetBoost = 0.05 } = options;
+  const { query, filters, embeddings, queryEmbedding, facetBoost = 0.05, indexVersion } = options;
   const q = query.trim();
   const hints = extractFacetHints(q);
 
   const filtered = applyChipFilters(events, filters ?? {});
-  const index = buildEventIndex(filtered);
+  const index = eventIndexFor(filtered, filters, indexVersion);
 
   const bm25 = index.search(expandQuery(q));
   const byId = new Map(filtered.map((e) => [eventKey(e), e]));

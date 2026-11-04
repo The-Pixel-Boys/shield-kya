@@ -1,7 +1,7 @@
 {
   "name": "shield-kya",
   "displayName": "Shield KYA",
-  "description": "Audit trail and traceability for AI agents. See kya verdicts for every coding agent tool call in your editor. Advisory: kya records every call, blocks only the never-list, fails open.",
+  "description": "Audit trail and traceability for AI agents. See kya verdicts for every coding agent tool call in your editor. Advisory: kya records every call, blocks the never-list and the guard pack, fails open.",
   "version": "0.1.0",
   "publisher": "shield-agent",
   "license": "MIT",
@@ -56,7 +56,7 @@
     "viewsWelcome": [
       {
         "view": "shieldKya.feed",
-        "contents": "No kya trail rows yet. Install kya and wire your agent: `npm i -g @shield-agent/kya` then `kya start`.\n[Connect this workspace](command:shieldKya.connectWorkspace)\nkya is advisory: it records every tool call and blocks only the never-list."
+        "contents": "No kya trail rows yet. Install kya and wire your agent: `npm i -g @shield-agent/kya` then `kya start`.\n[Connect this workspace](command:shieldKya.connectWorkspace)\nkya is advisory: it records every tool call and blocks the never-list and the guard pack."
       }
     ],
     "commands": [

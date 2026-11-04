@@ -1,6 +1,6 @@
 # MastraCode
 
-Wire KYA into MastraCode so every tool call the agent makes passes Shield's evaluate first. Allow runs, Deny stops, Hold waits for a person.
+Wire KYA into MastraCode so tool calls the agent routes through Shield's MCP gate pass Shield's evaluate first and are recorded. MastraCode's built-in tools do not go through the gate and are not evaluated or recorded. Allow runs, Deny stops, Hold waits for a person.
 
 ## Setup
 
@@ -20,7 +20,7 @@ Prefer editing by hand? Copy [`mastracode/mcp.example.json`](../../mastracode/mc
 
 ## What KYA reports
 
-Every tool call MastraCode routes through MCP lands on the receipt: tool id, decision (Allow / Deny / Hold), timestamp, and a clipped, redacted preview of what would change. Open it with `kya receipt --open`.
+Each tool call MastraCode routes through Shield's MCP gate lands on the receipt: tool id, decision (Allow / Deny / Hold), timestamp, and a clipped, redacted preview of what would change. Open it with `kya receipt --open`.
 
 ## Files written
 

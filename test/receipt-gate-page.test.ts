@@ -78,9 +78,13 @@ describe("evaluateGatewayTool", () => {
 
   it("matches the gateway's case-sensitive CEL behavior", () => {
     // The gateway's mcp.tool.name.matches(...) is case-sensitive, so the
-    // dry-run evaluator mirrors that exactly.
-    expect(evaluateGatewayTool("github", "DROP_TABLE").verdict).toBe("allow");
+    // generated pattern spells each verb lower, Capitalized and UPPER; the
+    // dry-run evaluator mirrors it. Mixed case that is no word form stays allowed.
+    expect(evaluateGatewayTool("github", "DROP_TABLE").verdict).toBe("deny");
+    expect(evaluateGatewayTool("github", "dRoP_table").verdict).toBe("allow");
     expect(evaluateGatewayTool("github", "drop_table").verdict).toBe("deny");
+    expect(evaluateGatewayTool("github", "dropTable").verdict).toBe("deny");
+    expect(evaluateGatewayTool("github", "drag_and_drop").verdict).toBe("allow");
     expect(evaluateGatewayTool("github", "get_issue").verdict).toBe("allow");
   });
 });

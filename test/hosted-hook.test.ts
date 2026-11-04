@@ -441,6 +441,28 @@ describe("hosted hook: retry and backoff schedule (injected clock + seeded RNG)"
     expect(w.calls.length).toBeGreaterThan(1);
   });
 
+  it("a refused connection that arrives after the deadline is still PLANE_UNREACHABLE, not PLANE_TIMEOUT", async () => {
+    // Main pipelines 3757 and PR 610 (3835): a closed port uses the whole budget in retries, and the last refusal
+    // landed after the deadline. The code must follow the error, not the clock.
+    const c = clock();
+    const late: PlaneTransport = (async () => {
+      await c.sleep(10_000); // the injected clock passes the 3000 ms deadline while the call is in flight
+      throw netErr();
+    }) as PlaneTransport;
+    const err = await call({ calls: [], fetch: late }, c).catch((e) => e);
+    expect(err.code).toBe("PLANE_UNREACHABLE");
+  });
+
+  it("an abort at the budget is still PLANE_TIMEOUT even after the deadline", async () => {
+    const c = clock();
+    const late: PlaneTransport = (async () => {
+      await c.sleep(10_000);
+      throw Object.assign(new Error("aborted"), { name: "TimeoutError" });
+    }) as PlaneTransport;
+    const err = await call({ calls: [], fetch: late }, c).catch((e) => e);
+    expect(err.code).toBe("PLANE_TIMEOUT");
+  });
+
   it("transient failure then success returns the verdict", async () => {
     const c = clock();
     const w = wire(json(502, {}), netErr(), verdict("ALLOW", "ALLOW"));
@@ -711,6 +733,14 @@ describe("hosted hook: no downgrade through env or repo config", () => {
     expect(r.trail[0]).toMatchObject({ verdict: "DENY", reasonCode: "AGENT_NOT_ACTIVE", configIgnored: true });
     expect(existsSync(join(kyaHome, ".kya", "trail.jsonl"))).toBe(false);
     expect(r.stderr).toMatch(/ignored/);
+  });
+
+  it("an env toggle for OTLP map attributes changes nothing: no code reads one (spans: otlp-optin-hosted.test.ts)", async () => {
+    // KYA_OTLP_MAP_ATTRS no longer exists. Only the passwd-home config turns the attributes on, in every mode.
+    const r = await run({ cwd: tmp("kya-proj-"), replies: [verdict("DENY", "AGENT_NOT_ACTIVE")], env: { KYA_OTLP_MAP_ATTRS: "on" } });
+    expect(r.exitCode).toBe(2);
+    expect(r.stdout).toContain("AGENT_NOT_ACTIVE");
+    expect(r.trail[0]).toMatchObject({ verdict: "DENY", reasonCode: "AGENT_NOT_ACTIVE" });
   });
 
   it("the same downgrade attempts cannot turn a dead plane into an allow", async () => {

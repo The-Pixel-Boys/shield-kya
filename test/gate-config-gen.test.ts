@@ -65,8 +65,10 @@ describe("CEL generation from the MCP server registry", () => {
 
   it("rule shape: target match AND NOT matches(deny) - destructive deny always wins", () => {
     const rule = celAllowRule(stdio("github", ["npx", "gh-mcp"]));
-    expect(rule).toMatch(/^mcp\.tool\.target == 'github' && !mcp\.tool\.name\.matches\('/);
-    expect(rule).toContain("drop|truncate|purge|transfer");
+    // destructive family (minus the exact drag_and_drop / transfer_learn names), then the ADMIN rules
+    expect(rule).toMatch(/^mcp\.tool\.target == 'github' && \(!mcp\.tool\.name\.matches\('/);
+    expect(rule).toMatch(/\) && !mcp\.tool\.name\.matches\('\^\(\?:delete_/);
+    expect(rule).toContain("drop(?:[^a-z]|$)");
     // OR-allow semantics: a denied name matches no allow rule → gateway denies it.
   });
 

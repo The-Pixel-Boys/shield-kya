@@ -11,10 +11,11 @@
 import { realpathSync, writeSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolveConfig } from "./config.js";
-import { KyaError } from "./errors.js";
+import { AuthRequiredError, KyaError } from "./errors.js";
 import { flagBool, flagString, parseArgs } from "./parse-args.js";
 import { ensureSupportedNode } from "./node-upgrade.js";
 import { CLI_VERSION } from "./version.js";
+import { isNeverCode } from "./never-code.js";
 
 const helpFor = (hosts: string): string => `Shield KYA light CLI - Know Your Agent (provider-agnostic)
 
@@ -33,7 +34,7 @@ Commands:
   connect <host>    Wire KYA MCP into a coding host config
                     (${hosts}; --project for project scope, --force to overwrite)
                     --hooks also wires the host's PreToolUse hook (claude|grok|kimi)
-                    --hooks --hosted --plane-config <abs path> wires the hosted hook (claude, beta)
+                    --hooks --hosted --plane-config <abs path> wires the hosted hook (claude, preview)
                     --gate points the host at the local kya gateway (kya gate run)
   gate              Local MCP gateway: govern + audit tool calls to any MCP server
                     (init | setup | doctor | status | run | stop)
@@ -49,7 +50,9 @@ Commands:
                     a newer release exists; --no-update-check / KYA_UPDATE_CHECK=0 opts out)
   register-agent    POST /api/v1/kya/agents (human mint; server applies allow/break-glass/approve)
   eval-tool         Policy evaluate (HTTP plane or --offline sample)
-  wrap              Evaluate + record trail. Never executes.
+  wrap              Evaluate + record trail. With --tool-id it never executes.
+                    wrap [--offline] -- <cmd...>: gate the command as a shell call, run it
+                    only if allowed (exit = the command's; 1 denied, 4 Hold pending).
                     Default observe: no Hold ticket (no second approve). --hold / KYA_HOLD=1 for org Hold.
   hook              PreToolUse interception for native-hook hosts (claude|grok|kimi|…)
                     Reads the hook payload from stdin; exit 2 blocks. --strict denies advisory.
@@ -58,12 +61,26 @@ Commands:
                     timeout needs onFailure=block in the plugin hooks.json.
                     Records once per tool_use_id (dual-hook safe). Never-list DENY
                     blocks in both modes.
-                    --plane-config <abs path> (beta): evaluate on the hosted plane,
+                    Guard pack (local, default on, exit 2, rule id in the message):
+                      NEVER_SHELL        rm of home/root, terraform destroy, SQL drops, force
+                                         push, delete main, docker volumes, kubectl delete ns,
+                                         cloud deletes, git hard reset plus git clean
+                      NEVER_SECRET_READ  ssh/cloud/kube/docker/railway credentials, .env
+                      NEVER_SECRET_WRITE AWS/GitHub/Slack/Stripe keys, private key headers
+                      NEVER_EXFIL        env or credential files sent to a non-loopback host
+                    Config in ~/.kya/config.json only: shellNeverList, secretsGuard,
+                    exfilGuard (default true), guardAllow [{rule, path|command}].
+                    A project .kya/config.json cannot lift a deny. docs/guard-pack.md.
+                    --plane-config <abs path> (preview): evaluate on the hosted plane,
                     fail closed; key/URL/agent come only from that 0600 file.
                     --plane-shadow records hosted verdicts without blocking;
                     --plane-budget-ms <n> total plane budget (default 3000, max 4000).
   receipt           Activity report HTML/JSON/MD (default: last 3 days, all tools; --open)
                     --q pre-fills feed search · --share publishes a redacted summary (see --share-url)
+  map               Map of agent actions: device, agent, tool and target graph with KYA verdicts (local only)
+                    --days <n> window (default 3) · --json · --html <file> · --session <id>
+  export            Local trail as an agent-flow JSONL event log (classes only, no args; local only)
+                    --format agent-flow · --days <n> (default 3) · --session <id> · --out <file>
   invoke            Authorize on the plane after Allow or APPROVED. Never runs the write here.
   approve           Human APPROVE an approval id (kya.approve scope)
   reject            Human REJECT an approval id (kya.approve scope)
@@ -80,6 +97,12 @@ Commands:
   orr run           Read-only ORR board (reporting only - not a second PEP)
                     Optional: --producer harness.agentshield [--agentshield-json <file>]
   dash              Terminal desk (FREE panes; actions on a TTY, --once for CI)
+  doctor            Local checks. doctor --iocs scans this machine now for known supply-chain
+                    indicators (advisory; read-only, offline). --json for scripts. Last result: kya dash/receipt
+                    Background daily scan (from kya hook) is off with KYA_IOC=0 or ioc.enabled=false in ~/.kya/config.json
+  posture           Developer posture report, OFF by default. status | on [--yes] | off |
+                    send [--dry-run --json] | label NAME. "on" prints the exact report first.
+                    Sent once a day only when the local toggle AND the workspace allow it.
   sandbox           Opt-in Firecracker wrap (spawn|exec|kill|status). Not MCP.
                     Requires KYA_SANDBOX=mock|firecracker. MCP still never execs.
   certify           Agent Trust Baseline gap report from local evidence
@@ -178,10 +201,13 @@ const defaultIo: CliIo = {
   exit: (c) => process.exit(c),
 };
 
-/** Set by the hosted hook: the CLI entry exits right after the answer is flushed. */
+/** The hook decides on the bytes it has after this long when the host never closes stdin. */
+const HOOK_STDIN_TIMEOUT_MS = 10_000;
+
+/** Set by the hook command: the CLI entry exits right after the answer is flushed. */
 let exitWhenDone = false;
 
-/** Whether the CLI entry will exit right after the hook answer (hosted mode). Exposed for tests. */
+/** Whether the CLI entry will exit right after the hook answer. Exposed for tests. */
 export function hostedExitPending(): boolean {
   return exitWhenDone;
 }
@@ -242,6 +268,11 @@ export async function runCli(
         const noGate =
           parsed.flags["no-gate"] === true || parsed.flags["no-gate"] === "true";
         if (!config.json) await maybePromptConsent(io, env);
+        // Before the report server starts, so the first search already sees the runtime. Never fails start.
+        if (!config.json) {
+          const { maybeOfferSemanticSearch } = await import("./receipt/semantic-setup.js");
+          await maybeOfferSemanticSearch(io, env).catch(() => undefined);
+        }
         const result = await runStart(config, { force, open: !noOpen, gate: !noGate });
         if (config.json) {
           io.log(JSON.stringify(result, null, 2));
@@ -312,6 +343,9 @@ export async function runCli(
         } finally {
           await beacon.stop();
         }
+        // The server is closed (signal, idle, folder gone, memory ceiling). A running search warm-up or
+        // another handle must not keep this process alive after its state file is gone.
+        exitWhenDone = true;
         return 0;
       }
 
@@ -515,6 +549,7 @@ export async function runCli(
         const { verdictExitCode } = await import("./commands/wrap.js");
         const { appendTrail, defaultSessionId } = await import("./trail.js");
         const { deriveTargetPath } = await import("./trail-summary.js");
+        const { trailMapFields } = await import("./trail-map-fields.js");
         const input = evalToolInputFromArgs(parsed);
         const config = resolveConfig({
           cwd,
@@ -533,8 +568,9 @@ export async function runCli(
           verdict: result.response.verdict,
           reasonCode: result.response.reasonCode ?? "",
           mode: result.offline ? "offline" : config.holdEnabled ? "hold" : "observe",
-          neverEvent: result.response.reasonCode === "NEVER_EVENT",
+          neverEvent: isNeverCode(result.response.reasonCode),
           argsHash: result.argsHash,
+          ...trailMapFields(result.response.toolId ?? input.toolId, input.args, config.cwd, env),
           ...(targetPath ? { targetPath } : {}),
         }, env);
         if (config.json) {
@@ -605,8 +641,51 @@ export async function runCli(
         return 0;
       }
 
+      case "map": {
+        const { mapOptionsFromArgs, runMap } = await import("./commands/map.js");
+        return await runMap(mapOptionsFromArgs(parsed), io, cwd, env);
+      }
+
+      case "export": {
+        const { exportOptionsFromArgs, runExport } = await import("./commands/export.js");
+        return await runExport(exportOptionsFromArgs(parsed), io, cwd, env);
+      }
+
       case "wrap": {
-        const { formatWrapHuman, runWrap, wrapExitCode, wrapInputFromArgs } = await import("./commands/wrap.js");
+        const { formatWrapHuman, runWrap, runWrapCommand, spawnWrapped, wrapCommandFromArgs, wrapCommandInputFromArgs, wrapExitCode, wrapInputFromArgs } = await import("./commands/wrap.js");
+        const argv = wrapCommandFromArgs(parsed);
+        if (argv) {
+          // Command form: verdict lines go to stderr so the child's stdout stays clean.
+          const cmdInput = wrapCommandInputFromArgs(parsed);
+          // No key and no --offline: gate with the local sample policy (never-list included) instead of refusing to run.
+          const cmdBase = { cwd, env, flags: parsed.flags } as const;
+          const cmdConfig = (() => {
+            if (cmdInput.offline) return resolveConfig({ ...cmdBase, requireApiKey: false, offline: true });
+            try {
+              return resolveConfig({ ...cmdBase, requireApiKey: true });
+            } catch (e) {
+              if (!(e instanceof AuthRequiredError)) throw e;
+              return resolveConfig({ ...cmdBase, requireApiKey: false, offline: true });
+            }
+          })();
+          const { exitCode } = await runWrapCommand(cmdConfig, argv, cmdInput, {
+            run: (a) => spawnWrapped(a, io.error),
+            onEvaluated: async (w) => {
+              io.error(cmdConfig.json ? JSON.stringify(w, null, 2) : formatWrapHuman(w));
+              try {
+                const { autoOpenReceiptAfterWrap } = await import("./receipt/auto-open.js");
+                const force =
+                  w.eval.response.verdict.toUpperCase() === "DENY" ||
+                  w.eval.response.reasonCode === "NEVER_EVENT";
+                const auto = await autoOpenReceiptAfterWrap(cmdConfig, { force, env });
+                if (!cmdConfig.json && auto.hint) io.error(auto.hint);
+              } catch {
+                /* receipt open is best-effort */
+              }
+            },
+          });
+          return exitCode;
+        }
         const input = wrapInputFromArgs(parsed);
         const config = resolveConfig({
           cwd,
@@ -626,7 +705,7 @@ export async function runCli(
           const { autoOpenReceiptAfterWrap } = await import("./receipt/auto-open.js");
           const force =
             result.eval.response.verdict.toUpperCase() === "DENY" ||
-            result.eval.response.reasonCode === "NEVER_EVENT";
+            isNeverCode(result.eval.response.reasonCode);
           const auto = await autoOpenReceiptAfterWrap(config, { force, env });
           if (!config.json && auto.hint) io.log(auto.hint);
         } catch {
@@ -935,7 +1014,7 @@ export async function runCli(
         // Present means on, except an explicit false/0.
         const fcFlag = parsed.flags["fail-closed"];
         const failClosed = fcFlag !== undefined && fcFlag !== false && !/^(false|0)$/i.test(String(fcFlag));
-        // Hosted plane (beta): argv only. Missing or empty path still means hosted (it denies PLANE_CONFIG).
+        // Hosted plane (preview): argv only. Missing or empty path still means hosted (it denies PLANE_CONFIG).
         const planeFlag = parsed.flags["plane-config"];
         const plane = planeFlag === undefined
           ? undefined
@@ -958,20 +1037,29 @@ export async function runCli(
           process.on("uncaughtException", crash);
           process.on("unhandledRejection", crash);
         }
+        // A host that closed its end of stdout must not turn the answer into a crash (EPIPE).
+        if (isCliEntry()) {
+          process.stdout.on("error", () => undefined);
+          process.stderr.on("error", () => undefined);
+        }
         let stdinText = "";
         if (!process.stdin.isTTY) {
           stdinText = await new Promise<string>((res) => {
             // Buffer chunks, not string concat - a multibyte UTF-8 char can
             // straddle a chunk boundary.
             const chunks: Buffer[] = [];
+            const done = () => {
+              clearTimeout(timer);
+              res(Buffer.concat(chunks).toString("utf8"));
+            };
+            // A host that never closes stdin would hold the hook for days: decide on what arrived.
+            // Fixed on purpose: an env value (a repo can set it in committed settings) must not shorten it
+            // and so turn a slow payload into an empty one that the OSS hook allows.
+            const timer = setTimeout(done, HOOK_STDIN_TIMEOUT_MS);
             process.stdin.on("data", (c: Buffer) => chunks.push(c));
             // Pipe errors must not hang the hook - resolve with what arrived.
-            process.stdin.on("error", () =>
-              res(Buffer.concat(chunks).toString("utf8")),
-            );
-            process.stdin.on("end", () =>
-              res(Buffer.concat(chunks).toString("utf8")),
-            );
+            process.stdin.on("error", done);
+            process.stdin.on("end", done);
           });
         }
         let r;
@@ -989,15 +1077,60 @@ export async function runCli(
           }
           return d.code;
         }
-        // Await the write callbacks: pipes can be async, and hosted mode exits explicitly below.
+        // Await the write callbacks: pipes can be async, and the exit below must not cut them off.
         if (r.stdout) await new Promise<void>((ok) => process.stdout.write(r.stdout, () => ok()));
         if (r.stderr) await new Promise<void>((ok) => process.stderr.write(r.stderr, () => ok()));
-        // Hosted: no lingering socket may hold the hook past the host timeout.
-        if (plane) exitWhenDone = true;
+        // Exit with the same code once the answer is out and the spawns below are issued. Detached
+        // children (ping, IoC, posture, notify) are unref'd and keep running; no other handle may hold a hook.
+        exitWhenDone = true;
         // After the answer is out. Opt-in, at most daily, detached: the hook never waits on the network.
         // Skipped when another hook copy already handled this tool_use_id.
         if (r.firstSeen !== false) maybeSpawnHookPing({ env, cwd, host });
+        // Daily IoC scan: detached, at most once per 24 h, never awaited. Fail open.
+        const { maybeSpawnIocScan } = await import("./ioc/spawn.js");
+        maybeSpawnIocScan({ env });
+        // Daily posture send: only when the local toggle is on. Detached, at most once per 24 h, never awaited.
+        const { maybeSpawnPostureSend } = await import("./posture/spawn.js");
+        maybeSpawnPostureSend({ env });
         return r.exitCode;
+      }
+
+      case "posture": {
+        const { runPosture } = await import("./commands/posture.js");
+        const [sub, ...rest] = parsed.positionals;
+        return await runPosture({
+          io: { log: (line) => io.log(line), error: (line) => io.error(line) },
+          env,
+          sub: parsed.command === "posture" ? sub : undefined,
+          args: rest,
+          flags: parsed.flags,
+          isTty: io.isTty ?? Boolean(process.stdin.isTTY && process.stdout.isTTY),
+        });
+      }
+
+      case "posture-send": {
+        // Internal: detached daily posture send started by the hook (posture/spawn.ts). Not in help.
+        const { runPostureSendDetached } = await import("./commands/posture.js");
+        await runPostureSendDetached(env);
+        return 0;
+      }
+
+      case "doctor": {
+        const { runDoctor } = await import("./commands/doctor.js");
+        return await runDoctor((line) => io.log(line), {
+          env,
+          iocs: flagBool(parsed.flags, "iocs"),
+          json: flagBool(parsed.flags, "json"),
+          cwd,
+          warn: (line) => io.error(line),
+        });
+      }
+
+      case "ioc-scan": {
+        // Internal: detached daily IoC scan started by kya hook (ioc/spawn.ts). Not in help.
+        const { runDetachedIocScan } = await import("./ioc/scan.js");
+        await runDetachedIocScan(env);
+        return 0;
       }
 
       case "import": {

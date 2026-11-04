@@ -6,6 +6,8 @@ import {
 } from "../client.js";
 import { UsageError } from "../errors.js";
 import { evaluateOffline } from "../offline-evaluate.js";
+import type { GuardContext } from "../guard-pack.js";
+import { loadProjectPolicy } from "../project-policy.js";
 import { deriveWireChangeFields } from "../diff-preview.js";
 import { findSampleTool } from "../sample-tools.js";
 import type { ParsedArgs } from "../parse-args.js";
@@ -28,6 +30,8 @@ export async function runEvalTool(
     approvalStatus?: string;
     sandboxId?: string;
     offline?: boolean;
+    /** Guard pack context (cwd, home, env). Defaults to the process cwd and environment. */
+    guard?: GuardContext;
   },
   client?: KyaHttpClient,
 ): Promise<EvalToolResult> {
@@ -58,7 +62,13 @@ export async function runEvalTool(
       : req;
 
   if (input.offline || config.offline) {
-    const response = evaluateOffline(request, config.host, input.args);
+    const response = evaluateOffline(
+      request,
+      config.host,
+      input.args,
+      loadProjectPolicy(config.cwd),
+      input.guard,
+    );
     return {
       response,
       toolId,

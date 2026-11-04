@@ -13,9 +13,11 @@
       { "name": "kya.reason_code", "values": ["ALLOW", "NEVER_EVENT", "PLANE_UNREACHABLE", "PLANE_AUTH_REJECTED", "FAIL_CLOSED"], "notes": "values is the subset dashboards may filter on, each a literal in src (test/dashboards.test.ts checks): NEVER_EVENT never-list hit (src/offline-evaluate.ts, src/commands/hook.ts), PLANE_UNREACHABLE and PLANE_AUTH_REJECTED MCP gate plane call failed (src/mcp/protocol.ts), FAIL_CLOSED opt-in fail-closed hook error (src/commands/hook.ts). The plane and offline evaluator emit other codes too." },
       { "name": "kya.mode", "values": ["observe", "hold", "offline"] },
       { "name": "kya.host", "values": ["ide", "runtime"], "notes": "gate host class, not the agent product" },
-      { "name": "kya.session_id" },
+      { "name": "kya.session_id", "notes": "raw host session id; with the map attributes on, the salted 16-hex session hash that kya map and kya export use" },
       { "name": "gen_ai.usage.input_tokens", "optional": true },
-      { "name": "gen_ai.usage.output_tokens", "optional": true }
+      { "name": "gen_ai.usage.output_tokens", "optional": true },
+      { "name": "kya.target.class", "optional": true, "notes": "map attribute, default off (otlpExport.mapAttrs in the user-level config only): target class from the trail row, never a raw path or argument; a project class is sent as project" },
+      { "name": "kya.device", "optional": true, "notes": "map attribute, default off: hashed device id, 16 hex characters" }
     ]
   },
   "metrics": [

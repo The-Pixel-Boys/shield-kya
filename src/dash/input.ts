@@ -20,6 +20,7 @@ export interface KeyAction {
     | "decide-reject"
     | "force-policy-eval"
     | "toggle-auto-refresh"
+    | "posture-toggle"
     | "confirm-yes"
     | "confirm-no"
     | "passport"
@@ -36,6 +37,7 @@ const DIGIT: Record<string, DashPane> = {
   "6": "orr",
   "7": "mcp",
   "8": "sandbox",
+  "9": "ioc",
 };
 
 const LETTER: Record<string, DashPane> = {
@@ -61,6 +63,7 @@ export function mapKey(raw: string): KeyAction {
   if (raw === "x") return { type: "decide-reject" };
   if (raw === "e") return { type: "force-policy-eval" };
   if (raw === "p") return { type: "toggle-auto-refresh" };
+  if (raw === "P") return { type: "posture-toggle" };
   if (raw === "t") return { type: "passport" };
   if (raw === "y") return { type: "confirm-yes" };
   if (raw === "N") return { type: "confirm-no" };

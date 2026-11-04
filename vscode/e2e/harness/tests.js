@@ -66,7 +66,7 @@ exports.run = async function run() {
     const wantMode = sc === "trusted" ? "advisory" : sc === "nokya" ? "advisory" : "unknown";
     check(`status bar shows gate mode '${wantMode}' (${sc === "nokya" ? "Claude plugin" : sc === "trusted" ? "user hook" : "nothing wired, trail active"}) and counts`,
       new RegExp(`KYA ${wantMode}\\b`).test(api.statusText()) && /1 allow 1 review 1 hold 1 deny/.test(api.statusText()), api.statusText());
-    check("status tooltip states advisory/fail-open semantics", /blocks only the never-list; it fails open/.test(api.statusTooltip()), api.statusTooltip());
+    check("status tooltip states advisory/fail-open semantics", /blocks the never-list and the guard pack; it fails open/.test(api.statusTooltip()), api.statusTooltip());
     check("feed tooltips are plain strings (never MarkdownString)", api.feed().every((_, i) => typeof api.feedItem(i).tooltip === "string"), typeof api.feedItem(0).tooltip);
     // Live tail: a new real hook call shows up without reload.
     kyaHook("mcp__postgres__drop_table", { table: "users" }, `live-${sc}`);

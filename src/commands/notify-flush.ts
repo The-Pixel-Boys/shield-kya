@@ -8,6 +8,8 @@ import { kyaHome, readFileConfig } from "../config.js";
 import type { TrailEvent } from "../trail.js";
 import { notifyOnTrailEvent, type NotifyFileConfig } from "../notify/index.js";
 import { exportVerdictSpan, resolveOtlpExportConfig } from "../otel/exporter.js";
+import { readOptInConfig } from "../otel/map-attrs-optin.js";
+import { NOTIFY_PROJECT_DIR_VAR } from "../notify/dispatch.js";
 
 export async function runNotifyFlush(
   env: NodeJS.ProcessEnv,
@@ -31,7 +33,8 @@ export async function runNotifyFlush(
     ...readFileConfig(cwd),
   } as NotifyFileConfig;
   await notifyOnTrailEvent(event, fileConfig, env).catch(() => undefined);
-  const otlp = resolveOtlpExportConfig(env, fileConfig);
+  // The project dir comes from the parent hook or wrap (dispatch.ts sets it on every spawn). Missing: the opt-in is refused.
+  const otlp = resolveOtlpExportConfig(env, fileConfig, readOptInConfig(env[NOTIFY_PROJECT_DIR_VAR]));
   if (otlp) {
     await exportVerdictSpan(
       {
@@ -44,6 +47,9 @@ export async function runNotifyFlush(
         ...(event.host ? { host: event.host } : {}),
         ...(event.tokensIn !== undefined ? { tokensIn: event.tokensIn } : {}),
         ...(event.tokensOut !== undefined ? { tokensOut: event.tokensOut } : {}),
+        ...(event.targetClass !== undefined ? { targetClass: event.targetClass } : {}),
+        ...(event.deviceId !== undefined ? { deviceId: event.deviceId } : {}),
+        ...(event.product !== undefined ? { product: event.product } : {}),
       },
       otlp,
       env,

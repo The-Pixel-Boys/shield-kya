@@ -13,6 +13,7 @@ import {
   renameSync,
   rmSync,
   type Stats,
+  writeFileSync,
   writeSync,
 } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
@@ -30,7 +31,7 @@ import { KyaError } from "./errors.js";
  * regular target's mode is carried over - a rename would otherwise turn a 0600
  * config into the umask default.
  */
-export function atomicWriteSync(target: string, content: string, beforeRename?: () => void): void {
+export function atomicWriteSync(target: string, content: string | Uint8Array, beforeRename?: () => void): void {
   writeAtomic(target, content, { beforeRename });
 }
 
@@ -45,7 +46,7 @@ export function atomicWriteSecretSync(target: string, content: string): void {
 
 function writeAtomic(
   target: string,
-  content: string,
+  content: string | Uint8Array,
   opts: { readonly beforeRename?: () => void; readonly forceMode?: number },
 ): void {
   const tmp = `${target}.kya-tmp-${randomBytes(16).toString("hex")}`;
@@ -68,7 +69,8 @@ function writeAtomic(
         /* win32 chmod semantics differ; POSIX correctness is what matters */
       }
     }
-    writeSync(fd, content, null, "utf8");
+    if (typeof content === "string") writeSync(fd, content, null, "utf8");
+    else writeFileSync(fd, content); // loops over short writes of a large buffer
     closeSync(fd);
     fd = undefined;
     opts.beforeRename?.();
@@ -180,13 +182,16 @@ export function ensureProjectDir(dir: string, root: string, mode?: number): void
  * re-check and the rename (TOCTOU); the temp file is O_EXCL and the rename
  * replaces a link instead of following it. Returns the path written.
  */
-export function writeProjectFile(target: string, content: string, root: string): string {
+export function writeProjectFile(target: string, content: string, root: string, forceMode?: number): string {
   const out = projectWritePath(target, root);
   mkdirSync(dirname(out), { recursive: true });
-  atomicWriteSync(out, content, () => {
-    if (projectWritePath(target, root) !== out) {
-      throw new ProjectPathError(`${target} changed while writing; nothing was written`);
-    }
+  writeAtomic(out, content, {
+    forceMode,
+    beforeRename: () => {
+      if (projectWritePath(target, root) !== out) {
+        throw new ProjectPathError(`${target} changed while writing; nothing was written`);
+      }
+    },
   });
   return out;
 }
@@ -196,7 +201,7 @@ export function writeProjectFile(target: string, content: string, root: string):
  * one of its existing ancestors is the project itself reached through an
  * alias (a symlinked path to the repo). Decides which output rule applies.
  */
-function underRoot(path: string, root: string): boolean {
+export function underRoot(path: string, root: string): boolean {
   const r = relative(resolve(root), resolve(path));
   if (r === "" || (r !== ".." && !r.startsWith(`..${sep}`) && !isAbsolute(r))) return true;
   const realRoot = realpathSync(root);
@@ -226,7 +231,7 @@ export function ensureOutDir(dir: string, root: string): void {
  * Report/output file: project rules inside root; outside, an atomic write
  * that replaces a planted leaf link instead of following it.
  */
-export function writeOutFile(path: string, content: string, root: string): void {
-  if (underRoot(path, root)) writeProjectFile(path, content, root);
-  else atomicWriteSync(path, content);
+export function writeOutFile(path: string, content: string, root: string, forceMode?: number): void {
+  if (underRoot(path, root)) writeProjectFile(path, content, root, forceMode);
+  else writeAtomic(path, content, { forceMode });
 }

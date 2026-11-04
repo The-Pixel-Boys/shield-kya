@@ -95,7 +95,7 @@ export function frame(
   const foot = [
     hline(),
     clip(
-      "1-8 panes  j/k  e eval  p refresh  w wrap  i/k/b decide (y)  o orr  t passport  O offline  q",
+      "1-9 panes  j/k  e eval  p refresh  P posture  w wrap  i/k/b decide (y)  o orr  t passport  O offline  q",
     ),
   ];
   return [...head, ...body.map((l) => clip(l)), ...confirm, ...foot].join("\n");

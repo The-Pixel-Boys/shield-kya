@@ -1,5 +1,5 @@
 /**
- * Hosted-plane mode for `kya hook` (beta): `--plane-config <absolute path>`.
+ * Hosted-plane mode for `kya hook` (preview): `--plane-config <absolute path>`.
  *
  * The API key, base URL and agent id come ONLY from that one user-owned file.
  * Env (KYA_OFFLINE, KYA_BASE_URL, KYA_API_KEY, SHIELD_API_KEY, KYA_AGENT_ID,
@@ -82,8 +82,11 @@ export function guardStream(stream: NodeJS.WriteStream): void {
   });
 }
 
-/** What the hook knows before any plane code runs; the crash path never lowers it. */
-export const hostedDecision: { neverList: "deny" | "clear" | "unknown" } = { neverList: "unknown" };
+/**
+ * What the hook knows before any plane code runs; the crash path never lowers it. "deny" covers the
+ * never-list and the guard pack (both local, both win in shadow); `code` and `rule` then name which one.
+ */
+export const hostedDecision: { neverList: "deny" | "clear" | "unknown"; code?: string; rule?: string } = { neverList: "unknown" };
 
 /**
  * Crash decision. The local never-list (evaluated before any plane code) wins
@@ -93,6 +96,10 @@ export const hostedDecision: { neverList: "deny" | "clear" | "unknown" } = { nev
  */
 export function crashDecision(shadow: boolean): { code: 0 | 2; reason: string } {
   if (hostedDecision.neverList === "deny") {
+    const { code, rule } = hostedDecision;
+    if (code && code !== "NEVER_EVENT" && /^NEVER_[A-Z_]+$/.test(code) && rule && /^[a-z0-9-]+$/.test(rule)) {
+      return { code: 2, reason: `KYA denied: ${code} (${rule}; internal error after the local guard pack matched)` };
+    }
     return { code: 2, reason: "KYA denied: NEVER_EVENT (internal error after the local never-list matched)" };
   }
   if (shadow && hostedDecision.neverList === "clear") {
@@ -272,7 +279,7 @@ export function loadPlaneConfig(
   const bad = (why: string): never => {
     throw new PlaneError("PLANE_CONFIG", `plane config ${why}`);
   };
-  if (process.platform === "win32") bad("is not supported on Windows in this beta (no POSIX owner and mode check)");
+  if (process.platform === "win32") bad("is not supported on Windows in this preview (no POSIX owner and mode check)");
   if (!path || !isAbsolute(path)) bad("path must be absolute");
   // lstat first: a FIFO or device would block or misbehave on open.
   let pre;
@@ -477,6 +484,8 @@ export interface HostedEvaluateInput {
   readonly now?: () => number;
   readonly sleep?: (ms: number) => Promise<void>;
   readonly random?: () => number;
+  /** Leave summary, diffPreview and targetPath off the wire (a secret-shaped write: its text is the secret). */
+  readonly withholdChange?: boolean;
 }
 
 export const BACKOFF_BASE_MS = 200;
@@ -514,7 +523,7 @@ const VERDICTS = new Set(["ALLOW", "DENY", "REQUIRE_APPROVE"]);
  */
 export function hostedEvaluateBody(input: HostedEvaluateInput): Record<string, unknown> {
   const sample = findSampleTool(input.toolName);
-  const change = deriveWireChangeFields(input.toolName, input.args, input.env);
+  const change = input.withholdChange ? undefined : deriveWireChangeFields(input.toolName, input.args, input.env);
   return {
     toolId: input.toolName,
     action: input.toolName,
@@ -614,7 +623,10 @@ export async function evaluateHosted(input: HostedEvaluateInput): Promise<Policy
       }
     } catch (e) {
       if (e instanceof PlaneError) throw e;
-      last = (e as Error)?.name === "TimeoutError" || (e as Error)?.name === "AbortError" || deadline - now() <= 0
+      // The code names what happened, not when it was noticed: only an abort at the budget is a timeout.
+      // A refused connection that arrives after the deadline (a slow host, a closed port that used the whole
+      // budget in retries) is still PLANE_UNREACHABLE. Both fail closed; only the reason text differs.
+      last = (e as Error)?.name === "TimeoutError" || (e as Error)?.name === "AbortError"
         ? new PlaneError("PLANE_TIMEOUT", "hosted plane did not answer within the budget")
         : new PlaneError("PLANE_UNREACHABLE", "hosted plane unreachable");
       wait = backoffMs(attempt, random);

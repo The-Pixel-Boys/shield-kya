@@ -173,6 +173,7 @@
     },
     {
       "id": "pypi",
+      "features": { "required": ["kya-hook-never-list", "kya-certify"], "source": "sdks/kya-python/README.md" },
       "kind": "PyPI shield-kya (Python shim)",
       "where": "pypi.org/project/shield-kya (version lockstep with package.json: pyproject.toml and __version__ in sdks/kya-python)",
       "update": "auto-pipeline",
@@ -185,12 +186,13 @@
     },
     {
       "id": "vscode-marketplace",
+      "features": { "required": ["kya-start", "kya-connect", "kya-hook-never-list", "kya-wrap", "kya-serve-mcp", "kya-telemetry"], "source": "sdks/kya/vscode/README.md" },
       "kind": "VS Code Marketplace extension (own version line, starts at 0.1.0)",
       "where": "marketplace.visualstudio.com shield-agent.shield-kya (sdks/kya/vscode/package.json version)",
       "update": "manual-owner",
-      "by": "nobody yet (publisher account not created)",
+      "by": "owner: publisher shield-agent; the listing is live at 0.1.0 (checked 2026-10-29)",
       "files": ["sdks/kya/vscode/package.json"],
-      "action": "Not published. Owner creates the Marketplace publisher 'shield-agent', then builds and publishes the .vsix (vsce publish, token in env or keychain, never argv). Then add a publish step and a probe here. The extension has its own version line, so it can only become auto once the registry tracks independent versions; listing text = channel-copy long. Per-item owner go."
+      "action": "Published at 0.1.0. Owner builds and publishes each new .vsix (vsce publish, token in env or keychain, never argv), then adds a probe here. The extension has its own version line, so it can only become auto once the registry tracks independent versions. Listing text = channel-copy long plus the features in features.required. Per-item owner go."
     },
     {
       "id": "open-vsx",
@@ -265,6 +267,7 @@
     },
     {
       "id": "listing-pages",
+      "features": { "required": ["kya-certify", "kya-hook-never-list"] },
       "kind": "directory and marketplace listing pages (Claude plugin directory, Cursor marketplace page, MCP directories, AlternativeTo, GitHub repo About)",
       "where": "third-party listing forms",
       "update": "manual-owner",
@@ -280,6 +283,7 @@
     "sdks/kya/test/fixtures/otlp-capture.json # recorded OTLP fixture: service version inside telemetry, frozen on purpose",
     "sdks/kya/catalog/agent-trust-baseline-v0.json # trust baseline catalog: its own content version, not a distribution channel",
     "sdks/kya/integrations/grafana/kya-dashboard.json # Grafana dashboard: Grafana and plugin versions, not kya",
+      "sdks/kya/test/fixtures/posture/report.golden.json # posture report golden: host and extension versions inside the report, not a package manifest",
     "sdks/kya/vscode/e2e/prod-harness/package.json # private e2e test harness of the VS Code extension, never published"
   ]
 }

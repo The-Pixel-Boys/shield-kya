@@ -1,6 +1,6 @@
 # OpenCode
 
-Wire KYA into [OpenCode](https://opencode.ai) so every tool call the agent makes passes Shield's evaluate first. Allow runs, Deny stops, Hold waits for a person.
+Wire KYA into [OpenCode](https://opencode.ai) so tool calls the agent routes through Shield's MCP gate pass Shield's evaluate first and are recorded. OpenCode's built-in tools do not go through the gate and are not evaluated or recorded. Allow runs, Deny stops, Hold waits for a person.
 
 ## Setup
 
@@ -20,7 +20,7 @@ Prefer editing by hand? Copy [`opencode/opencode.example.json`](../../opencode/o
 
 ## What KYA reports
 
-Every tool call OpenCode routes through MCP lands on the receipt: tool id, decision (Allow / Deny / Hold), timestamp, and a clipped, redacted preview of what would change. Open it with `kya receipt --open`, or watch live in the host's MCP panel.
+Each tool call OpenCode routes through Shield's MCP gate lands on the receipt: tool id, decision (Allow / Deny / Hold), timestamp, and a clipped, redacted preview of what would change. Open it with `kya receipt --open`, or watch live in the host's MCP panel.
 
 ## Files written
 

@@ -8,12 +8,12 @@
  * snake_case payload). Copilot denies a tool call when a preToolUse command hook exits non-zero, so
  * the fail-open cases matter here. The e2e needs `tsc` first.
  */
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncOptionsWithStringEncoding, type SpawnSyncReturns } from "node:child_process";
 import { readdirSync } from "node:fs";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
 const root = join(import.meta.dirname, "..");
 const pluginRoot = join(root, "plugins/kya-copilot");
@@ -23,7 +23,29 @@ const version = json("package.json").version as string;
 const haveDist = existsSync(join(root, "dist/cli.js"));
 const hooksFile = "plugins/kya-copilot/com.github.copilot/hooks/hooks.json";
 const handler = (event: string) => json(hooksFile).hooks[event][0];
-const tmp = () => mkdtempSync(join(tmpdir(), "kya copilot-"));
+const made: string[] = [];
+const tmp = () => {
+  const dir = mkdtempSync(join(tmpdir(), "kya copilot-"));
+  made.push(dir);
+  return dir;
+};
+afterAll(() => {
+  for (const dir of made) rmSync(dir, { recursive: true, force: true });
+});
+
+/** Runs in its own process group: a shell that times out leaves its node child alive, so the group is killed after each run. */
+function run(cmd: string, args: readonly string[], opts: SpawnSyncOptionsWithStringEncoding): SpawnSyncReturns<string> {
+  const grouped = { ...opts, detached: true }; // not in the spawnSync typings; the runtime honours it
+  const r = spawnSync(cmd, [...args], grouped);
+  if (r.pid) {
+    try {
+      process.kill(-r.pid, "SIGKILL");
+    } catch {
+      /* the group is already gone */
+    }
+  }
+  return r;
+}
 
 // Agent Plugins v1.0.0 (agentplugins/agent-plugins-spec schemas/1.0.0/plugin.schema.json): closed schema.
 const PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
@@ -38,9 +60,9 @@ function runHandler(event: string, data: string, env: Record<string, string> = {
   };
   const h = handler(event);
   const opts = { input: stdin, encoding: "utf8" as const, timeout: 10000, env: { PATH: process.env.PATH ?? "", HOME: tmp(), ...vars, ...env } };
-  if (h.bash) return spawnSync("/bin/bash", ["-c", h.bash as string], opts);
+  if (h.bash) return run("/bin/bash", ["-c", h.bash as string], opts);
   const args = (h.args as string[]).map((a) => Object.entries(vars).reduce((s, [k, v]) => s.replaceAll(`\${${k}}`, v), a));
-  return spawnSync(process.execPath, args, opts);
+  return run(process.execPath, args, opts);
 }
 
 /** A PATH that has the node running these tests and nothing else from the host. */
@@ -177,7 +199,7 @@ describe("copilot-hook.mjs (PreToolUse, fails open)", () => {
 
   it("PLUGIN_ROOT unset: node cannot find the wrapper (exit 1), the bash command still exits 0", () => {
     const vars = { PATH: process.env.PATH ?? "", HOME: tmp(), COPILOT_PLUGIN_DATA: dataWith() };
-    const r = spawnSync("/bin/bash", ["-c", handler("PreToolUse").bash], { input: payload("Bash"), encoding: "utf8", env: vars });
+    const r = run("/bin/bash", ["-c", handler("PreToolUse").bash], { input: payload("Bash"), encoding: "utf8", env: vars });
     expect(r.status).toBe(0);
   });
 
@@ -198,7 +220,7 @@ describe("copilot-hook.mjs (PreToolUse, fails open)", () => {
   });
 
   it("no data dir in the env at all: exit 0", () => {
-    const r = spawnSync(process.execPath, [join(pluginRoot, "scripts/copilot-hook.mjs")], { input: payload("Bash"), encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
+    const r = run(process.execPath, [join(pluginRoot, "scripts/copilot-hook.mjs")], { input: payload("Bash"), encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
     expect(r.status).toBe(0);
   });
 

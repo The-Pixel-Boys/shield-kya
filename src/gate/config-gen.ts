@@ -29,8 +29,42 @@ import {
 } from "../mcp-servers.js";
 import type { GatewayServer, GatewaysConfig } from "./config.js";
 
-/** Destructive-name family denied on every target, registry or not. */
-export const DESTRUCTIVE_PATTERN = "(?:^|_)(?:drop|truncate|purge|transfer)(?:_|$)";
+const DESTRUCTIVE_VERBS = ["drop", "truncate", "purge", "transfer"] as const;
+
+/**
+ * Destructive-name family denied on every target, registry or not. The verb must be a whole
+ * word of the name: snake_case, kebab-case, dotted and camelCase/PascalCase all split into
+ * words (`drop_table`, `drop-table`, `dropTable`, `DropTable`, `DROP_TABLE`). The gateway
+ * engine has no lookaround and no `(?i)`, so each verb is spelled lower, Capitalized and
+ * UPPER. A verb inside a longer word (`dropdown`, `purgeable`, `transferable`) is not a word.
+ */
+export const DESTRUCTIVE_PATTERN = `(?:${DESTRUCTIVE_VERBS.flatMap((v) => {
+  const cap = v[0]!.toUpperCase() + v.slice(1);
+  return [
+    `(?:^|[^A-Za-z])${v}(?:[^a-z]|$)`,
+    `(?:^|[^A-Za-z]|[a-z])${cap}(?:[^a-z]|$)`,
+    `(?:^|[^A-Za-z])${v.toUpperCase()}(?:[^A-Za-z]|$)`,
+  ];
+}).join("|")})`;
+
+/**
+ * Whole names that carry a destructive verb as a word but are not destructive: the UI
+ * gesture `drag_and_drop` (with at most one prefix word: `appium_drag_and_drop`,
+ * `appiumDragAndDrop`) and the ML term `transfer_learn(ing)` (no prefix). Exact match
+ * only, so a second verb or any other suffix (`drag_and_drop_table`) stays denied. Lifts
+ * the destructive family only, never a server's ADMIN rules.
+ */
+export const DESTRUCTIVE_SAFE_PATTERN =
+  "^(?:(?:[A-Za-z0-9]+[_-]|[a-z0-9]+)?(?:[Dd]rag[_-]?[Aa]nd[_-]?[Dd]rop|DRAG[_-]?AND[_-]?DROP)|[Tt]ransfer[_-]?[Ll]earn(?:ing)?|TRANSFER[_-]?LEARN(?:ING)?)$";
+
+/**
+ * The prefix word of a drag-and-drop name must not be a destructive verb itself
+ * (`drop_drag_and_drop`, `dropDragAndDrop`): the safe exception does not apply then.
+ */
+export const DESTRUCTIVE_PREFIX_PATTERN = `^(?:${DESTRUCTIVE_VERBS.flatMap((v) => [v, v[0]!.toUpperCase() + v.slice(1), v.toUpperCase()]).join("|")})(?:[^a-z].*)?(?:[Dd]rag|DRAG)`;
+
+const safeException = (name: string): string =>
+  `(${name}.matches(${celString(DESTRUCTIVE_SAFE_PATTERN)}) && !${name}.matches(${celString(DESTRUCTIVE_PREFIX_PATTERN)}))`;
 
 /** Loopback-only L4 rule for the (wildcard-bound) MCP listener. */
 export const LOOPBACK_RULE =
@@ -56,16 +90,35 @@ function celString(s: string): string {
   return `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 }
 
+/**
+ * Whether the generated gateway policy denies this tool name on this server (same rule as
+ * the CEL below, for the report and tests). A bad pattern never denies.
+ */
+export function gatewayDenies(serverId: string, toolName: string): boolean {
+  try {
+    const [, ...admin] = denyPatternsFor(serverId);
+    if (admin.length > 0 && new RegExp(admin.join("|")).test(toolName)) return true;
+    if (!new RegExp(DESTRUCTIVE_PATTERN).test(toolName)) return false;
+    return !new RegExp(DESTRUCTIVE_SAFE_PATTERN).test(toolName) || new RegExp(DESTRUCTIVE_PREFIX_PATTERN).test(toolName);
+  } catch {
+    return false;
+  }
+}
+
 /** The OR-allow CEL rule for one server target. */
 export function celAllowRule(server: GatewayServer): string {
   const target = `mcp.tool.target == ${celString(server.id)}`;
-  const deny = denyPatternsFor(server.id).join("|");
   if (!unmatchedAllowed(server.id)) {
     // ADMIN defaultTier: only explicitly non-denied, non-admin tools may run -
     // allow nothing unmatched (no registered server has this today).
     return `${target} && false`;
   }
-  return `${target} && !mcp.tool.name.matches(${celString(deny)})`;
+  const [, ...admin] = denyPatternsFor(server.id);
+  const name = "mcp.tool.name";
+  const destructive = `(!${name}.matches(${celString(DESTRUCTIVE_PATTERN)}) || ${safeException(name)})`;
+  return admin.length > 0
+    ? `${target} && ${destructive} && !${name}.matches(${celString(admin.join("|"))})`
+    : `${target} && ${destructive}`;
 }
 
 function q(s: string): string {

@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 import type { ResolvedConfig } from "../config.js";
 import { UsageError } from "../errors.js";
 import { hostReload, hostRunning, listProcessNames, reloadMessage } from "../host-reload.js";
-import { hookSupported, wireHook, type HostedHookWiring } from "./wire-hooks.js";
+import { hookSupported, PROJECT_HOOK_CLAUDE_ONLY, wireHook, type HostedHookWiring } from "./wire-hooks.js";
 import { loadPlaneConfig, PlaneError } from "./hosted-hook.js";
 import { atomicWriteSync, projectWritePath, writeProjectFile } from "../fs-atomic.js";
 
@@ -225,7 +225,7 @@ export interface ConnectInput {
   readonly force?: boolean;
   /** Also wire the host's PreToolUse hook (claude/grok/kimi only). */
   readonly hooks?: boolean;
-  /** With hooks: wire the hosted-plane hook (beta, claude only) pointing at this config file. */
+  /** With hooks: wire the hosted-plane hook (preview, claude only) pointing at this config file. */
   readonly hosted?: HostedHookWiring;
   /** Wire the "shield-kya-gate" remote entry at this URL (from a running kya gateway). */
   readonly gateUrl?: string;
@@ -527,10 +527,18 @@ export async function runConnect(
       `no hook wiring for ${input.host} - supported: claude, grok, kimi`,
     );
   }
+  if (input.hooks && input.scope === "project" && input.host.trim().toLowerCase() !== "claude") {
+    // Before the MCP write, so a refusal leaves nothing behind.
+    throw new UsageError(PROJECT_HOOK_CLAUDE_ONLY(input.host));
+  }
+  if (input.hosted && input.scope === "project") {
+    // A fail-closed hook with absolute local paths must not land in a file a team commits.
+    throw new UsageError("--hosted hook wiring is user-level only (drop --project): the hook holds absolute paths of this machine");
+  }
   if (input.hosted) {
     if (!input.hooks) throw new UsageError("--hosted needs --hooks (it wires the hosted PreToolUse hook)");
     if (input.host.trim().toLowerCase() !== "claude") {
-      throw new UsageError("--hosted hook wiring is claude only in this beta (needs the host's onFailure \"block\")");
+      throw new UsageError("--hosted hook wiring is claude only in this preview (needs the host's onFailure \"block\")");
     }
     // Same loader the hook runs, so a bad file fails here and not on the first tool call.
     try {
@@ -552,7 +560,7 @@ export async function runConnect(
   if (input.hooks) {
     let r;
     try {
-      r = wireHook({ host: wired.host, home, force: input.force, hosted: input.hosted });
+      r = wireHook({ host: wired.host, home, force: input.force, hosted: input.hosted, scope: wired.scope, cwd: config.cwd });
     } catch (err) {
       // The MCP write already landed - say so, so the user knows the state.
       if (err instanceof UsageError) {
