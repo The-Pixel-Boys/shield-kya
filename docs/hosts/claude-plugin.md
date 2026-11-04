@@ -10,7 +10,7 @@ This repo is also a Claude Code plugin marketplace named `shield-kya`. It ships 
 - It blocks only the small never-list (for example `mcp__postgres__drop_table`). Everything else is allowed and recorded.
 - It is advisory and fails open: if kya is missing, crashes or times out, the tool call proceeds and nothing is recorded.
 - The hook evaluates locally. It makes no hosted-plane calls, so it has no Hold tickets and no human sign-off.
-- Hosted-plane enforcement today is the MCP/gateway path (`kya.policy_evaluate`, see [claude.md](claude.md)). A separate hosted-plane hook (beta) evaluates each call on your workspace and denies when the plane cannot answer. It is not part of this plugin; see [hosted-hook.md](../hosted-hook.md).
+- Hosted-plane enforcement today is the MCP/gateway path (`kya.policy_evaluate`, see [claude.md](claude.md)). A separate hosted-plane hook (preview) evaluates each call on your workspace and denies when the plane cannot answer. It is not part of this plugin; see [hosted-hook.md](../hosted-hook.md).
 
 ## Install (one user)
 
@@ -77,7 +77,7 @@ Full guide (refusals, pin upgrades, supply-chain notes, undo): [team-rollout.md]
 
 To restrict users to your marketplace, pair this with `strictKnownMarketplaces`, copying the exact source including its `ref`; see [team-rollout.md](../team-rollout.md) and the [organization guide](https://code.claude.com/docs/en/plugins/org). This rollout is advisory like the plugin itself.
 
-## Hosted-plane hook for a fleet (beta, managed settings)
+## Hosted-plane hook for a fleet (preview, managed settings)
 
 The plugin hook above is local only. For the hosted-plane hook, wire it per user with `kya connect claude --hooks --hosted --plane-config <absolute path>`, or deploy it in managed settings. A repository's `.claude/settings.json` can set `"disableAllHooks": true`, which turns off user and plugin hooks but not managed ones. `allowManagedHooksOnly` (managed settings only) blocks every hook that managed settings did not deploy, including this plugin's hooks unless the plugin is force-enabled there.
 
@@ -102,7 +102,7 @@ The plugin hook above is local only. For the hosted-plane hook, wire it per user
 }
 ```
 
-`onFailure` needs Claude Code 2.1.295 or later. The config file format, the beta limits and the full behaviour table are in [hosted-hook.md](../hosted-hook.md).
+`onFailure` needs Claude Code 2.1.295 or later. The config file format, the preview limits and the full behaviour table are in [hosted-hook.md](../hosted-hook.md).
 
 ## Already ran `kya start`?
 

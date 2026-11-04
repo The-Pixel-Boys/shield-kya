@@ -198,4 +198,4 @@ human approval and signed certify."
 `variants.python` today: "Audit trail and traceability for AI agents. In-process kya shim for Python
 agent frameworks (offline evaluate via the kya CLI)."
 `variants.plugin` today: "Audit trail and traceability for AI agents. See what every coding agent did. Advisory:
-records every tool call, blocks only the never-list, fails open."
+records every tool call, blocks the never-list and the guard pack, fails open."

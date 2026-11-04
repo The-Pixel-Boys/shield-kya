@@ -1,4 +1,6 @@
-# Roll the Claude Code plugin out to your team
+# Roll out Shield to a team
+
+This page covers the Claude Code plugin, the repository policy file, and the rollout steps.
 
 Audit trail and traceability for AI agents. See what every coding agent did, for everyone on the team.
 
@@ -83,15 +85,37 @@ A committed settings file that enables a plugin decides what code runs on every 
 - If you need a pin nobody else can move, mirror the repository into your own organization, tag it there, and point `repo` and `ref` at your mirror.
 - The plugin's SessionStart step installs the exact `@shield-agent/kya` version named in that release from the public npm registry; see "Install hardening and limits" in [hosts/claude-plugin.md](hosts/claude-plugin.md) for what is and is not verified.
 - No secrets go into either file. Keep API keys in the environment, never in `.claude/settings.json`.
-- Review changes to `.claude/settings.json` and to `.kya/config.json` in pull requests like any other code: a changed `ref` or `repo` changes what runs. A `.kya/config.json` notify webhook receives record fields on denied calls.
+- Review changes to `.claude/settings.json`, `.kya/policy.json` and `.kya/config.json` in pull requests like any other code: a changed `ref` or `repo` changes what runs. A `.kya/config.json` notify webhook receives record fields on denied calls.
 
-## No `.kya/config.json` is written
+## Repository policy: `.kya/policy.json`
+
+The first `kya team init` also creates `.kya/policy.json`. It has no rules, so it changes no verdict. Commit it with `.claude/settings.json`. Add tool ids to make the local gate stricter for everyone who clones the repository:
+
+```json
+{
+  "version": 1,
+  "deny": ["example.tool.id"],
+  "requireApprove": ["example.other.tool"]
+}
+```
+
+Rules:
+
+- `deny` makes a matching tool call DENY. `requireApprove` makes a matching call REQUIRE_APPROVE, but only when the base rule would allow it.
+- The file can only add stricter rules. It cannot allow a call that the base rules deny. The never-list always blocks.
+- Only the keys `version`, `deny` and `requireApprove` are read. Any other key, for example `allow`, makes the whole file invalid.
+- Tool ids match exactly. Patterns are not supported.
+- If the file is invalid, is a symlink, is not a regular file, or is larger than 64 KB, kya ignores it. It prints one line to stderr, for example `kya: ignoring .kya/policy.json: not valid JSON (...); the base rules apply`, and the gate uses the base rules.
+- The local gate reads the file: the hook, `kya eval-tool --offline`, and the local MCP gate when it runs offline. Hosted evaluation over HTTP does not read it.
+- A removed entry makes the gate looser. Review changes to this file in pull requests, the same as changes to `.claude/settings.json`.
+
+## `.kya/config.json` is not written
 
 The OSS baseline is observe mode, which is what kya does when `.kya/config.json` has no `gateMode`. The only gate key that file supports is `gateMode` (`hold` or `offline`), and neither is an advisory baseline, so `kya team init` leaves it alone.
 
 ## Undo
 
-Remove the `shield-kya` entry and the `kya@shield-kya` line from `.claude/settings.json` and commit. Each teammate can then run `/plugin uninstall kya@shield-kya`.
+Remove the `shield-kya` entry and the `kya@shield-kya` line from `.claude/settings.json`, delete `.kya/policy.json` if you do not want its rules, and commit. Each teammate can then run `/plugin uninstall kya@shield-kya`.
 
 ## For contributors: the manual end-to-end check
 

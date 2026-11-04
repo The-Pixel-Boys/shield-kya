@@ -31,7 +31,7 @@ interface RawSeg {
   pipeIn: boolean;
 }
 
-interface Segment {
+export interface Segment {
   readonly tokens: readonly string[];
   readonly pipeIn: boolean;
   /** Candidate command words, in order. The last one is the real command (shells skipped). */
@@ -45,17 +45,20 @@ function keptCmds(seg: Segment): readonly Cmd[] {
   return (seg.kept ??= commandsAt(seg.tokens, true));
 }
 
-interface Shell {
+export interface Shell {
   readonly raw: string;
   readonly segments: readonly Segment[];
   readonly home: string | undefined;
+  /** Absolute working directory of the call, when the host gave one (relative deletes above it are denied). */
+  readonly cwd?: string;
 }
 
 /** A command word and the tokens after it. Copied once, when the segment is built. */
-class Cmd {
+export class Cmd {
   private cached: readonly string[] | undefined;
   /** `raw` is the word as written (a download substitution is checked on it). */
-  constructor(readonly name: string, readonly raw: string, private readonly tokens: readonly string[], private readonly start: number) {}
+  /** `coprocName` is true for the NAME of `coproc NAME { ... }`: it never runs, so the persistence rules skip it. */
+  constructor(readonly name: string, readonly raw: string, private readonly tokens: readonly string[], private readonly start: number, readonly coprocName = false) {}
   /** Arguments, copied on first use: most candidate words are never asked for them. */
   get args(): readonly string[] {
     return (this.cached ??= this.tokens.slice(this.start));
@@ -65,12 +68,19 @@ class Cmd {
 export interface NeverListInputRule {
   /** Stable id. Shown in the deny reason and listed in docs/guides/kya-never-list.md. */
   readonly id: string;
-  /** Group a to e, as in the owner's list. */
-  readonly group: "a" | "b" | "c" | "d" | "e";
+  /** Group a to e are the owner's list. f to h were added 2026-10-30 (persistence, tunnels, exfiltration). */
+  readonly group: "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h";
   /** Checks a shell command. Only shell-like tools reach it. */
   readonly shell?: (sh: Shell) => boolean;
   /** Checks a file path. Only tools that are not write-like reach it. */
   readonly file?: (path: string, home: string | undefined) => boolean;
+  /** Checks a file path that a write-like tool writes (Write, Edit, apply_patch). Only write-like tools reach it. */
+  readonly writeFile?: (path: string, home: string | undefined) => boolean;
+  /**
+   * Checks the whole shell command text, unwindowed. Used only when the command is longer than MAX_SCAN_CHARS,
+   * because the parsed windows miss the middle of a long command.
+   */
+  readonly fullText?: (text: string) => boolean;
 }
 
 // Words that run another command: skip them to find the real command word.
@@ -181,7 +191,7 @@ function commandsAt(tokens: readonly string[], keepShells: boolean): Cmd[] {
     // `coproc NAME { ...` or `coproc NAME for ...`: NAME is a candidate and the body is scanned too.
     // Otherwise coproc is a wrapper: `coproc sudo -u root rm ...` and `coproc git push ...` run the command.
     if (t === "coproc" && i + 2 < tokens.length && isCoprocName(tokens[i + 1]!) && COPROC_BODY.has(tokens[i + 2]!)) {
-      out.push(new Cmd(tokens[i + 1]!, tokens[i + 1]!, tokens, i + 2));
+      out.push(new Cmd(tokens[i + 1]!, tokens[i + 1]!, tokens, i + 2, true));
       i++; // NAME is a candidate; the words after it are scanned next
       continue;
     }
@@ -205,7 +215,7 @@ function commandAt(tokens: readonly string[], keepShells: boolean): Cmd | undefi
   return cs[cs.length - 1];
 }
 
-function hasCommand(sh: Shell, pred: (c: Cmd, sh: Shell) => boolean): boolean {
+export function hasCommand(sh: Shell, pred: (c: Cmd, sh: Shell) => boolean): boolean {
   // Indexed loops: this runs once per rule per segment, so no iterator objects.
   const segs = sh.segments;
   for (let i = 0; i < segs.length; i++) {
@@ -242,7 +252,7 @@ function resolveDots(p: string): string {
  * Canonical form for matching. Repeated slashes and `/.` go, `~`, `~user` and
  * `$HOME` are expanded when the home directory is known, and `..` is resolved.
  */
-function normalizePath(w: string, home: string | undefined): string {
+export function normalizePath(w: string, home: string | undefined): string {
   let p = w.replace(/\/{2,}/g, "/").replace(/\/\.(?=\/|$)/g, "");
   if (p === "") p = "/";
   const named = /^~([A-Za-z0-9._-]+)(\/.*)?$/.exec(p);
@@ -260,11 +270,25 @@ function normalizePath(w: string, home: string | undefined): string {
   return p;
 }
 
-/** Root, home, home contents, or a top-level system directory (with optional `/*`). */
-function isProtected(word: string, home: string | undefined): boolean {
+/**
+ * A relative path that, joined to the working directory, is a strict ancestor of it
+ * (`..`, `../*`, `../../*`): the delete reaches above the project root. The project root
+ * itself (`.`, `./*`, `*`) is not above it. Needs a known absolute cwd, else false.
+ */
+function aboveCwd(word: string, cwd: string | undefined): boolean {
+  if (!cwd || !cwd.startsWith("/") || word.startsWith("/") || word.startsWith("~") || word.includes("$")) return false;
+  const root = cwd.length > 1 ? cwd.replace(/\/+$/, "") : cwd;
+  const target = resolveDots(`${root}/${word}`.replace(/\/{2,}/g, "/")).replace(/\/\.?\*$/, "") || "/";
+  return target !== root && (target === "/" || root.startsWith(`${target}/`));
+}
+
+/** Root, home, home contents, a top-level system directory (with optional `/*`), or a path above the working directory. */
+function isProtected(word: string, sh: Shell): boolean {
+  const home = sh.home;
   const p = normalizePath(word, home);
   if (ROOT_SET.has(p) || TOP_LEVEL.test(p) || USER_HOME.test(p)) return true;
-  return home !== undefined && (p === home || p === `${home}/*` || p === `${home}/.*`);
+  if (home !== undefined && (p === home || p === `${home}/*` || p === `${home}/.*`)) return true;
+  return aboveCwd(word, sh.cwd);
 }
 
 function isRecursive(flags: readonly string[]): boolean {
@@ -285,7 +309,7 @@ function findDeleteProtected(c: Cmd, sh: Shell): boolean {
     if (t.startsWith("-") || t === "!" || t === "(") break;
     starts.push(t);
   }
-  if (!starts.some((p) => isProtected(p, sh.home))) return false;
+  if (!starts.some((p) => isProtected(p, sh))) return false;
   if (c.args.includes("-delete")) return true;
   const exec = c.args.some((t) => t === "-exec" || t === "-execdir" || t === "-ok" || t === "-okdir");
   return exec && c.args.includes("rm");
@@ -295,7 +319,7 @@ function rmRecursiveProtected(c: Cmd, sh: Shell): boolean {
   if (c.name !== "rm") return false;
   const flags = c.args.filter((t) => t.startsWith("-"));
   const paths = c.args.filter((t) => !t.startsWith("-"));
-  return isRecursive(flags) && paths.some((p) => isProtected(p, sh.home));
+  return isRecursive(flags) && paths.some((p) => isProtected(p, sh));
 }
 
 function chmodChownRecursiveProtected(c: Cmd, sh: Shell): boolean {
@@ -304,7 +328,7 @@ function chmodChownRecursiveProtected(c: Cmd, sh: Shell): boolean {
   const rest = c.args.filter((t) => !t.startsWith("-"));
   if (!isRecursive(flags)) return false;
   if (c.name === "chmod" && !rest.some((t) => /^0?777$/.test(t))) return false;
-  return rest.some((p) => isProtected(p, sh.home));
+  return rest.some((p) => isProtected(p, sh));
 }
 
 const PROTECTED_BRANCH = (b: string): boolean => {
@@ -327,7 +351,7 @@ const GIT_GLOBAL_FLAG = new Set([
  * The subcommand index, and whether every option before it is known. An unknown option makes
  * `known` false, so no later word is exempted by the subcommand (fail closed).
  */
-function gitSubInfo(a: readonly string[]): { idx: number; known: boolean } {
+export function gitSubInfo(a: readonly string[]): { idx: number; known: boolean } {
   let i = 0;
   let known = true;
   while (i < a.length && a[i]!.startsWith("-")) {
@@ -477,7 +501,7 @@ function globSecret(p: string): boolean {
 }
 
 /** Private key, cloud or package credential, or a real `.env` file (templates are not secret). Globs that could match one count too. */
-function isSecretPath(raw: string, home: string | undefined): boolean {
+export function isSecretPath(raw: string, home: string | undefined): boolean {
   const p = normalizePath(raw, home);
   const base = p.slice(p.lastIndexOf("/") + 1);
   if (/(^|\/)\.ssh\/id_/.test(p) && !base.endsWith(".pub")) return true;
@@ -689,6 +713,18 @@ function nestedNetExec(sh: Shell): boolean {
 
 // Fork bomb: `:(){ :|:& };:` or any one-word name. The name is bounded so the scan stays linear.
 const FORK_BOMB = /(^|[\s;&|(){}])(:|[A-Za-z_][\w.-]{0,63})\s*\(\s*\)\s*\{\s*\2\s*\|\s*\2\s*&/;
+// ksh and bash `function NAME { NAME|NAME& }`, with or without the `()`.
+const FORK_BOMB_FUNCTION = /(^|[\s;&|(){}])function\s+([A-Za-z_][\w.-]{0,63})\s*(?:\(\s*\)\s*)?\{\s*\2\s*\|\s*\2\s*&/;
+
+/**
+ * Tested on the whole text and on each token: quoted code given to `bash -c`, `sh -c`,
+ * `eval` or `sudo bash -c` is one token, and the quote in front of it is not a boundary
+ * for the raw text.
+ */
+function forkBomb(sh: Shell): boolean {
+  const bomb = (t: string): boolean => FORK_BOMB.test(t) || FORK_BOMB_FUNCTION.test(t);
+  return bomb(sh.raw) || sh.segments.some((seg) => seg.tokens.some((t) => t.includes("|") && bomb(t)));
+}
 const ANSI_ESC: Readonly<Record<string, string>> = {
   n: "\n", t: "\t", r: "\r", a: "\x07", b: "\b", e: "\x1b", f: "\f", v: "\v",
   "\\": "\\", "'": "'", '"': '"', "?": "?",
@@ -1005,15 +1041,547 @@ function segmentsOf(text: string, scope: Map<string, string>, depth: number): Se
   return segs;
 }
 
-function parseShell(cmd: string, home: string | undefined): Shell {
-  return { raw: cmd, segments: segmentsOf(cmd, new Map(), 0), home };
+let lastParsed: Shell | undefined;
+
+/** One-entry memo: the never-list rules and the guard pack parse the same command back to back. */
+export function parseShell(cmd: string, home: string | undefined, cwd?: string): Shell {
+  if (lastParsed && lastParsed.raw === cmd && lastParsed.home === home && lastParsed.cwd === cwd) return lastParsed;
+  return (lastParsed = { raw: cmd, segments: segmentsOf(cmd, new Map(), 0), home, cwd });
 }
 
 /**
- * THE rule table. One row per rule, one comment per row. The owner approved this list
- * on 2026-10-29, with no changes. Changes to a row need owner approval. Matching is by
- * parsed command word and exact target, never by substring alone, so
- * `~/proj/node_modules`, `/tmp/x` and `.env.example` stay allowed.
+ * Command operands: the words after the command word with redirections removed (`>`, `>>`, `<` and
+ * their target, and an fd digit before a redirect). `cp k FILE 2>/dev/null` has the operands k and FILE.
+ */
+function operandsOf(tokens: readonly string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]!;
+    if (REDIRECT_OPS.has(t)) {
+      i++;
+      continue;
+    }
+    if (/^\d+$/.test(t) && REDIRECT_OPS.has(tokens[i + 1] ?? "")) continue;
+    out.push(t);
+  }
+  return out;
+}
+
+/** Persistence paths, matched on the normalized path (see normalizePath). */
+// Case-insensitive (`i`): macOS file systems are case-insensitive by default, so `~/.SSH/Authorized_Keys` is the same file.
+const AUTHORIZED_KEYS = /(^|\/)\.ssh\/authorized_keys2?$/i;
+const CRON_PATH = /^\/(etc\/cron|var\/spool\/cron)/i;
+// Directory forms end with `(\/|$)`: normalizePath drops a trailing slash, and `cp x ~/Library/LaunchAgents/` writes inside.
+const LAUNCH_PATH = /(^|\/)Library\/Launch(Agents|Daemons)(\/|$)/i;
+const SYSTEMD_USER_PATH = /(^|\/)\.config\/systemd\/user(\/|$)|^\/etc\/systemd\/user(\/|$)/i;
+const SHELL_RC_PATH = /(^|\/)\.(zshrc|zshenv|zprofile|zlogin|bashrc|bash_profile|bash_login|profile)$/i;
+/** A curl or wget word (not part of a longer name). Used on a whole command that writes a shell rc file. */
+const NET_WORD = /(^|[^A-Za-z0-9_])(curl|wget)(?![A-Za-z0-9_])/;
+
+/**
+ * The candidates the persistence and tunnel rules read: the last MAX_CANDIDATES command words of a segment,
+ * without coproc NAMEs. The real command is the last candidate, so it is always read. Earlier candidates come
+ * from expansions (`$(:)tee`) and are bounded here, so a long run of them stays linear (`coproc tee {` repeated was quadratic).
+ */
+const MAX_CANDIDATES = 16;
+
+/** Like hasCommand, over the bounded candidates. Allocates nothing: this runs for every rule on every command. */
+function hasCandidate(sh: Shell, pred: (c: Cmd) => boolean): boolean {
+  const segs = sh.segments;
+  for (let i = 0; i < segs.length; i++) {
+    const cs = segs[i]!.cmds;
+    let n = 0;
+    for (let k = cs.length - 1; k >= 0 && n < MAX_CANDIDATES; k--) {
+      const c = cs[k]!;
+      if (c.coprocName) continue;
+      n++;
+      if (pred(c)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Paths that a segment writes: redirect targets, tee operands, the destination of cp, mv and install,
+ * the files of `sed -i`, and dd `of=`. Only the shapes named here count (a python `open(..., 'w')` does not).
+ */
+function writtenPaths(seg: Segment, out: string[]): void {
+  const t = seg.tokens;
+  for (let i = 0; i + 1 < t.length; i++) if (t[i] === ">" || t[i] === ">>") out.push(t[i + 1]!);
+  const cs = seg.cmds;
+  let n = 0;
+  for (let k = cs.length - 1; k >= 0 && n < MAX_CANDIDATES; k--) {
+    const c = cs[k]!;
+    if (c.coprocName) continue;
+    n++;
+    if (c.name === "tee") {
+      for (const a of operandsOf(c.args)) if (!a.startsWith("-")) out.push(a);
+    } else if (c.name === "cp" || c.name === "mv" || c.name === "install") {
+      copyTargets(c, out);
+    } else if (c.name === "curl" || c.name === "wget") {
+      downloadTargets(c, out);
+    } else if (c.name === "sed") {
+      if (c.args.some((a) => /^-[A-Za-z]*i/.test(a) || a.startsWith("--in-place"))) {
+        out.push(...operandsOf(c.args).filter((a) => !a.startsWith("-")).slice(1));
+      }
+    } else if (c.name === "dd") {
+      for (const a of c.args) if (a.startsWith("of=")) out.push(a.slice(3));
+    }
+  }
+}
+
+/** The last path part of a path, with trailing slashes removed (`~/.ssh/` gives `.ssh`). */
+function baseName(p: string): string {
+  const s = p.replace(/\/+$/, "");
+  return s.slice(s.lastIndexOf("/") + 1);
+}
+
+/** Options of cp, mv and install that take a value (`install -m MODE`, `cp -S SUFFIX`): the value is not a path. */
+const COPY_VALUE_LETTERS = "Smog";
+
+/**
+ * A long option named by `full`, or by a unique prefix of it of at least `min` characters (`--tar` for
+ * `--target-directory`). The value is the text after `=`, or the next word (then `used` is true).
+ */
+function longOption(t: string, full: string, min: number, next: string | undefined): { value: string | undefined; used: boolean } | undefined {
+  const eq = t.indexOf("=");
+  const name = eq >= 0 ? t.slice(0, eq) : t;
+  if (name.length < min || !full.startsWith(name)) return undefined;
+  return eq >= 0 ? { value: t.slice(eq + 1), used: false } : { value: next, used: true };
+}
+
+/** `dir/base`, with one slash between them. */
+function joinPath(dir: string, base: string): string {
+  return dir.endsWith("/") ? dir + base : `${dir}/${base}`;
+}
+
+/**
+ * cp, mv and install destinations. A destination that is a directory receives each source under its basename, so
+ * both the destination and `DIR/basename` are tested. `-t DIR`, `-tDIR`, `--target-directory DIR`,
+ * `--target-directory=DIR` and any unique prefix of the long option name the directory first.
+ */
+function copyTargets(c: Cmd, out: string[]): void {
+  const ops = operandsOf(c.args);
+  let target: string | undefined;
+  const plain: string[] = [];
+  for (let i = 0; i < ops.length; i++) {
+    const a = ops[i]!;
+    if (a === "--") continue;
+    if (a.startsWith("--")) {
+      const t = longOption(a, "--target-directory", 3, ops[i + 1]);
+      if (t !== undefined) {
+        target = t.value;
+        if (t.used) i++;
+      }
+      continue;
+    }
+    if (a.length > 1 && a.startsWith("-")) {
+      for (let k = 1; k < a.length; k++) {
+        const ch = a[k]!;
+        if (ch === "t") {
+          if (k < a.length - 1) target = a.slice(k + 1);
+          else {
+            target = ops[i + 1];
+            i++;
+          }
+          break;
+        }
+        if (COPY_VALUE_LETTERS.includes(ch)) {
+          if (k === a.length - 1) i++;
+          break;
+        }
+        if (!/[A-Za-z]/.test(ch)) break;
+      }
+      continue;
+    }
+    plain.push(a);
+  }
+  if (target !== undefined) pushDestination(out, target, plain);
+  else if (plain.length >= 2) pushDestination(out, plain[plain.length - 1]!, plain.slice(0, -1));
+}
+
+function pushDestination(out: string[], dest: string, sources: readonly string[]): void {
+  out.push(dest);
+  for (const src of sources) {
+    const base = baseName(src);
+    if (base !== "") out.push(joinPath(dest, base));
+  }
+}
+
+/**
+ * Write targets of curl and wget. curl: `-o`/`--output`, and `--output-dir DIR` (with `-O`/`--remote-name`, the file
+ * is the URL basename in that directory). wget: `-O`/`--output-document`, and `-P`/`--directory-prefix DIR` (wget
+ * writes the URL basename in that directory unless -O is given). A value can be attached (`-o/path`, `-sSo~/x`,
+ * `--output=/x`), and a long option can be a unique prefix (`--out`). Extra paths only add tests, so this fails closed.
+ */
+function downloadTargets(c: Cmd, out: string[]): void {
+  const curl = c.name === "curl";
+  const FILE_OPT = curl ? "--output" : "--output-document";
+  const DIR_OPT = curl ? "--output-dir" : "--directory-prefix";
+  const FILE_LETTER = curl ? "o" : "O";
+  const DIR_LETTER = curl ? "" : "P";
+  const a = c.args;
+  const files: string[] = [];
+  const urls: string[] = [];
+  let dir: string | undefined;
+  let remote = false;
+  for (let i = 0; i < a.length; i++) {
+    const t = a[i]!;
+    if (t.startsWith("--")) {
+      const name = t.split("=")[0]!;
+      if (curl && name.length >= 4 && ("--remote-name".startsWith(name) || "--remote-name-all".startsWith(name) || "--remote-header-name".startsWith(name) || "--content-disposition".startsWith(name))) remote = true;
+      const f = longOption(t, FILE_OPT, 3, a[i + 1]);
+      const d = longOption(t, DIR_OPT, 3, a[i + 1]);
+      if (f?.value !== undefined) files.push(f.value);
+      if (d?.value !== undefined) dir = d.value;
+      if (f?.used || d?.used) i++;
+      continue;
+    }
+    if (t.length > 1 && t.startsWith("-")) {
+      for (let k = 1; k < t.length; k++) {
+        const ch = t[k]!;
+        if (ch === FILE_LETTER || (DIR_LETTER !== "" && ch === DIR_LETTER)) {
+          const used = k === t.length - 1;
+          const v = used ? a[i + 1] : t.slice(k + 1);
+          if (ch === FILE_LETTER) {
+            if (v !== undefined) files.push(v);
+          } else {
+            dir = v;
+          }
+          if (used) i++;
+          break;
+        }
+        if (curl && (ch === "O" || ch === "J")) remote = true;
+        if (!/[A-Za-z]/.test(ch)) break;
+      }
+      continue;
+    }
+    urls.push(t); // any operand: a scheme-less host is a URL too
+  }
+  for (const f of files) {
+    out.push(f);
+    if (dir !== undefined && dir !== "") out.push(joinPath(dir, f));
+  }
+  const named = curl ? remote : files.length === 0;
+  if (named) {
+    // The server can choose the file name, so the directory is a write target. `authorized_keys` is joined onto it
+    // too: the rule then tests the normalized path, so `~/.SSH`, `$HOME/.ssh`, `./../.ssh` all resolve to a .ssh
+    // directory. Each name is pushed bare and joined onto the directory (extra paths only add tests).
+    const d = dir ?? "";
+    if (d !== "") {
+      out.push(d);
+      out.push(joinPath(d, "authorized_keys"));
+    }
+    for (const u of urls) {
+      const base = baseName(u.replace(/[?#].*$/, ""));
+      if (base === "") continue;
+      out.push(base);
+      if (d !== "") out.push(joinPath(d, base));
+    }
+  }
+}
+
+/** Normalized written paths of one command, computed once for all rules that ask (they all read the same list). */
+const WRITTEN_CACHE = new WeakMap<Shell, string[]>();
+function writtenIn(sh: Shell): string[] {
+  let out = WRITTEN_CACHE.get(sh);
+  if (out === undefined) {
+    const raw: string[] = [];
+    const segs = sh.segments;
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i]!;
+      // `>|` and `>&` end the segment at the operator, so the target is the first word of the next segment.
+      const prev = i > 0 ? segs[i - 1]!.tokens : undefined;
+      const last = prev?.[prev.length - 1];
+      if (seg.tokens.length > 0 && (last === ">" || last === ">>")) raw.push(seg.tokens[0]!);
+      writtenPaths(seg, raw);
+    }
+    out = raw.map((w) => normalizePath(w, sh.home));
+    WRITTEN_CACHE.set(sh, out);
+  }
+  return out;
+}
+
+/** True when a segment of the command writes to a path that `pred` accepts (after normalizePath). */
+function writesTo(sh: Shell, pred: (p: string) => boolean): boolean {
+  for (const p of writtenIn(sh)) if (pred(p)) return true;
+  return false;
+}
+
+/** crontab that installs a table: `crontab -`, `crontab -e` or `crontab FILE`. `-l` and `-r` do not. */
+function cronWrites(c: Cmd): boolean {
+  if (c.name !== "crontab") return false;
+  const ops = operandsOf(c.args);
+  for (let i = 0; i < ops.length; i++) {
+    const t = ops[i]!;
+    if (t === "-u") {
+      i++;
+      continue;
+    }
+    if (t === "-" || t === "-e" || !t.startsWith("-")) return true;
+  }
+  return false;
+}
+
+/** `at TIME` or `at -f FILE` schedules a job. `at -l` (list) and `at -d` or `-r` (remove) do not. */
+function atSchedules(c: Cmd): boolean {
+  if (c.name !== "at") return false;
+  const ops = operandsOf(c.args);
+  if (ops.includes("-d") || ops.includes("-r")) return false;
+  return ops.includes("-f") || ops.some((t) => !t.startsWith("-"));
+}
+
+/** The first operand that is not an option (the subcommand of launchctl and systemctl). */
+function firstSubcommand(c: Cmd): string | undefined {
+  return operandsOf(c.args).find((t) => !t.startsWith("-"));
+}
+
+/** `launchctl load` or `launchctl bootstrap` starts a LaunchAgent or LaunchDaemon. `launchctl list` does not. */
+function launchLoads(c: Cmd): boolean {
+  if (c.name !== "launchctl") return false;
+  const sub = firstSubcommand(c);
+  return sub === "load" || sub === "bootstrap";
+}
+
+/** `systemctl --user enable` or `link` makes a user unit start at login. `--user status` does not. */
+function systemdUserEnables(c: Cmd): boolean {
+  if (c.name !== "systemctl") return false;
+  const ops = operandsOf(c.args);
+  if (!ops.includes("--user")) return false;
+  const sub = firstSubcommand(c);
+  return sub === "enable" || sub === "link";
+}
+
+/** Option letters that take a value in ssh (`-p 22`, `-oKey=val`, `-L 8080:x:80`). */
+const SSH_VALUE_LETTERS = "BbcDEeFIiJLlmOopQRSWw";
+/**
+ * Every ssh option in the command, wherever it stands. OpenSSH parses options after the destination too
+ * (`ssh host -R 9000:localhost:22 -N`), so every operand is read until `--`. Returns the option letters, the
+ * values of `-o` options (`RemoteForward=...`), the `-F` config files, and the destination (the first operand
+ * that is not an option). A value option takes the rest of its word, or the next word: `-fNR host`, `-R8080:...`,
+ * `-oRemoteForward=...`, `-F~/x`.
+ */
+function sshShape(c: Cmd): { letters: Set<string>; opts: string[]; configs: string[]; libs: string[]; dest: string | undefined } {
+  const ops = operandsOf(c.args);
+  const letters = new Set<string>();
+  const opts: string[] = [];
+  const configs: string[] = [];
+  const libs: string[] = [];
+  let dest: string | undefined;
+  let noMoreOptions = false;
+  for (let i = 0; i < ops.length; i++) {
+    const t = ops[i]!;
+    if (!noMoreOptions && t === "--") {
+      noMoreOptions = true;
+      continue;
+    }
+    if (noMoreOptions || !t.startsWith("-") || t === "-") {
+      if (dest === undefined) dest = t;
+      continue;
+    }
+    for (let k = 1; k < t.length; k++) {
+      const ch = t[k]!;
+      letters.add(ch);
+      if (SSH_VALUE_LETTERS.includes(ch)) {
+        const attached = k < t.length - 1;
+        const value = attached ? t.slice(k + 1) : ops[i + 1];
+        if (!attached) i++;
+        if (ch === "o" && value !== undefined) opts.push(value);
+        if (ch === "F" && value !== undefined) configs.push(value);
+        if (ch === "I" && value !== undefined) libs.push(value);
+        break;
+      }
+    }
+  }
+  return { letters, opts, configs, libs, dest };
+}
+
+/** The two jump shapes allowed as a ProxyCommand: `ssh -W %h:%p HOST` and `nc %h %p`. */
+const SSH_JUMP = /^(ssh -W %h:%p [A-Za-z0-9._@:-]+|nc %h %p)$/;
+
+/**
+ * One -o option value: the keyword is the text before the first `=` or whitespace, lower-cased. Double quotes are
+ * removed first, the way OpenSSH reads `-o "ProxyCommand=nc x 22"` and `-o '"ProxyCommand" nc x 22'`.
+ * Undefined when no keyword can be read.
+ */
+function sshOptionKeyValue(v: string): { key: string; value: string } | undefined {
+  const m = /^([A-Za-z][A-Za-z0-9]*)\s*(?:=|\s)\s*([\s\S]*)$/.exec(v.replace(/"/g, "").trim());
+  return m ? { key: m[1]!.toLowerCase(), value: m[2]!.trim() } : undefined;
+}
+
+/**
+ * A -o option that runs a command and whose value is not one of the two jump shapes (`SSH_JUMP`), or a -o option
+ * that cannot be read (fail closed). Gated keys: every keyword that ends in `command` (ProxyCommand, LocalCommand,
+ * KnownHostsCommand, RemoteCommand), except PermitLocalCommand, a yes/no switch. This is an allowlist of the value,
+ * not a word list. IdentityAgent names a socket and is not gated.
+ */
+function sshOptionDenied(v: string): boolean {
+  const kv = sshOptionKeyValue(v);
+  if (!kv) return true;
+  if (!kv.key.endsWith("command") || kv.key === "permitlocalcommand") return false;
+  return !SSH_JUMP.test(kv.value);
+}
+
+/** -o keys that load a shared library (a provider) into ssh: only `none` or an empty value is allowed. */
+const CODE_PROVIDER_KEYS = new Set(["pkcs11provider", "securitykeyprovider"]);
+function providerValueDenied(value: string): boolean {
+  const v = value.replace(/"/g, "").trim().toLowerCase();
+  return v !== "" && v !== "none";
+}
+function sshCodeLoadingDenied(c: Cmd): boolean {
+  const shape = sshShape(c);
+  if (shape.libs.some(providerValueDenied)) return true;
+  return shape.opts.some((v) => {
+    const kv = sshOptionKeyValue(v);
+    return kv !== undefined && CODE_PROVIDER_KEYS.has(kv.key) && providerValueDenied(kv.value);
+  });
+}
+
+const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+/** Octets of a dotted IPv4 literal, or undefined. */
+function ipv4Octets(s: string): number[] | undefined {
+  const m = IPV4.exec(s);
+  if (!m) return undefined;
+  const o = m.slice(1).map(Number);
+  return o.every((x) => x <= 255) ? o : undefined;
+}
+/** A dotted IPv4 host, with an optional `user@` in front. A name such as `1.2.3.4.nip.io` is not one. */
+function isIpv4Host(d: string | undefined): boolean {
+  if (d === undefined) return false;
+  return ipv4Octets(d.slice(d.lastIndexOf("@") + 1)) !== undefined;
+}
+/** Public IPv4: not loopback (127), private (10, 172.16/12, 192.168), link-local (169.254), or 0. */
+function isPublicIpv4(s: string): boolean {
+  const [a = -1, b = -1] = ipv4Octets(s) ?? [];
+  if (a < 0) return false;
+  return !(a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168));
+}
+const IPV4_IN_TEXT = /(?:^|[^\d.])((?:\d{1,3}\.){3}\d{1,3})(?![\d.])/g;
+/** True when a word holds a public dotted IPv4 literal (a URL `http://8.8.8.8:80/x` counts). */
+function hasPublicIpv4(s: string): boolean {
+  for (const m of s.matchAll(IPV4_IN_TEXT)) if (isPublicIpv4(m[1]!)) return true;
+  return false;
+}
+
+/** `ssh -R` (any destination, any position, or `RemoteForward` in an option): a reverse tunnel into this machine. */
+function sshReverseForward(c: Cmd): boolean {
+  if (c.name !== "ssh") return false;
+  const { letters, opts } = sshShape(c);
+  return letters.has("R") || opts.some((v) => /^remoteforward/i.test(v));
+}
+/** `ssh -L ... -N` (or `-o LocalForward`) to a dotted IPv4 address. A tunnel to a host name is allowed (a normal dev tunnel). */
+function sshLocalToRawIp(c: Cmd): boolean {
+  if (c.name !== "ssh") return false;
+  const { letters, opts, dest } = sshShape(c);
+  const forward = letters.has("L") || opts.some((v) => /^localforward/i.test(v));
+  return forward && letters.has("N") && isIpv4Host(dest);
+}
+/** `ssh -w` opens a layer 3 tunnel device on both ends. Denied: it is a tunnel with no host check. */
+function sshTunnelDevice(c: Cmd): boolean {
+  return c.name === "ssh" && sshShape(c).letters.has("w");
+}
+/** `ssh -o ProxyCommand=...` that runs a shell, netcat, socat, an interpreter or a download: a command run on connect. */
+function sshProxyExec(c: Cmd): boolean {
+  return c.name === "ssh" && sshShape(c).opts.some(sshOptionDenied);
+}
+/**
+ * `ssh -F FILE` when this same command writes FILE (a redirect, tee, cp and so on): the config can carry a
+ * ProxyCommand that was written in the same call. A config written by an earlier call is not seen (documented limit).
+ */
+function sshConfigWritten(sh: Shell): boolean {
+  const written = writtenIn(sh);
+  if (written.length === 0) return false;
+  return hasCandidate(sh, (c) => c.name === "ssh" && sshShape(c).configs.some((f) => written.includes(normalizePath(f, sh.home))));
+}
+
+const NC_NAMES = new Set(["nc", "ncat", "netcat"]);
+/**
+ * A netcat or socat listener or client that runs a program. For nc, ncat and netcat, `-e`, `-c` or `--exec`,
+ * `--sh-exec` (also inside a short cluster such as `-nve`). `nc -z`, `nc -l PORT`, and `nc host port < file` are not matches.
+ */
+function netcatExec(c: Cmd): boolean {
+  if (NC_NAMES.has(c.name)) {
+    return operandsOf(c.args).some((a) => /^-[A-Za-z]*[ec]/.test(a) || a === "--exec" || a === "--sh-exec");
+  }
+  if (c.name === "socat") return operandsOf(c.args).some((a) => /(^|[,:])(EXEC|SYSTEM):/i.test(a));
+  return false;
+}
+
+const DEV_TCP = /^\/dev\/(tcp|udp)\//;
+const REDIRECT_IN_OUT = new Set(["<", ">", ">>"]);
+/**
+ * A bash network redirect: `/dev/tcp/HOST/PORT` as the target of `<`, `>` or `>>`, or as the first word of a
+ * segment (`bash -i >& /dev/tcp/...` splits at the `&`, so the target starts the next segment). Text that
+ * only names the path (`git commit -m "/dev/tcp"`) does not count.
+ */
+function devTcpRedirect(sh: Shell): boolean {
+  if (!sh.raw.includes("/dev/")) return false;
+  for (const seg of sh.segments) {
+    const t = seg.tokens;
+    if (t.length > 0 && DEV_TCP.test(t[0]!)) return true;
+    for (let i = 0; i + 1 < t.length; i++) {
+      if (REDIRECT_IN_OUT.has(t[i]!) && DEV_TCP.test(t[i + 1]!)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * True when the words of one command dump the environment: `env` or `printenv` with no command after it,
+ * bare `set` (no operands), `export -p`, `declare -p` and `compgen -e`. `set -e` and `env FOO=1 node x` are not dumps.
+ */
+function isEnvDump(tokens: readonly string[]): boolean {
+  let dump = false;
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]!;
+    if (t.startsWith("-") || ASSIGN.test(t)) continue;
+    const name = wordName(t);
+    if (name === "printenv") return true;
+    if (name === "env") {
+      dump = true;
+      continue;
+    }
+    if (WRAPPERS.has(name)) continue;
+    if (name === "set") return i === tokens.length - 1;
+    if (name === "export" || name === "declare") return tokens.slice(i + 1).includes("-p");
+    if (name === "compgen") return tokens.slice(i + 1).includes("-e");
+    return false;
+  }
+  return dump;
+}
+
+const RAW_IP_CLIENTS = new Set(["curl", "wget", "nc", "ncat", "netcat", "socat", "telnet"]);
+const VAR_REF = /\$\{?[A-Za-z_]/;
+/**
+ * Environment names or values sent to a public raw IPv4 address. The command must have a client
+ * (curl, wget, nc, socat, telnet) with a public IPv4 operand, and either an environment dump
+ * (`env | ...`, `printenv`, bare `set`, `$(env)`) or a `$NAME` reference anywhere in the same command.
+ * Linear: the client check runs first and stops most commands; then one scan for the dump, one for the reference.
+ * Loopback and private addresses are allowed on purpose.
+ */
+function envToPublicIp(sh: Shell): boolean {
+  if (!hasCandidate(sh, (c) => RAW_IP_CLIENTS.has(c.name) && operandsOf(c.args).some(hasPublicIpv4))) return false;
+  for (const seg of sh.segments) if (isEnvDump(seg.tokens)) return true;
+  for (const seg of sh.segments) if (seg.tokens.some((t) => VAR_REF.test(t))) return true;
+  return false;
+}
+
+/** Path of one line of an apply_patch body (Codex): Add File, Update File, Delete File or Move to. */
+const PATCH_PATH = /^\*\*\* (?:Add File|Update File|Delete File|Move to): ([^\r\n]+)$/gm;
+
+/**
+ * Words of the persistence, tunnel and exfiltration rules, searched in a whole command longer than MAX_SCAN_CHARS.
+ * One alternation with no nested repeats, so the search is linear. It is coarse on purpose: a long command that
+ * names one of these tools is denied.
+ */
+const LONG_INPUT_WORDS =
+  /authorized_keys|LaunchAgents|LaunchDaemons|systemd\/user|\/etc\/cron|\/var\/spool\/cron|crontab|launchctl|systemctl|schtasks|ssh-copy-id|autossh|RemoteForward|LocalForward|ProxyCommand|\/dev\/(tcp|udp)\/|\bssh\b|\bnc\b|ncat|netcat|socat|\.(zshrc|zshenv|zprofile|zlogin|bashrc|bash_profile|bash_login|profile)\b/i;
+
+/**
+ * THE rule table. One row per rule, one comment per row. The owner approved groups a to e
+ * on 2026-10-29, with no changes. Groups f to h were added on 2026-10-30 and wait for owner
+ * review. Changes to a row need owner approval. Matching is by parsed command word and exact
+ * target, never by substring alone, so `~/proj/node_modules`, `/tmp/x` and `.env.example` stay allowed.
  */
 export const NEVER_LIST_INPUT_RULES: readonly NeverListInputRule[] = [
   // a. Recursive delete of home, root or a top-level system dir (also find -delete / -exec rm on those).
@@ -1036,10 +1604,34 @@ export const NEVER_LIST_INPUT_RULES: readonly NeverListInputRule[] = [
     group: "d",
     shell: (sh) => sh.segments.some((seg) => seg.tokens.some((t, i) => (t === ">" || t === ">>") && BLOCK_DEVICE.test(seg.tokens[i + 1] ?? ""))),
   },
-  { id: "fork-bomb", group: "d", shell: (sh) => FORK_BOMB.test(sh.raw) },
+  { id: "fork-bomb", group: "d", shell: forkBomb },
   { id: "chmod-chown-recursive-root", group: "d", shell: (sh) => hasCommand(sh, chmodChownRecursiveProtected) },
   // e. Network download piped into a shell, or run as code through a substitution (`sh -c "$(curl ...)"`).
   { id: "pipe-network-to-shell", group: "e", shell: (sh) => pipeNetworkToShell(sh) || nestedNetExec(sh) },
+  // f. Agent-driven persistence (added 2026-10-30). A write rule also runs on Write, Edit and apply_patch paths.
+  { id: "ssh-authorized-keys-write", group: "f", shell: (sh) => writesTo(sh, (p) => AUTHORIZED_KEYS.test(p)), writeFile: (p, home) => AUTHORIZED_KEYS.test(normalizePath(p, home)) },
+  { id: "ssh-copy-id", group: "f", shell: (sh) => hasCandidate(sh, (c) => c.name === "ssh-copy-id") },
+  { id: "persistence-cron", group: "f", shell: (sh) => hasCandidate(sh, cronWrites) || writesTo(sh, (p) => CRON_PATH.test(p)), writeFile: (p, home) => CRON_PATH.test(normalizePath(p, home)) },
+  { id: "persistence-at-job", group: "f", shell: (sh) => hasCandidate(sh, atSchedules) },
+  { id: "persistence-launchd", group: "f", shell: (sh) => hasCandidate(sh, launchLoads) || writesTo(sh, (p) => LAUNCH_PATH.test(p)), writeFile: (p, home) => LAUNCH_PATH.test(normalizePath(p, home)) },
+  { id: "persistence-systemd-user", group: "f", shell: (sh) => hasCandidate(sh, systemdUserEnables) || writesTo(sh, (p) => SYSTEMD_USER_PATH.test(p)), writeFile: (p, home) => SYSTEMD_USER_PATH.test(normalizePath(p, home)) },
+  { id: "persistence-schtasks-create", group: "f", shell: (sh) => hasCandidate(sh, (c) => c.name === "schtasks" && c.args.some((a) => a.toLowerCase() === "/create")) },
+  // A download (curl, wget) in a command that writes a shell rc file: it runs at every shell start.
+  { id: "shell-rc-download-append", group: "f", shell: (sh) => NET_WORD.test(sh.raw) && writesTo(sh, (p) => SHELL_RC_PATH.test(p)) },
+  // g. Reverse tunnels and reverse shells (added 2026-10-30).
+  { id: "ssh-reverse-forward", group: "g", shell: (sh) => hasCandidate(sh, sshReverseForward) },
+  { id: "ssh-local-forward-raw-ip", group: "g", shell: (sh) => hasCandidate(sh, sshLocalToRawIp) },
+  { id: "reverse-shell-netcat-exec", group: "g", shell: (sh) => hasCandidate(sh, netcatExec) },
+  { id: "reverse-shell-dev-tcp", group: "g", shell: devTcpRedirect },
+  { id: "autossh-tunnel", group: "g", shell: (sh) => hasCandidate(sh, (c) => c.name === "autossh") },
+  { id: "ssh-tunnel-device", group: "g", shell: (sh) => hasCandidate(sh, sshTunnelDevice) },
+  { id: "ssh-proxy-command-exec", group: "g", shell: (sh) => hasCandidate(sh, sshProxyExec) },
+  { id: "ssh-config-written", group: "g", shell: sshConfigWritten },
+  { id: "ssh-code-loading-option", group: "g", shell: (sh) => hasCandidate(sh, sshCodeLoadingDenied) },
+  // Long command (over MAX_SCAN_CHARS): the parsed windows skip the middle, so the whole text is searched for these words.
+  { id: "long-input-persistence-words", group: "f", fullText: (text) => LONG_INPUT_WORDS.test(text) },
+  // h. Exfiltration of environment names or values to a public raw IPv4 address (added 2026-10-30).
+  { id: "env-dump-to-raw-ip", group: "h", shell: envToPublicIp },
 ];
 
 const WRITE_NAME = /write|edit|create|update|delete|remove|move|rename|patch|replace|save|append|mkdir|touch/;
@@ -1054,13 +1646,13 @@ function lastSegment(toolId: string): string {
   return toolId.split("__").pop()!.trim().toLowerCase();
 }
 
-function isShellTool(toolId: string): boolean {
+export function isShellTool(toolId: string): boolean {
   const last = lastSegment(toolId);
   return findHostToolTier(last) === "SHELL" || SHELL_NAME.test(last);
 }
 
 /** Tools that write. The file rule skips them: a write to `.env` is not a read of a secret. */
-function isWriteLike(toolId: string): boolean {
+export function isWriteLike(toolId: string): boolean {
   const last = lastSegment(toolId);
   if (findHostToolTier(last) === "WRITE" || WRITE_NAME.test(last)) return true;
   const mcp = parseMcpToolId(toolId);
@@ -1069,7 +1661,7 @@ function isWriteLike(toolId: string): boolean {
   return tier === "WRITE" || tier === "ADMIN";
 }
 
-function fieldsOf(toolInput: unknown): Record<string, unknown> | undefined {
+export function fieldsOf(toolInput: unknown): Record<string, unknown> | undefined {
   let v = toolInput;
   if (typeof v === "string") {
     if (v.length > MAX_JSON_CHARS) return undefined;
@@ -1080,11 +1672,11 @@ function fieldsOf(toolInput: unknown): Record<string, unknown> | undefined {
 }
 
 /** The first and last window of a long field. A short field is one window. */
-function windowsOf(s: string): string[] {
+export function windowsOf(s: string): string[] {
   return s.length <= MAX_SCAN_CHARS ? [s] : [s.slice(0, MAX_SCAN_CHARS), s.slice(-MAX_SCAN_CHARS)];
 }
 
-function commandStrings(f: Record<string, unknown>): string[] {
+export function commandStrings(f: Record<string, unknown>): string[] {
   const v = f.command ?? f.cmd;
   let s: string | undefined;
   if (typeof v === "string") s = v;
@@ -1092,7 +1684,7 @@ function commandStrings(f: Record<string, unknown>): string[] {
   return s === undefined ? [] : windowsOf(s);
 }
 
-function pathStrings(f: Record<string, unknown>, toolId: string): string[] {
+export function pathStrings(f: Record<string, unknown>, toolId: string): string[] {
   const out: string[] = [];
   for (const k of PATH_FIELDS) {
     const v = f[k];
@@ -1108,6 +1700,28 @@ function pathStrings(f: Record<string, unknown>, toolId: string): string[] {
     }
   }
   return out;
+}
+
+/** Paths that a write-like tool writes: its path fields, and for Codex apply_patch the paths named in the patch body. */
+function writePathStrings(f: Record<string, unknown>, toolId: string): string[] {
+  const out = pathStrings(f, toolId);
+  if (lastSegment(toolId) === "apply_patch") {
+    // The patch is one string, or an argv array whose items are lines or chunks. Each item is scanned on its own
+    // (a joined array does not hide a line start), and the whole item is scanned, not a window: the header regex is
+    // linear, and a long patch must not hide a header in its middle.
+    const v = f.command ?? f.cmd;
+    const items = typeof v === "string" ? [v] : Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+    for (const item of items) for (const m of item.matchAll(PATCH_PATH)) out.push(m[1]!.trim());
+  }
+  return out;
+}
+
+/** The whole shell command text, unwindowed (the same join as commandStrings), or undefined when there is none. */
+function fullCommandText(f: Record<string, unknown>): string | undefined {
+  const v = f.command ?? f.cmd;
+  if (typeof v === "string") return v;
+  if (Array.isArray(v) && v.every((x) => typeof x === "string")) return (v as string[]).join(" ");
+  return undefined;
 }
 
 /** Home directory for `~` and absolute home paths. Undefined when the OS has none. */
@@ -1128,17 +1742,28 @@ export function neverListInputMatch(
   toolId: string,
   toolInput: unknown,
   home: string | undefined = safeHome(),
+  cwd?: string,
 ): { readonly rule: string } | undefined {
   try {
     const f = fieldsOf(toolInput);
     if (!f) return undefined;
     if (isShellTool(toolId)) {
+      // Long command: the parsed windows do not cover the middle, so the whole text gets the word search first.
+      const full = fullCommandText(f);
+      if (full !== undefined && full.length > MAX_SCAN_CHARS) {
+        for (const r of NEVER_LIST_INPUT_RULES) if (r.fullText?.(full)) return { rule: r.id };
+      }
       for (const cmd of commandStrings(f)) {
-        const sh = parseShell(cmd, home);
+        const sh = parseShell(cmd, home, cwd);
         for (const r of NEVER_LIST_INPUT_RULES) if (r.shell?.(sh)) return { rule: r.id };
       }
     }
-    if (!isWriteLike(toolId)) {
+    if (isWriteLike(toolId)) {
+      // Write tools: only the writeFile rules (persistence files). A write to `.env` is not a read of a secret.
+      for (const p of writePathStrings(f, toolId)) {
+        for (const r of NEVER_LIST_INPUT_RULES) if (r.writeFile?.(p, home)) return { rule: r.id };
+      }
+    } else {
       for (const p of pathStrings(f, toolId)) {
         for (const r of NEVER_LIST_INPUT_RULES) if (r.file?.(p, home)) return { rule: r.id };
       }

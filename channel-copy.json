@@ -1,10 +1,10 @@
 {
-  "$comment": "Single source of truth for how every distribution channel describes kya, and for the screenshots they show. Edit here, then run `pnpm sync:channel-copy`; `pnpm check:channel-copy` (CI) fails on any drift. Every variant starts with the tagline. Keep it truthful: local OSS is advisory and fails open except the never-list; never claim OSS enforcement or call the hosted console GA.",
+  "$comment": "Single source of truth for how every distribution channel describes kya, and for the screenshots they show. Edit here, then run `pnpm sync:channel-copy`; `pnpm check:channel-copy` (CI) fails on any drift. Every variant starts with the tagline. Keep it truthful: local OSS is advisory and fails open except the never-list and the guard pack; never claim OSS enforcement or call the hosted console GA.",
   "short": "Audit trail and traceability for AI agents.",
   "long": "Audit trail and traceability for AI agents. See what every coding agent did and check each tool call against policy.",
   "variants": {
     "mcp": "Audit trail and traceability for AI agents. MCP gate: evaluate, ingest, request approval.",
-    "plugin": "Audit trail and traceability for AI agents. See what every coding agent did. Advisory: records every tool call, blocks only the never-list, fails open.",
+    "plugin": "Audit trail and traceability for AI agents. See what every coding agent did. Advisory: records every tool call, blocks the never-list and the guard pack, fails open.",
     "python": "Audit trail and traceability for AI agents. In-process kya shim for Python agent frameworks (offline evaluate via the kya CLI).",
     "webInstall": "Audit trail and traceability for AI agents. Install in minutes: offline demo, MCP gate, local free console, or hosted. No private protocol.",
     "webHowKyaWorks": "Audit trail and traceability for AI agents. Register an agent, wrap a tool, get Allow, Hold, or Deny. What to do after a local or company install."

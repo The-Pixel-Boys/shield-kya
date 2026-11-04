@@ -24,11 +24,12 @@
  */
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { globalConfigDir, resolveGateMode } from "./config.js";
 import { atomicWriteSync } from "./fs-atomic.js";
+import { claimDailySlot } from "./daily-slot.js";
 import { CLI_VERSION } from "./version.js";
 
 export type TelemetrySurface = "mcp-stdio" | "mcp-http" | "report" | "gateway" | "hook";
@@ -299,25 +300,7 @@ type SpawnLike = (
  * hooks racing on a stale stamp only the one whose create succeeds gets the slot.
  */
 export function claimHookPingSlot(env: NodeJS.ProcessEnv, nowMs: number = Date.now()): boolean {
-  const stamp = hookPingStampPath(env);
-  try {
-    // The claimed time lives in the file content: mtime granularity differs
-    // across filesystems (some round to whole seconds), which made a 24h
-    // window measurable as elapsed after only ~24h - 1s.
-    const raw = readFileSync(stamp, "utf8").trim();
-    const last = raw === "" ? statSync(stamp).mtimeMs : Number(raw);
-    if (Number.isFinite(last) && nowMs - last < HOOK_PING_INTERVAL_MS) return false;
-    unlinkSync(stamp);
-  } catch {
-    /* no stamp yet, or another hook removed it first: fall through to the exclusive create */
-  }
-  mkdirSync(globalConfigDir(env), { recursive: true, mode: 0o700 });
-  try {
-    writeFileSync(stamp, String(nowMs), { flag: "wx" });
-    return true;
-  } catch {
-    return false; // EEXIST: another hook won the race
-  }
+  return claimDailySlot(hookPingStampPath(env), HOOK_PING_INTERVAL_MS, nowMs);
 }
 
 /**

@@ -65,10 +65,14 @@ export interface TrailEvent {
   readonly sourceHash?: string;
   /** agt import: false when the source log's hash chain did not verify. */
   readonly chainVerified?: boolean;
-  /** Hosted hook with --plane-shadow: the verdict was recorded, never enforced (except the never-list). */
+  /** Hosted hook with --plane-shadow: the verdict was recorded, never enforced (except the never-list and the guard pack). */
   readonly shadow?: boolean;
   /** Hosted hook: env or repo config tried to steer it and was ignored. */
   readonly configIgnored?: boolean;
+  /** Stable hashed id of this install (device-id.ts). Never the host name, user or MAC. */
+  readonly deviceId?: string;
+  /** Privacy-safe class of the tool target (map/target-class.ts). A class, never a path, URL path, argument or command. */
+  readonly targetClass?: string;
 }
 
 export function globalTrailPath(env: NodeJS.ProcessEnv = process.env): string {
@@ -236,6 +240,8 @@ function parseTrailEvent(raw: unknown): TrailEvent | undefined {
     ...(typeof e.chainVerified === "boolean" ? { chainVerified: e.chainVerified } : {}),
     ...(typeof e.shadow === "boolean" ? { shadow: e.shadow } : {}),
     ...(typeof e.configIgnored === "boolean" ? { configIgnored: e.configIgnored } : {}),
+    ...(typeof e.deviceId === "string" && /^[0-9a-f]{16}$/.test(e.deviceId) ? { deviceId: e.deviceId } : {}),
+    ...(typeof e.targetClass === "string" && e.targetClass.length <= 128 ? { targetClass: e.targetClass } : {}),
   };
 }
 
@@ -319,12 +325,34 @@ export function readTrailSince(
   since: Date,
   env: NodeJS.ProcessEnv = process.env,
 ): TrailEvent[] {
+  return eventsSince(readTrail(cwd, env), since);
+}
+
+/** Same filter as readTrailSince, for events already read. */
+export function eventsSince(events: readonly TrailEvent[], since: Date): TrailEvent[] {
   const sinceMs = since.getTime();
-  return readTrail(cwd, env).filter((e) => {
+  return events.filter((e) => {
     const t = Date.parse(e.ts);
     if (Number.isNaN(t)) return true;
     return t >= sinceMs;
   });
+}
+
+/** Changes when either trail file readTrail reads is written, replaced or removed. */
+export function trailVersion(cwd: string, env: NodeJS.ProcessEnv = process.env): string {
+  const globalPath = globalTrailPath(env);
+  const legacy = legacyTrailPath(cwd);
+  const paths = legacy === globalPath ? [globalPath] : [globalPath, legacy];
+  return paths
+    .map((p) => {
+      try {
+        const st = statSync(p);
+        return `${st.ino}:${st.size}:${st.mtimeMs}`;
+      } catch {
+        return "-";
+      }
+    })
+    .join("|");
 }
 
 export function defaultSessionId(env: NodeJS.ProcessEnv = process.env): string {

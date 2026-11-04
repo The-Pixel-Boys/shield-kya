@@ -1,6 +1,8 @@
 /**
  * Activity feed HTML/MD for local trail events.
  */
+import { liveMapScripts, MAP_CSS, MAP_LIVE_ZONE_CSS } from "../map/page.js";
+import { semanticInstallCommand, semanticRuntimeInstalled } from "./semantic-status.js";
 import { assertNoSecrets, clip, stripEscapes } from "../dash/render.js";
 import { clipMultiline, DIFF_MAX_TOTAL_CHARS } from "../diff-preview.js";
 import { DOMAIN_LABELS, domainOrder } from "../certify/render.js";
@@ -8,7 +10,7 @@ import type {
   CertifyRequirementResult,
   RequirementStatus,
 } from "../certify/evaluate.js";
-import { productLabel, readTrail, readTrailSince, type TrailEvent, type TrailImportFormat, type TrailProduct } from "../trail.js";
+import { productLabel, eventsSince, readTrail, type TrailEvent, type TrailImportFormat, type TrailProduct } from "../trail.js";
 import { mcpServerLabel, parseMcpToolId } from "../mcp-servers.js";
 import type { KyaFileConfig } from "../config.js";
 import {
@@ -53,6 +55,8 @@ import {
 import { receiptCss } from "./receipt-css.js";
 import { applyChipFilters, rankEvents } from "./search.js";
 import { emptyOpenshellCard, loadOpenshellCard, type OpenshellCard } from "./openshell-card.js";
+import { readIocResult, type IocResult } from "../ioc/result.js";
+import { postureCard, type PostureCard } from "../posture/card.js";
 
 export const PAGE_SIZE = 50;
 
@@ -106,6 +110,10 @@ export interface ReceiptModel {
   readonly alerts?: NotifyLogSummary;
   /** Persisted OTLP export counters from .kya/otel-stats.json. */
   readonly otel?: OtelStats;
+  /** Last IoC scan result from ~/.kya/ioc-latest.json. Advisory; never sent by buildSharePayload. */
+  readonly ioc?: IocResult;
+  /** Developer setup card: the posture preview and the local toggle. No device id, no label. */
+  readonly posture?: PostureCard;
 }
 
 function esc(s: string): string {
@@ -412,6 +420,8 @@ export function buildReceiptModel(
     investigate: extras?.investigate,
     alerts: extras?.alerts,
     otel: extras?.otel,
+    ioc: extras?.ioc,
+    posture: extras?.posture,
   };
 }
 
@@ -445,6 +455,8 @@ export function buildWindowReceiptModel(
     investigate: extras?.investigate,
     alerts: extras?.alerts,
     otel: extras?.otel,
+    ioc: extras?.ioc,
+    posture: extras?.posture,
   };
 }
 
@@ -462,13 +474,13 @@ export function loadReceiptModel(input: {
   const days = input.days > 0 ? Math.floor(input.days) : 3;
   const env = input.env ?? process.env;
   const showback = loadShowbackCard(input.cwd);
-  const events = input.sessionId
-    ? readTrail(input.cwd, env)
-    : readTrailSince(input.cwd, new Date(Date.now() - days * 24 * 60 * 60 * 1000), env);
-  // The Import card aggregates the full trail, not just the window: imported
-  // spans keep their foreign timestamps and would fall out of a short window.
+  // One trail read per model. The Import card aggregates the full trail, not just the window:
+  // imported spans keep their foreign timestamps and would fall out of a short window.
   // The OpenShell card rolls up the same full-trail view for the same reason.
-  const importEvents = input.sessionId ? events : readTrail(input.cwd, env);
+  const importEvents = readTrail(input.cwd, env);
+  const events = input.sessionId
+    ? importEvents
+    : eventsSince(importEvents, new Date(Date.now() - days * 24 * 60 * 60 * 1000));
   const certify = loadCertifyCard(input.cwd);
   const extras = {
     page: input.page ?? 1,
@@ -488,6 +500,8 @@ export function loadReceiptModel(input: {
     investigate: loadInvestigateLastRun(env),
     alerts: summarizeNotifyLog(readNotifyLog(env)),
     otel: readOtelStats(env),
+    ioc: readIocResult(env),
+    posture: postureCard(env),
     spend: showback
       ? {
           tokens: showback.totalTokensIn + showback.totalTokensOut,
@@ -549,8 +563,27 @@ function projectMeta(project: string | undefined): string {
       <span class="project">${esc(clip(p, 40))}</span>`;
 }
 
-function renderFeed(events: readonly TrailEvent[], nowMs: number, live?: boolean, preserveOrder?: boolean): string {
+/** Empty list while events exist: the search or the chip filters matched nothing. */
+function noMatchHint(query: string | undefined, env: NodeJS.ProcessEnv = process.env): string {
+  const q = query?.trim();
+  if (!q) return "No events match these filters. Clear a filter to see more.";
+  const base = `No events match &ldquo;${esc(clip(q, 60))}&rdquo;.`;
+  if (semanticRuntimeInstalled(env)) return base;
+  return (
+    `${base} Plain-language search is off, so only exact words match. ` +
+    `Turn it on once with <code>${esc(semanticInstallCommand(env))}</code>, then search again.`
+  );
+}
+
+function renderFeed(
+  events: readonly TrailEvent[],
+  nowMs: number,
+  live?: boolean,
+  preserveOrder?: boolean,
+  noMatch?: string,
+): string {
   if (events.length === 0) {
+    if (noMatch) return `<p class="empty">${noMatch}</p>`;
     const hint = live
       ? "No events yet - evaluate a tool call with <code>kya wrap</code> and this page will refresh."
       : "No events yet - evaluate a tool call with <code>kya wrap</code>, then regenerate this receipt.";
@@ -2201,6 +2234,7 @@ export function renderFeedPage(
   query?: string,
   embeddings?: ReadonlyMap<string, number[]>,
   queryEmbedding?: number[],
+  indexVersion?: string,
 ): FeedPageResult {
   const q = query?.trim();
   let ordered: TrailEvent[];
@@ -2212,6 +2246,7 @@ export function renderFeedPage(
       embeddings,
       queryEmbedding,
       facetBoost: 0.05,
+      indexVersion,
     });
     ordered = ranked.map((r) => r.event);
     total = ranked.length;
@@ -2226,7 +2261,7 @@ export function renderFeedPage(
   const pageEvents = ordered.slice(start, start + PAGE_SIZE);
 
   return {
-    feedHtml: renderFeed(pageEvents, nowMs, live, !!q),
+    feedHtml: renderFeed(pageEvents, nowMs, live, !!q, pageEvents.length === 0 && events.length > 0 ? noMatchHint(q) : undefined),
     paginationHtml: paginationBar(total, p, pages),
     total,
     page: p,
@@ -2334,6 +2369,58 @@ export function buildLiveFragments(
   };
 }
 
+/** IoC check: a banner when a scan found something, otherwise a quiet card. Nothing before the first scan. */
+function iocSectionHtml(ioc: IocResult | undefined): string {
+  if (!ioc) return "";
+  const n = ioc.findings.length;
+  if (n > 0) {
+    const items = ioc.findings
+      .map((f) => `<li><code>${esc(f.ioc)}</code> ${esc(f.check)} <code>${esc(f.evidence)}</code><br><span class="mute">Fix: ${esc(f.hint)}</span></li>`)
+      .join("");
+    return `<aside class="alert" aria-label="IoC findings">
+  <strong>IoC check: ${n} finding${n === 1 ? "" : "s"} (advisory)</strong>
+  <ul>${items}</ul>
+  <span class="mute">List ${esc(ioc.listVersion)} · checked ${esc(ioc.checkedAt)}. A clean check does not prove the machine is clean.</span>
+</aside>`;
+  }
+  return `<section class="card" aria-label="IoC check">
+  <h3>IoC check</h3>
+  <p class="mute">No findings. List ${esc(ioc.listVersion)} · checked ${esc(ioc.checkedAt)} · unreadable files skipped: ${ioc.skipped}. Advisory: a clean check does not prove the machine is clean.</p>
+</section>`;
+}
+
+/** Developer setup card (advisory). Shows what a send would contain and the local on/off switch. */
+function postureSectionHtml(card: PostureCard | undefined, live: boolean): string {
+  if (!card) return "";
+  const list = (items: readonly string[]): string =>
+    items.length === 0 ? "none" : items.map((i) => `<code>${esc(i)}</code>`).join(", ");
+  const toggle = live
+    ? card.share
+      ? `<button type="button" class="stat" data-report-action="posture" data-posture-share="off">Stop sharing</button>`
+      : `<button type="button" class="stat" data-report-action="posture" data-posture-share="on">Turn sharing on</button>`
+    : `<p class="mute small">To change this, run <code>kya posture on</code> or <code>kya posture off</code>.</p>`;
+  const blocked =
+    card.violations.length > 0
+      ? `<p class="mute">Not sendable as it is: ${esc(card.violations.map((v) => `${v.path || "report"} (${v.reason})`).join("; "))}.</p>`
+      : "";
+  return `<section class="card" aria-label="Developer setup">
+  <h3>Developer setup</h3>
+  <p class="mute">Sharing is <strong>${card.share ? "on" : "off"}</strong>. Hosted login: ${card.hosted ? "yes" : "no"}. Workspace policy (cached): ${esc(card.policy)}${card.lastSentAt ? `. Last sent: ${esc(card.lastSentAt)}` : ""}.</p>
+  <p class="mute small">What a send would contain. No device id, no label, no paths, no environment values, no user name:</p>
+  <ul>
+    <li>Agent hosts: ${list(card.hosts)}</li>
+    <li>Agent extensions: ${list(card.extensions)}</li>
+    <li>MCP servers (name, transport, command name): ${list(card.mcpServers)}</li>
+    <li>IoC check: ${esc(card.iocLine)}</li>
+    <li>Never-list: mode ${esc(card.neverMode)}</li>
+  </ul>
+  ${blocked}
+  ${toggle}
+  <div id="report-action-result-posture"></div>
+  <p class="mute small">Advisory. This card reports what is shared. It does not prevent anything.</p>
+</section>`;
+}
+
 export function renderReceiptHtml(model: ReceiptModel): string {
   const nowMs = Date.now();
   const events = normalizeTrailEvents(model.events);
@@ -2366,6 +2453,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       ? model.mcpSeen.map((m) => m.toolId)
       : [...new Set(events.map((e) => e.toolId))];
 
+  const iocHtml = iocSectionHtml(model.ioc) + postureSectionHtml(model.posture, !!model.liveToken);
   const blockedBanner =
     blocked.length === 0
       ? ""
@@ -2726,6 +2814,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       dirty = false;
       feedUpdate();
       scheduleFragments();
+      if (window.kyaMapRefresh && location.hash === '#map') window.kyaMapRefresh();
     }
     // EventSource is absent in DOM shims and very old engines; the page still
     // works, it just does not stream updates.
@@ -3021,7 +3110,9 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       var resultEl = document.getElementById('report-action-result-' + action);
       btn.disabled = true;
       setResult(resultEl, 'Working...', false);
-      post('/action/' + action, {})
+      var shareAttr = btn.getAttribute('data-posture-share');
+      var body = shareAttr ? { share: shareAttr === 'on' } : {};
+      post('/action/' + action, body)
         .then(parseJson)
         .then(function(data){
           if (data && data.ok) {
@@ -3031,7 +3122,9 @@ export function renderReceiptHtml(model: ReceiptModel): string {
                 ? 'Done: ' + data.total + ' item(s) discovered'
                 : action === 'notify-test'
                   ? (data.detail ? String(data.detail) : 'Test alert sent to ' + data.targets + ' target(s)')
-                  : String(data.detail || 'ok');
+                  : action === 'posture'
+                    ? 'Developer setup sharing is ' + (data.share ? 'on' : 'off') + '.'
+                    : String(data.detail || 'ok');
             setResult(resultEl, '<p>' + esc(msg) + '</p>', false);
             if (action === 'otel-test') {
               btn.disabled = false;
@@ -3132,7 +3225,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>${esc(model.title)} - ${esc(model.rangeLabel)}</title>
-<style>${receiptCss()}</style>
+<style>${receiptCss()}${model.liveToken ? MAP_CSS + MAP_LIVE_ZONE_CSS : ""}</style>
 </head>
 <body>
 <aside class="sidebar">
@@ -3148,6 +3241,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     ${navItem("#changes", "Changes", changes.fileCount)}
     ${navItem("#certify", "Certify", model.certify?.gap ?? 0)}
     ${navItem("#orr", "ORR", model.orr ? model.orr.scorecards.fail : undefined)}
+    ${model.liveToken ? navItem("#map", "Map", undefined) : ""}
     ${navGroup("Gateway", model.gate?.state === "running")}
     ${navSubItem("#gateway-home", "Home", model.gate?.servers.length ?? 0)}
     ${navSubItem("#gateway-listeners", "Listeners", model.gate?.listeners?.length ?? 0)}
@@ -3173,6 +3267,7 @@ ${model.liveToken ? '<main data-live-token="1">' : '<main>'}
     ${identityLine(model.identity)}
   </header>
   ${blockedBanner}
+  ${iocHtml}
   <section class="zone" id="overview" aria-labelledby="tab-overview">
     <div class="hero">
       ${fr.fragments.heroCertify}
@@ -3212,12 +3307,14 @@ ${fr.fragments.changesList}
   <section class="zone" id="orr" aria-labelledby="tab-orr">
     <div id="frag-orr">${fr.fragments.orrPanel}</div>
   </section>
+  ${model.liveToken ? '<section class="zone" id="map" aria-labelledby="tab-map"><div id="frag-map"><p class="mute">Loading the map.</p></div></section>' : ""}
   ${gatePagePanel(model.gate, nowMs)}
   <section class="zone" id="system" aria-labelledby="tab-system">
     ${systemBody}
   </section>
 </main>
 ${filterScript}
+${model.liveToken ? liveMapScripts() : ""}
 ${staticSearchScript}
 ${themeScript}
 ${gateScript}
@@ -3241,6 +3338,13 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     `Allow ${c.allow} | Deny ${c.deny} | Review ${c.require} | Never ${c.never}`,
     "",
   ];
+  if (model.ioc) {
+    const k = model.ioc.findings.length;
+    lines.push(
+      mdText(`IoC check (advisory): ${k === 0 ? "no findings" : `${k} finding${k === 1 ? "" : "s"}`}, list ${model.ioc.listVersion}, checked ${model.ioc.checkedAt}.`),
+      "",
+    );
+  }
 
   if (model.identity) {
     const id = model.identity;

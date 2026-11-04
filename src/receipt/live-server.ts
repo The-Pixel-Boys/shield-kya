@@ -4,7 +4,7 @@
  * Requires a minted token (?t=) - same pattern as HTTP MCP shared secret.
  */
 import { randomBytes } from "node:crypto";
-import { mkdirSync, statSync, watch, type FSWatcher } from "node:fs";
+import { existsSync, mkdirSync, statSync, watch, type FSWatcher } from "node:fs";
 import {
   createServer,
   type IncomingHttpHeaders,
@@ -41,7 +41,10 @@ import {
   buildLiveFragments,
   type FeedFilters,
 } from "./render-receipt.js";
-import { trailPath, type TrailEvent } from "../trail.js";
+import { trailPath, trailVersion, type TrailEvent } from "../trail.js";
+import { installSalt } from "../device-id.js";
+import { loadMap, type LoadedMap } from "../map/load.js";
+import { cytoscapeSource, renderMapBody, scanMapOutput } from "../map/page.js";
 import { buildEventEmbeddings, EventEmbeddingCache, LocalMiniLmProvider } from "./embeddings.js";
 import type { EmbeddingProvider } from "./embeddings.js";
 
@@ -56,6 +59,14 @@ export interface LiveReceiptOptions {
   readonly port?: number;
   /** Test-only injection point for the embedding provider. */
   readonly embeddingProvider?: EmbeddingProvider;
+  /** Close after this many ms with no open request (an SSE stream counts). Omit for no idle close. */
+  readonly idleMs?: number;
+  /** Close once the project dir is gone, checked every this many ms. Omit for no check. */
+  readonly cwdPollMs?: number;
+  /** Close when RSS is above this many MB, so the next start is a fresh process. Omit for no ceiling. */
+  readonly maxRssMb?: number;
+  /** Memory check period in ms (default 30 s). */
+  readonly memPollMs?: number;
 }
 
 export interface LiveReceiptServer {
@@ -378,12 +389,28 @@ export function startLiveReceiptServer(
   const cwd = options.config.cwd;
   const path = trailPath(cwd);
   const token = randomBytes(24).toString("base64url");
+  // Per-install salt for the map's session hashes. A random value when the salt cannot be read (never a constant).
+  const mapSalt = installSalt(process.env) ?? randomBytes(16).toString("hex");
+  const loadLiveMap = (): Promise<LoadedMap> =>
+    loadMap({
+      path: trailPath(cwd, process.env),
+      days: options.days,
+      now: new Date(),
+      salt: mapSalt,
+      session: options.sessionId,
+      tzOffsetMinutes: -new Date().getTimezoneOffset(),
+    });
   const clients = new Set<ServerResponse>();
   let watcher: FSWatcher | undefined;
   let debounce: ReturnType<typeof setTimeout> | undefined;
   let orrTimer: ReturnType<typeof setInterval> | undefined;
+  let cwdTimer: ReturnType<typeof setInterval> | undefined;
+  let memTimer: ReturnType<typeof setInterval> | undefined;
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  let openRequests = 0;
   let closed = false;
   let onSignal: (() => void) | undefined;
+  const idleMs = options.idleMs;
   const cache = new EventEmbeddingCache();
   const provider = options.embeddingProvider ?? new LocalMiniLmProvider(process.env);
   let embeddings = new Map<string, number[]>();
@@ -473,7 +500,24 @@ export function startLiveReceiptServer(
     return true;
   }
 
+  // Re-armed by the last request to close, so the timer counts from that close.
+  const armIdle = (): void => {
+    if (closed || idleMs === undefined) return;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(checkIdle, idleMs);
+    idleTimer.unref?.();
+  };
+  // An open request (an SSE stream included) is never idle; its close re-arms the timer.
+  const checkIdle = (): void => {
+    if (openRequests === 0) void closeAll();
+  };
+
   const server: Server = createServer((req, res) => {
+    openRequests++;
+    res.once("close", () => {
+      openRequests--;
+      if (openRequests === 0) armIdle();
+    });
     try {
       const url = new URL(req.url ?? "/", `http://${LOOPBACK}`);
       const isPostAction =
@@ -488,6 +532,7 @@ export function startLiveReceiptServer(
           url.pathname === "/action/notify-test" ||
           url.pathname === "/action/otel-test" ||
           url.pathname === "/action/orr-run" ||
+          url.pathname === "/action/posture" ||
           url.pathname === "/fragments");
       if (isPostAction && !isLoopbackClient(req)) {
         return forbidden(res, { ok: false, error: "loopback only" });
@@ -647,6 +692,29 @@ export function startLiveReceiptServer(
         return;
       }
 
+      if (req.method === "POST" && url.pathname === "/action/posture") {
+        void (async () => {
+          try {
+            const body = (await readJsonBody(req)) as Record<string, unknown> | undefined;
+            const { setPostureShare } = await import("../posture/card.js");
+            // No share field: report the current state (the page's generic action probe sends an empty body).
+            if (body?.share === undefined) {
+              const { shareOn } = await import("../posture/store.js");
+              return jsonOk(res, { ok: true, share: shareOn(process.env) });
+            }
+            if (typeof body.share !== "boolean") return badRequest(res, { ok: false, error: "share must be true or false" });
+            const r = setPostureShare(process.env, body.share);
+            if (!r.ok) return badRequest(res, { ok: false, error: r.error });
+            return jsonOk(res, { ok: true, share: r.share });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(`${JSON.stringify({ ok: false, error: message })}\n`);
+          }
+        })();
+        return;
+      }
+
       if (req.method === "POST" && url.pathname === "/action/otel-test") {
         void (async () => {
           try {
@@ -684,6 +752,8 @@ export function startLiveReceiptServer(
             const filters = isFeedFilters(body?.filters) ? body.filters : {};
             const requestedPage = typeof body?.page === "number" && body.page > 0 ? Math.floor(body.page) : 1;
             const q = typeof body?.q === "string" ? body.q : "";
+            // Taken before the read: a write during the read gives a new version next time.
+            const indexVersion = `${trailVersion(cwd)}|${options.sessionId ?? ""}|${options.days}`;
             const model = loadReceiptModel({
               cwd,
               sessionId: options.sessionId,
@@ -702,6 +772,7 @@ export function startLiveReceiptServer(
               q,
               embeddings,
               queryEmbedding,
+              indexVersion,
             );
             return jsonOk(res, {
               ok: true,
@@ -730,7 +801,14 @@ export function startLiveReceiptServer(
         // so keep-alive sockets are not wedged.
         void (async () => {
           try {
-            await readJsonBody(req);
+            const body = (await readJsonBody(req)) as Record<string, unknown> | null | undefined;
+            if (body && body.map === true) {
+              // Map tab refresh: only the map body, so the activity fragments stay as they were.
+              const map = await loadLiveMap();
+              const mapBody = renderMapBody(map.graph, map.heat, options.days);
+              scanMapOutput(mapBody);
+              return jsonOk(res, { ok: true, fragments: { mapBody } });
+            }
             const model = loadReceiptModel({
               cwd,
               sessionId: options.sessionId,
@@ -747,6 +825,35 @@ export function startLiveReceiptServer(
         return;
       }
 
+      if (req.method === "GET" && url.pathname === "/vendor/cytoscape.min.js") {
+        // The vendored library (MIT, vendor/cytoscape/LICENSE) for the live Map tab. Token-gated like every route.
+        res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(cytoscapeSource());
+        return;
+      }
+      if (url.pathname === "/map.json") {
+        if (req.method !== "GET") {
+          res.writeHead(405, { Allow: "GET", "Content-Type": "text/plain; charset=utf-8" });
+          res.end("method not allowed\n");
+          return;
+        }
+        void (async () => {
+          try {
+            const map = await loadLiveMap();
+            const payload = { ...map.graph, heat: map.heat };
+            const body = JSON.stringify(payload);
+            scanMapOutput(body);
+            res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+            res.end(`${body}\n`);
+            return;
+          } catch {
+            // Generic on purpose: an error message can hold the trail path.
+            res.writeHead(500, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+            res.end(`${JSON.stringify({ ok: false, error: "map failed" })}\n`);
+          }
+        })();
+        return;
+      }
       if (req.method === "GET" && url.pathname === "/healthz") {
         // Cheap liveness + version handshake for daemon reuse - never renders,
         // so a render-time failure (e.g. assertNoSecrets) cannot wedge it. The
@@ -822,6 +929,9 @@ export function startLiveReceiptServer(
       closed = true;
       if (debounce) clearTimeout(debounce);
       if (orrTimer) clearInterval(orrTimer);
+      if (cwdTimer) clearInterval(cwdTimer);
+      if (memTimer) clearInterval(memTimer);
+      if (idleTimer) clearTimeout(idleTimer);
       if (onSignal) {
         process.removeListener("SIGINT", onSignal);
         process.removeListener("SIGTERM", onSignal);
@@ -867,6 +977,28 @@ export function startLiveReceiptServer(
       setTimeout(refreshOrr, 1_500);
       orrTimer = setInterval(refreshOrr, ORR_REFRESH_MS);
       orrTimer.unref?.();
+
+      if (options.cwdPollMs !== undefined) {
+        // Two misses in a row: a volume that unmounts for a moment must not stop a healthy daemon.
+        let cwdMisses = 0;
+        cwdTimer = setInterval(() => {
+          cwdMisses = existsSync(cwd) ? 0 : cwdMisses + 1;
+          if (cwdMisses >= 2) void closeAll();
+        }, options.cwdPollMs);
+        cwdTimer.unref?.();
+      }
+      const maxRssMb = options.maxRssMb;
+      if (maxRssMb !== undefined) {
+        // shortcut: RSS reads low on macOS when pages are compressed, so this ceiling is lenient there.
+        memTimer = setInterval(() => {
+          const rssMb = process.memoryUsage.rss() / (1024 * 1024);
+          if (rssMb <= maxRssMb) return;
+          console.error(`memory ceiling: rss ${Math.round(rssMb)} MB above ${maxRssMb} MB, exiting`);
+          void closeAll();
+        }, options.memPollMs ?? 30_000);
+        memTimer.unref?.();
+      }
+      armIdle();
 
       try {
         mkdirSync(dirname(path), { recursive: true });

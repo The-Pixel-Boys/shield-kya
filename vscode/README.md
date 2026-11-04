@@ -2,7 +2,7 @@
 
 Audit trail and traceability for AI agents, inside your editor. This extension shows what kya recorded for every coding-agent tool call (Claude Code, Cursor, Codex, Gemini CLI and the other hosts kya wires). It does not gate anything itself.
 
-**Advisory.** Local kya records every tool call, blocks only the never-list (for example a `drop_table` on a known Postgres MCP server) and fails open: if kya is missing or broken, the agent's call still runs. Enforcement (fail-closed hooks, Hold tickets, human approvals) is the hosted Shield product. This extension never claims or adds enforcement.
+**Advisory.** Local kya records every tool call, blocks the never-list (for example a `drop_table` on a known Postgres MCP server) and the guard pack (destructive shell commands, credential reads, secret writes, exfiltration) and fails open: if kya is missing or broken, the agent's call still runs. Enforcement (fail-closed hooks, Hold tickets, human approvals) is the hosted Shield product. This extension never claims or adds enforcement.
 
 ## What it does
 

@@ -19,6 +19,7 @@ export const FREE_PANES = [
   "orr",
   "mcp",
   "sandbox",
+  "ioc",
 ] as const;
 
 export type FreePane = (typeof FREE_PANES)[number];

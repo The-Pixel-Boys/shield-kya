@@ -1,6 +1,6 @@
 # Kiro CLI
 
-Wire KYA into [Kiro](https://kiro.dev) so every tool call the agent makes passes Shield's evaluate first. Allow runs, Deny stops, Hold waits for a person.
+Wire KYA into [Kiro](https://kiro.dev) so tool calls the agent routes through Shield's MCP gate pass Shield's evaluate first and are recorded. Kiro's built-in tools do not go through the gate and are not evaluated or recorded. Allow runs, Deny stops, Hold waits for a person.
 
 ## Setup
 
@@ -20,7 +20,7 @@ Prefer editing by hand? Copy [`kiro/mcp.example.json`](../../kiro/mcp.example.js
 
 ## What KYA reports
 
-Every tool call Kiro routes through MCP lands on the receipt: tool id, decision (Allow / Deny / Hold), timestamp, and a clipped, redacted preview of what would change. Open it with `kya receipt --open`, or check Kiro's MCP server panel.
+Each tool call Kiro routes through Shield's MCP gate lands on the receipt: tool id, decision (Allow / Deny / Hold), timestamp, and a clipped, redacted preview of what would change. Open it with `kya receipt --open`, or check Kiro's MCP server panel.
 
 ## Files written
 

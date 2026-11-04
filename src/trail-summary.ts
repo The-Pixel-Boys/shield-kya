@@ -126,15 +126,25 @@ export function scrubUrl(value: string): string {
   return value.replace(/([?&#][^=\s]*=)[^&\s#]+/g, "$1[redacted]");
 }
 
+/** Longest command text read for a summary. */
+const SHELL_SUMMARY_INPUT_MAX = 8192;
+
+/** True when a `?`, `&` or `#` is followed somewhere later by `=`. Linear: the regex form `/[?&#].*=/` is quadratic on a long run of `?`. */
+function hasQueryAssign(s: string): boolean {
+  const i = s.search(/[?&#]/);
+  return i >= 0 && s.indexOf("=", i + 1) >= 0;
+}
+
 /**
  * Shell lines: keep bin + arg count only - never the full command
  * (env assignments, -p passwords, Basic auth headers).
  */
 export function summarizeShellCommand(cmd: string): string {
-  const trimmed = cmd.trim();
+  // Only the binary and the argument count are kept; a longer string only feeds the quadratic scrub below.
+  const trimmed = cmd.slice(0, SHELL_SUMMARY_INPUT_MAX).trim();
   if (!trimmed) return "shell";
   // Space-free URL masquerading as a "command" - scrub query before binning.
-  if (!/\s/.test(trimmed) && (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) || /[?&#].*=/.test(trimmed))) {
+  if (!/\s/.test(trimmed) && (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) || hasQueryAssign(trimmed))) {
     return finalize([`shell`, pathLike(trimmed)]) ?? "shell";
   }
   const tokens = trimmed.split(/\s+/).filter(Boolean);
@@ -142,7 +152,7 @@ export function summarizeShellCommand(cmd: string): string {
   let i = 0;
   while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i]!)) i++;
   let bin = tokens[i] ?? "cmd";
-  if (/^[a-z][a-z0-9+.-]*:/i.test(bin) || /[?&#].*=/.test(bin)) {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(bin) || hasQueryAssign(bin)) {
     bin = pathLike(bin);
   }
   const rest = Math.max(0, tokens.length - i - 1);

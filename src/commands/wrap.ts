@@ -1,4 +1,7 @@
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { constants as osConstants } from "node:os";
+import { neverListInputMatch } from "../never-list-input.js";
 import { factoryWorkItemId } from "../hash.js";
 import type { ResolvedConfig } from "../config.js";
 import {
@@ -7,7 +10,7 @@ import {
 } from "../client.js";
 import { UsageError } from "../errors.js";
 import type { ParsedArgs } from "../parse-args.js";
-import { flagString } from "../parse-args.js";
+import { flagBool, flagString } from "../parse-args.js";
 import {
   evalToolInputFromArgs,
   runEvalTool,
@@ -17,11 +20,14 @@ import { appendTrail, defaultSessionId } from "../trail.js";
 import { assertNoSecrets } from "../dash/render.js";
 import { deriveDiffPreview } from "../diff-preview.js";
 import { deriveTargetPath, deriveTrailSummary } from "../trail-summary.js";
+import { trailMapFields } from "../trail-map-fields.js";
 import { maybeSpawnNotifyFlush } from "../notify/dispatch.js";
+import { isNeverCode } from "../never-code.js";
 
 export interface WrapResult {
   readonly eval: EvalToolResult;
-  readonly sideEffect: "blocked";
+  /** "executed" only on the `wrap -- <cmd>` form, after an allowing verdict. */
+  readonly sideEffect: "blocked" | "executed";
   readonly approval?: ApprovalResponse;
   readonly workItemId?: string;
   readonly next?: string;
@@ -67,16 +73,18 @@ function recordTrail(
     verdict: evalResult.response.verdict,
     reasonCode: reason,
     mode,
-    neverEvent: reason === "NEVER_EVENT",
+    neverEvent: isNeverCode(reason),
     argsHash: evalResult.argsHash,
-    ...(summary ? { summary } : {}),
-    ...(diffPreview ? { diffPreview } : {}),
+    ...trailMapFields(toolId, args, config.cwd, process.env),
+    // A secret-shaped write is denied because its text is a secret: no summary or preview of it is stored.
+    ...(summary && reason !== "NEVER_SECRET_WRITE" ? { summary } : {}),
+    ...(diffPreview && reason !== "NEVER_SECRET_WRITE" ? { diffPreview } : {}),
     ...(targetPath ? { targetPath } : {}),
   };
   appendTrail(config.cwd, trailEvent);
   // Webhooks + OTLP export ride a detached helper; wrap never waits on the
   // network. No-op unless a sink is configured.
-  maybeSpawnNotifyFlush({ env: process.env, cwd: config.cwd, event: trailEvent });
+  maybeSpawnNotifyFlush({ env: process.env, cwd: config.cwd, event: trailEvent, projectDir: config.cwd });
 }
 
 export async function runWrap(
@@ -185,6 +193,96 @@ export function wrapInputFromArgs(parsed: ParsedArgs) {
   };
 }
 
+/** `kya wrap [flags] -- <cmd...>`: the command to gate and run, or undefined for the --tool-id form. */
+export function wrapCommandFromArgs(parsed: ParsedArgs): readonly string[] | undefined {
+  const rest = parsed.rest;
+  if (rest === undefined) return undefined;
+  if (rest.length === 0 || !rest[0]) throw new UsageError("wrap -- needs a command: kya wrap [--offline] -- <cmd> [args...]");
+  return rest;
+}
+
+/** Flags of the command form: the tool is always the host shell tool, so no --tool-id. */
+export function wrapCommandInputFromArgs(parsed: ParsedArgs) {
+  return {
+    offline: flagBool(parsed.flags, "offline"),
+    irreversible: flagBool(parsed.flags, "irreversible"),
+    sessionRisk: flagString(parsed.flags, "session-risk", "risk"),
+    approvalStatus: flagString(parsed.flags, "approval-status"),
+    workItemId: flagString(parsed.flags, "work-item", "workItem"),
+  };
+}
+
+/** POSIX single-quote every token that needs it, so the joined text re-parses to the same argv. */
+export function shellJoin(argv: readonly string[]): string {
+  return argv
+    .map((a) => (/^[A-Za-z0-9_@%+=:,./~-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`))
+    .join(" ");
+}
+
+/** Run argv with inherited stdio. Exit code: the child's, 126 not executable, 127 not found, 128+n by signal. */
+export function spawnWrapped(argv: readonly string[], error: (m: string) => void): number {
+  const r = spawnSync(argv[0]!, argv.slice(1), { stdio: "inherit" });
+  if (r.error) {
+    const code = (r.error as NodeJS.ErrnoException).code;
+    error(`kya wrap: cannot run ${argv[0]}: ${code ?? "spawn failed"}`);
+    return code === "EACCES" ? 126 : 127;
+  }
+  if (r.status === null) return 128 + (osConstants.signals[r.signal as NodeJS.Signals] ?? 0);
+  return r.status;
+}
+
+export interface WrapCommandResult {
+  readonly wrap: WrapResult;
+  readonly exitCode: number;
+  readonly ran: boolean;
+}
+
+/**
+ * Gate one command, then run it only when the verdict allows (exit code 0: ALLOW, or an
+ * observed REQUIRE_APPROVE). The local input rules run on the online path too, so a
+ * command the hook would deny is never run from here. `onEvaluated` reports before the
+ * command starts, so the verdict lines come first.
+ */
+export async function runWrapCommand(
+  config: ResolvedConfig,
+  argv: readonly string[],
+  input: {
+    irreversible?: boolean;
+    sessionRisk?: string;
+    approvalStatus?: string;
+    offline?: boolean;
+    workItemId?: string;
+  },
+  opts: {
+    client?: KyaHttpClient;
+    onEvaluated?: (w: WrapResult) => Promise<void> | void;
+    run?: (argv: readonly string[]) => number;
+  } = {},
+): Promise<WrapCommandResult> {
+  const args = { command: shellJoin(argv) };
+  const localHit = neverListInputMatch("Bash", args, undefined, config.cwd);
+  let wrap: WrapResult;
+  if (localHit) {
+    const offline = Boolean(input.offline || config.offline);
+    const evalResult: EvalToolResult = {
+      response: { verdict: "DENY", reasonCode: "NEVER_EVENT", toolId: "Bash", ruleId: localHit.rule },
+      toolId: "Bash",
+      argsHash: undefined,
+      offline,
+    };
+    recordTrail(config, evalResult, offline ? "offline" : "observe", args);
+    wrap = { eval: evalResult, sideEffect: "blocked", next: "denied - the command was not run" };
+  } else {
+    wrap = await runWrap(config, { ...input, toolId: "Bash", args }, opts.client);
+  }
+  const code = wrapExitCode(wrap);
+  const ran = code === 0;
+  if (ran) wrap = { ...wrap, sideEffect: "executed", next: "evaluated ok - running the command" };
+  await opts.onEvaluated?.(wrap);
+  if (!ran) return { wrap, exitCode: code, ran };
+  return { wrap, exitCode: (opts.run ?? ((a) => spawnWrapped(a, (m) => process.stderr.write(`${m}\n`))))(argv), ran };
+}
+
 export function formatWrapHuman(result: WrapResult): string {
   const r = result.eval.response;
   return [
@@ -200,7 +298,6 @@ export function formatWrapHuman(result: WrapResult): string {
     result.eval.offline
       ? "mode: offline-sample (not production PEP)"
       : undefined,
-    "View activity: kya receipt --open",
   ]
     .filter(Boolean)
     .join("\n");

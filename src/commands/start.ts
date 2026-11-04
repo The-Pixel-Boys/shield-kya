@@ -438,7 +438,13 @@ export function formatStartHuman(r: StartResult): string {
       : undefined,
     r.gate ? r.gate.summary : undefined,
     ...(r.gate?.warnings.map((w) => `gateway warning: ${w}`) ?? []),
-    r.liveUrl ? `report: ${r.liveUrl}` : undefined,
+    r.liveUrl
+      ? `report: ${r.liveUrl}${
+          r.reportReused
+            ? ` (already running, pid ${r.reportPid}; to restart it run kya stop, then kya start)`
+            : ""
+        }`
+      : undefined,
     r.next,
   ]
     .filter(Boolean)

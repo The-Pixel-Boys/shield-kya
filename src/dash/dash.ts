@@ -23,6 +23,9 @@ import {
   sessionsLiveBody,
 } from "./screens/free.js";
 import { loadSandboxState } from "../sandbox/runtime.js";
+import { iocLines } from "../ioc/format.js";
+import { readIocResult } from "../ioc/result.js";
+import { iocEnabled } from "../ioc/spawn.js";
 import {
   casesBody,
   dashboardBody,
@@ -188,6 +191,13 @@ async function bodyFor(
       }));
       return pack(sandboxBody({ backend, rows }));
     }
+    case "ioc":
+      return pack([
+        "IoC check (advisory): known supply-chain indicators on this machine.",
+        "Run kya doctor --iocs to check now.",
+        "",
+        ...iocLines(readIocResult(env), iocEnabled(env)),
+      ]);
     case "dashboard":
       if (!live) return pack(needsPlaneBody("dashboard"));
       return pack(dashboardBody(await loadDashboard(options.client!)));

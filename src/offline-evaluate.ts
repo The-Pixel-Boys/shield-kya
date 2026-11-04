@@ -11,6 +11,8 @@ import { findHostToolTier } from "./host-tools.js";
 import { mcpToolTier, parseMcpToolId } from "./mcp-servers.js";
 import { findSampleTool, type ActionClass, type PolicyVerdict } from "./sample-tools.js";
 import { neverListInputMatch } from "./never-list-input.js";
+import { guardContextFrom, guardPackMatch, matchesShellNeverList as matchesShell, readGuardConfig, type GuardContext } from "./guard-pack.js";
+import type { ProjectPolicy } from "./project-policy.js";
 
 export type SessionRisk = "LOW" | "MEDIUM" | "HIGH";
 
@@ -79,11 +81,20 @@ export function matchesNeverList(toolId: string): boolean {
   return NEVER_LIST_VERBS.some((v) => rest.includes(v));
 }
 
+/**
+ * Shell-family guard rules only (`terraform destroy`, `git push --force`, ...): the stable rule id of the
+ * first match, or null. See guard-pack.ts; the full set (secrets, exfiltration, config) runs in evaluateOffline.
+ */
+export function matchesShellNeverList(command: string, ctx: { cwd: string; home: string; projectRoot: string }): string | null {
+  return matchesShell(command, ctx);
+}
+
 function baseTier(
   toolId: string,
   irreversible: boolean,
   actionClass: string | undefined,
   toolInput: unknown,
+  guard: GuardContext,
 ): { verdict: PolicyVerdict; reasonCode: string; ruleId?: string } {
   if (!toolId || toolId.trim() === "") {
     return { verdict: "DENY", reasonCode: "EMPTY_TOOL" };
@@ -95,9 +106,14 @@ function baseTier(
     return { verdict: "DENY", reasonCode: "NEVER_EVENT" };
   }
   // Input rules (shell command, secret path): same DENY, same code.
-  const inputHit = neverListInputMatch(toolId, toolInput);
+  const inputHit = neverListInputMatch(toolId, toolInput, undefined, guard.cwd);
   if (inputHit) {
     return { verdict: "DENY", reasonCode: "NEVER_EVENT", ruleId: inputHit.rule };
+  }
+  // Guard pack (second layer; config from the user-level file only, see guard-pack.ts).
+  const guardHit = guardPackMatch(toolId, toolInput, guard, readGuardConfig(guard.home).config);
+  if (guardHit) {
+    return { verdict: "DENY", reasonCode: guardHit.code, ruleId: guardHit.rule };
   }
 
   const known = findSampleTool(toolId);
@@ -151,6 +167,24 @@ function baseTier(
   return { verdict: "REQUIRE_APPROVE", reasonCode: "UNKNOWN_TOOL" };
 }
 
+/**
+ * Tighten-only repo policy (.kya/policy.json). Runs AFTER baseTier, so the never-list and every base DENY
+ * stay DENY: a policy entry can never relax a verdict. Exact tool id match.
+ */
+export function applyProjectPolicy(
+  base: { verdict: PolicyVerdict; reasonCode: string; ruleId?: string },
+  toolId: string,
+  policy: ProjectPolicy | undefined,
+): { verdict: PolicyVerdict; reasonCode: string; ruleId?: string } {
+  if (!policy || base.verdict === "DENY") return base;
+  const id = toolId.trim();
+  if (policy.deny.has(id)) return { verdict: "DENY", reasonCode: "POLICY_DENY", ruleId: "project-policy.deny" };
+  if (base.verdict === "ALLOW" && policy.requireApprove.has(id)) {
+    return { verdict: "REQUIRE_APPROVE", reasonCode: "POLICY_REQUIRE_APPROVE", ruleId: "project-policy.requireApprove" };
+  }
+  return base;
+}
+
 /** Raise-only: risk may bump ALLOW → REQUIRE_APPROVE; never lowers DENY/REQUIRE_APPROVE. */
 export function applySessionRisk(
   base: { verdict: PolicyVerdict; reasonCode: string; ruleId?: string },
@@ -173,11 +207,14 @@ export function applySessionRisk(
  * Doctrine: sole production PEP remains Shield HTTP; this is demo/CT only.
  * `toolInput` is the raw host tool input, read only for the never-list input rules.
  * It never goes into the request (only argsHash does), so nothing leaves the machine.
+ * `guard` is the cwd, home and env the guard pack resolves paths and variables against.
  */
 export function evaluateOffline(
   req: PolicyEvaluateRequest,
   host: Host = "ide",
   toolInput?: unknown,
+  policy?: ProjectPolicy,
+  guard: GuardContext = guardContextFrom(process.cwd()),
 ): PolicyEvaluateResponse {
   const irreversible = req.irreversible ?? false;
   const known = findSampleTool(req.toolId);
@@ -195,7 +232,11 @@ export function evaluateOffline(
       opaReason: "OFFLINE_SAMPLE",
     };
   }
-  const base = baseTier(req.toolId, irreversible, req.actionClass, toolInput);
+  const base = applyProjectPolicy(
+    baseTier(req.toolId, irreversible, req.actionClass, toolInput, guard),
+    req.toolId,
+    policy,
+  );
   const risk = (req.sessionRisk as SessionRisk | undefined) ?? "LOW";
   const final = applySessionRisk(base, risk);
   const resolvedHost = req.env?.host ?? host;

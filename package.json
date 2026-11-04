@@ -1,6 +1,6 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.32.9",
+  "version": "0.33.1",
   "description": "Audit trail and traceability for AI agents. See what every coding agent did and check each tool call against policy.",
   "license": "MIT",
   "type": "module",
@@ -25,6 +25,8 @@
   "files": [
     "dist",
     "catalog",
+    "data",
+    "vendor",
     "README.md",
     "server.json",
     "LICENSE",
@@ -73,13 +75,15 @@
     "check:version": "node scripts/check-version-pins.mjs",
     "sync:channel-copy": "node scripts/check-channel-copy.mjs --write",
     "check:channel-copy": "node scripts/check-channel-copy.mjs",
+    "sync:features": "node scripts/sync-features.mjs",
+    "check:features": "node scripts/sync-features.mjs --check",
     "prepublishOnly": "pnpm run check:version && pnpm run build && pnpm test"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "@vitest/coverage-v8": "^3.2.6",
+    "@vitest/coverage-v8": "^4.1.11",
     "typescript": "^5.7.2",
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.11"
   },
   "publishConfig": {
     "access": "public"

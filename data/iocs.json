@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "version": "2026-10-30.1",
+  "iocs": [
+    {
+      "id": "ioc-2026-claude-vscode-trojan",
+      "title": "Trojanized anthropic.claude-code 2.1.313",
+      "severity": "critical",
+      "source": "https://thehackernews.com/2026/10/official-claude-code-vs-code-extension.html",
+      "checks": [
+        { "kind": "extension", "id": "anthropic.claude-code", "versions": ["2.1.313"] },
+        { "kind": "ssh_authorized_keys_comment", "value": "svc-telemetry" },
+        { "kind": "net_indicator", "value": "134.209.82.225", "where": ["crontab", "launchagents", "systemd_user", "ssh_config", "shell_rc"] }
+      ]
+    }
+  ]
+}

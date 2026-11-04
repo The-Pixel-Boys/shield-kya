@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { UsageError } from "../errors.js";
-import { atomicWriteSync } from "../fs-atomic.js";
+import { atomicWriteSync, projectWritePath, writeProjectFile } from "../fs-atomic.js";
 // imports from connect.ts are call-time only (shared fs/registry helpers) - safe cycle
 import {
   cliJsPath,
@@ -22,8 +22,11 @@ export interface WireHookInput {
   readonly host: string;
   readonly home: string;
   readonly force?: boolean;
-  /** Hosted-plane hook (beta, claude only): flags appended to the command. Never the key. */
+  /** Hosted-plane hook (preview, claude only): flags appended to the command. Never the key. */
   readonly hosted?: HostedHookWiring;
+  /** "project" writes `<cwd>/.claude/settings.json` (claude only) instead of the home config. */
+  readonly scope?: "global" | "project";
+  readonly cwd?: string;
 }
 
 export interface HostedHookWiring {
@@ -50,6 +53,9 @@ export function hookSupported(hostId: string): boolean {
 }
 
 const HOOK_TIMEOUT_SECONDS = 5;
+
+export const PROJECT_HOOK_CLAUDE_ONLY = (host: string): string =>
+  `--project hook wiring is claude only; ${host} hooks live in the user config (drop --project)`;
 
 /** Shell command a host's PreToolUse hook runs. JSON-quoted paths are safe to embed. */
 export function hookCommand(hostId: string, hosted?: HostedHookWiring): string {
@@ -99,16 +105,19 @@ interface ClaudeSettingsHookEntry {
  * instead of rewritten. An existing kya entry (matched by command identity)
  * means skipped; --force replaces that one entry, preserving all others.
  */
-function wireClaudeSettings(path: string, force: boolean, hosted?: HostedHookWiring): ConnectStatus {
+function wireClaudeSettings(path: string, force: boolean, hosted?: HostedHookWiring, root?: string): ConnectStatus {
   const entry = preToolUseEntry("claude", hosted);
+  // Project scope (root set): never follow a link out of the project; home scope keeps the dotfiles behaviour.
+  const write = (t: string, content: string) =>
+    root ? writeProjectFile(path, content, root) : atomicWriteSync(t, content);
   if (!existsSync(path)) {
-    atomicWriteSync(
-      createTarget(path),
+    write(
+      root ? path : createTarget(path),
       `${JSON.stringify({ hooks: { PreToolUse: [entry] } }, null, 2)}\n`,
     );
     return "created";
   }
-  const target = writeTarget(path);
+  const target = root ? projectWritePath(path, root) : writeTarget(path);
   let raw: Record<string, unknown>;
   try {
     raw = JSON.parse(readFileSync(target, "utf8")) as Record<string, unknown>;
@@ -162,7 +171,7 @@ function wireClaudeSettings(path: string, force: boolean, hosted?: HostedHookWir
   }
   hooksObj["PreToolUse"] = entries;
   raw["hooks"] = hooksObj;
-  atomicWriteSync(target, `${JSON.stringify(raw, null, 2)}\n`);
+  write(target, `${JSON.stringify(raw, null, 2)}\n`);
   return "wired";
 }
 
@@ -273,8 +282,12 @@ export function wireHook(input: WireHookInput): WireHookResult {
   const force = Boolean(input.force);
   if (input.hosted && key !== "claude") {
     throw new UsageError(
-      `--hosted hook wiring is claude only in this beta (needs the host's onFailure "block"); ${input.host} is not supported`,
+      `--hosted hook wiring is claude only in this preview (needs the host's onFailure "block"); ${input.host} is not supported`,
     );
+  }
+  const project = input.scope === "project";
+  if (project && key !== "claude") {
+    throw new UsageError(PROJECT_HOOK_CLAUDE_ONLY(input.host));
   }
   let label: string;
   let path: string;
@@ -282,8 +295,14 @@ export function wireHook(input: WireHookInput): WireHookResult {
   switch (key as HookHostId) {
     case "claude":
       label = CONNECT_REGISTRY["claude"]!.label;
-      path = join(input.home, ".claude", "settings.json");
-      status = wireClaudeSettings(path, force, input.hosted);
+      if (project) {
+        if (!input.cwd) throw new UsageError("--project hook wiring needs a project directory");
+        path = join(input.cwd, ".claude", "settings.json");
+        status = wireClaudeSettings(path, force, input.hosted, input.cwd);
+      } else {
+        path = join(input.home, ".claude", "settings.json");
+        status = wireClaudeSettings(path, force, input.hosted);
+      }
       break;
     case "grok":
       label = CONNECT_REGISTRY["grok"]!.label;
