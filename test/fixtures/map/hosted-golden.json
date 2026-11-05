@@ -1,0 +1,3405 @@
+{
+ "_comment": "Synthetic inputs. Expected values are written by the TS code: UPDATE_MAP_GOLDEN=1 npx vitest run test/map-hosted-golden.test.ts. Read by core MapGoldenParityTest (Java port).",
+ "classify": [
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/Users/zz-user/.ssh/id_rsa"
+   },
+   "expected": {
+    "class": "secret:ssh-key",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/home/zz/.ssh/id_ed25519.pub"
+   },
+   "expected": {
+    "class": "home:dot/**",
+    "family": "home"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "~/.aws/credentials"
+   },
+   "expected": {
+    "class": "secret:cloud-credential",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/x/.config/gcloud/credentials.db"
+   },
+   "expected": {
+    "class": "secret:cloud-credential",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/srv/app/.env"
+   },
+   "expected": {
+    "class": "secret:env-file",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/srv/app/.env.example"
+   },
+   "expected": {
+    "class": "absolute:other",
+    "family": "other"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/srv/app/.env.local"
+   },
+   "expected": {
+    "class": "secret:env-file",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/srv/app/x.pem"
+   },
+   "expected": {
+    "class": "secret:key-file",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/srv/app/x.pem\n"
+   },
+   "expected": {
+    "class": "absolute:other",
+    "family": "other"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/srv/app/.env\n"
+   },
+   "expected": {
+    "class": "absolute:other",
+    "family": "other"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "~root/.ssh/id_rsa"
+   },
+   "expected": {
+    "class": "secret:ssh-key",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "~zz/.npmrc"
+   },
+   "expected": {
+    "class": "secret:other",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/a/b/../../home/zz/.netrc"
+   },
+   "expected": {
+    "class": "secret:other",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/srv/.e[n]v"
+   },
+   "expected": {
+    "class": "secret:other",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "~/.n?mrc"
+   },
+   "expected": {
+    "class": "secret:other",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/home/zz/.s?h/id_rsa"
+   },
+   "expected": {
+    "class": "secret:other",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/home/zz/.ssh/*"
+   },
+   "expected": {
+    "class": "secret:ssh-key",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/srv//app/./.aws/credentials"
+   },
+   "expected": {
+    "class": "secret:cloud-credential",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/tmp/x"
+   },
+   "expected": {
+    "class": "tmp:/**",
+    "family": "tmp"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/private/var/folders/ab/c"
+   },
+   "expected": {
+    "class": "tmp:/**",
+    "family": "tmp"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/etc/passwd"
+   },
+   "expected": {
+    "class": "system:/etc/**",
+    "family": "system"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/private/etc/hosts"
+   },
+   "expected": {
+    "class": "system:/private/etc/**",
+    "family": "system"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/usr"
+   },
+   "expected": {
+    "class": "system:/usr/**",
+    "family": "system"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/opt2/x"
+   },
+   "expected": {
+    "class": "absolute:other",
+    "family": "other"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/w/proj-a/src/a.ts",
+    "project": "proj-a"
+   },
+   "expected": {
+    "class": "project:proj-a/src/**",
+    "family": "project"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/w/proj-a/internal-plans/a.md",
+    "project": "proj-a"
+   },
+   "expected": {
+    "class": "project:proj-a/(other)/**",
+    "family": "project"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/w/proj-a/README.md",
+    "project": "proj-a"
+   },
+   "expected": {
+    "class": "project:proj-a/*",
+    "family": "project"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/w/a@b/src/x",
+    "project": "a@b"
+   },
+   "expected": {
+    "class": "project:(other)/src/**",
+    "family": "project"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/home/zz/home/y",
+    "project": "home"
+   },
+   "expected": {
+    "class": "home:other",
+    "family": "home"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/w/proj-a/src/a.ts"
+   },
+   "expected": {
+    "class": "absolute:other",
+    "family": "other"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "src/main.ts"
+   },
+   "expected": {
+    "class": "project:(relative)/src/**",
+    "family": "project"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "README"
+   },
+   "expected": {
+    "class": "project:(relative)/*",
+    "family": "project"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "x:y/z"
+   },
+   "expected": {
+    "class": "project:(relative)/(other)/**",
+    "family": "project"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "C:\\Users\\x"
+   },
+   "expected": {
+    "class": "absolute:other",
+    "family": "other"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "\\\\server\\share"
+   },
+   "expected": {
+    "class": "absolute:other",
+    "family": "other"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "~"
+   },
+   "expected": {
+    "class": "home:other",
+    "family": "home"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "~/Documents/x"
+   },
+   "expected": {
+    "class": "home:other",
+    "family": "home"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/Users/zz-user/.zshrc"
+   },
+   "expected": {
+    "class": "home:dot/**",
+    "family": "home"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/root"
+   },
+   "expected": {
+    "class": "home:other",
+    "family": "home"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "/Users/zz-user/x\ny"
+   },
+   "expected": {
+    "class": "absolute:other",
+    "family": "other"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "https://Example.COM/a?b=c"
+   },
+   "expected": {
+    "class": "network:example.com",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://u:p@host.io:8080/x"
+   },
+   "expected": {
+    "class": "network:host.io",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://[::1]:8080/"
+   },
+   "expected": {
+    "class": "network:[::1]",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://[2001:DB8:0:0:0:0:0:1]/"
+   },
+   "expected": {
+    "class": "network:[2001:db8::1]",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "https://münchen.de/"
+   },
+   "expected": {
+    "class": "network:xn--mnchen-3ya.de",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://a b.com/"
+   },
+   "expected": {
+    "class": "network:other",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://exa\\mple.com"
+   },
+   "expected": {
+    "class": "network:exa",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://0x7f.1/"
+   },
+   "expected": {
+    "class": "network:127.0.0.1",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://1234/"
+   },
+   "expected": {
+    "class": "network:0.0.4.210",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://a:99999/"
+   },
+   "expected": {
+    "class": "network:other",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "ftp://files.example.org/x"
+   },
+   "expected": {
+    "class": "network:files.example.org",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "s3://bucket/key"
+   },
+   "expected": {
+    "class": "network:other",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "HTTP://X.ORG"
+   },
+   "expected": {
+    "class": "network:x.org",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http:///host.com/x"
+   },
+   "expected": {
+    "class": "network:host.com",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://ex%41mple.com/"
+   },
+   "expected": {
+    "class": "network:example.com",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://host.com./"
+   },
+   "expected": {
+    "class": "network:other",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "https://ex_ample.com"
+   },
+   "expected": {
+    "class": "network:other",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://08.1.2.3/"
+   },
+   "expected": {
+    "class": "network:other",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://[::ffff:1.2.3.4]/"
+   },
+   "expected": {
+    "class": "network:[::ffff:102:304]",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://exa\tmple.com/"
+   },
+   "expected": {
+    "class": "network:example.com",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://0x٣f.1/"
+   },
+   "expected": {
+    "class": "network:other",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "https://h.example:٣/x"
+   },
+   "expected": {
+    "class": "network:other",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://[fe80::1%25eth0]/"
+   },
+   "expected": {
+    "class": "network:other",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://[::]/"
+   },
+   "expected": {
+    "class": "network:[::]",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://[1:0:2:3:4:5:6:7]/"
+   },
+   "expected": {
+    "class": "network:[1:0:2:3:4:5:6:7]",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "http://[1:0:0:2:0:0:3:4]/"
+   },
+   "expected": {
+    "class": "network:[1::2:0:0:3:4]",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "file:///home/zz/.aws/credentials"
+   },
+   "expected": {
+    "class": "secret:cloud-credential",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "file:///etc/hosts"
+   },
+   "expected": {
+    "class": "system:/etc/**",
+    "family": "system"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "file://localhost/tmp/x"
+   },
+   "expected": {
+    "class": "tmp:/**",
+    "family": "tmp"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "file:///Users/zz/My%20Docs/x"
+   },
+   "expected": {
+    "class": "home:other",
+    "family": "home"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "file:///a/../etc/x"
+   },
+   "expected": {
+    "class": "system:/etc/**",
+    "family": "system"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "file:///x/%zz"
+   },
+   "expected": {
+    "class": "absolute:other",
+    "family": "other"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "file://a b/x"
+   },
+   "expected": {
+    "class": "absolute:other",
+    "family": "other"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "file:///tmp/a+b"
+   },
+   "expected": {
+    "class": "tmp:/**",
+    "family": "tmp"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "FILE:///home/zz/.ssh/id_rsa"
+   },
+   "expected": {
+    "class": "secret:ssh-key",
+    "family": "secret"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "summary": "shell git (+3 args)"
+   },
+   "expected": {
+    "class": "command:git",
+    "family": "command"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "summary": "shell /usr/bin/ls"
+   },
+   "expected": {
+    "class": "command:ls",
+    "family": "command"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "summary": "shell https://evil.example/x (+1 args)"
+   },
+   "expected": {
+    "class": "network:evil.example",
+    "family": "network"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "summary": "shell a b (+1 args)"
+   },
+   "expected": {
+    "class": "none",
+    "family": "none"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "summary": "shell ../x;rm (+1 args)"
+   },
+   "expected": {
+    "class": "command:other",
+    "family": "command"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "summary": "shell git\n"
+   },
+   "expected": {
+    "class": "none",
+    "family": "none"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "summary": "ran tests"
+   },
+   "expected": {
+    "class": "none",
+    "family": "none"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write"
+   },
+   "expected": {
+    "class": "none",
+    "family": "none"
+   }
+  },
+  {
+   "input": {
+    "toolId": "Write",
+    "targetPath": "",
+    "summary": "shell npm (+2 args)"
+   },
+   "expected": {
+    "class": "command:npm",
+    "family": "command"
+   }
+  }
+ ],
+ "secret": [
+  {
+   "input": "/x/.aws/cred*",
+   "expected": true
+  },
+  {
+   "input": "/x/.ssh/id_rsa.pub",
+   "expected": false
+  },
+  {
+   "input": "/x/.env.sample",
+   "expected": false
+  },
+  {
+   "input": "/x/.env.prod",
+   "expected": true
+  },
+  {
+   "input": "/x/.en?",
+   "expected": true
+  },
+  {
+   "input": "/x/.e?v.local",
+   "expected": true
+  },
+  {
+   "input": "/x/k.key",
+   "expected": true
+  },
+  {
+   "input": "~/.git-credentials",
+   "expected": true
+  },
+  {
+   "input": "/Users/zz/.netrc",
+   "expected": true
+  },
+  {
+   "input": "/x/.config/gcloud/legacy_credentials/a",
+   "expected": true
+  },
+  {
+   "input": "/x/[abc",
+   "expected": false
+  },
+  {
+   "input": "/x/.s[!a]h/id_x",
+   "expected": true
+  }
+ ],
+ "toolClass": [
+  {
+   "input": {
+    "toolId": "kya:approve"
+   },
+   "expected": "kya"
+  },
+  {
+   "input": {
+    "toolId": "mcp__gh__create_issue"
+   },
+   "expected": "mcp"
+  },
+  {
+   "input": {
+    "toolId": "Bash"
+   },
+   "expected": "shell"
+  },
+  {
+   "input": {
+    "toolId": "Run",
+    "summary": "shell ls"
+   },
+   "expected": "shell"
+  },
+  {
+   "input": {
+    "toolId": "Fetch",
+    "targetPath": "https://x.example"
+   },
+   "expected": "network"
+  },
+  {
+   "input": {
+    "toolId": "Write"
+   },
+   "expected": "write"
+  },
+  {
+   "input": {
+    "toolId": "MultiEdit"
+   },
+   "expected": "write"
+  },
+  {
+   "input": {
+    "toolId": "fs.update"
+   },
+   "expected": "write"
+  },
+  {
+   "input": {
+    "toolId": "Read"
+   },
+   "expected": "read"
+  },
+  {
+   "input": {
+    "toolId": "Grep"
+   },
+   "expected": "read"
+  },
+  {
+   "input": {
+    "toolId": "tools/search"
+   },
+   "expected": "read"
+  },
+  {
+   "input": {
+    "toolId": "Task"
+   },
+   "expected": "other"
+  },
+  {
+   "input": {
+    "toolId": "Notebook.delete"
+   },
+   "expected": "write"
+  }
+ ],
+ "bucket": [
+  {
+   "input": {
+    "verdict": "DENY",
+    "mode": "observe"
+   },
+   "expected": "deny"
+  },
+  {
+   "input": {
+    "verdict": "REQUIRE_APPROVE",
+    "mode": "hold"
+   },
+   "expected": "hold"
+  },
+  {
+   "input": {
+    "verdict": "REQUIRE_APPROVE",
+    "mode": "observe"
+   },
+   "expected": "observed"
+  },
+  {
+   "input": {
+    "verdict": "ALLOW",
+    "mode": "offline"
+   },
+   "expected": "allow"
+  },
+  {
+   "input": {
+    "verdict": "WEIRD",
+    "mode": "observe"
+   },
+   "expected": "observed"
+  },
+  {
+   "input": {
+    "verdict": "ALLOW",
+    "mode": "hold"
+   },
+   "expected": "allow"
+  }
+ ],
+ "graph": {
+  "salt": "golden-salt",
+  "maxNodes": 20,
+  "rows": [
+   {
+    "ts": "2026-10-29T03:07:00Z",
+    "sessionId": "s-2",
+    "host": "claude-code",
+    "toolId": "WebFetch",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "product": "cursor",
+    "project": "proj-b",
+    "targetPath": "https://h1.example/p"
+   },
+   {
+    "ts": "2026-10-29T09:14:00Z",
+    "sessionId": "s-3",
+    "host": "claude-code",
+    "toolId": "Bash",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "summary": "shell cmd2 (+1 args)"
+   },
+   {
+    "ts": "2026-10-29T14:21:00Z",
+    "sessionId": "s-1",
+    "host": "claude-code",
+    "toolId": "Read",
+    "verdict": "DENY",
+    "reasonCode": "never",
+    "mode": "observe",
+    "product": "claude-code",
+    "project": "proj-a",
+    "targetPath": "/Users/zz-user/.ssh/id_rsa"
+   },
+   {
+    "ts": "2026-10-29T22:28:00Z",
+    "sessionId": "s-2",
+    "host": "claude-code",
+    "toolId": "mcp__gh__create_issue",
+    "verdict": "REQUIRE_APPROVE",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "product": "cursor",
+    "project": "proj-b",
+    "targetPath": "https://api4.example/x"
+   },
+   {
+    "ts": "2026-10-30T03:35:00Z",
+    "sessionId": "s-3",
+    "host": "claude-code",
+    "toolId": "Edit",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "targetPath": "/tmp/build-5/x"
+   },
+   {
+    "ts": "2026-10-30T09:42:00Z",
+    "sessionId": "s-1",
+    "host": "claude-code",
+    "toolId": "Write",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "product": "claude-code",
+    "project": "proj-a",
+    "targetPath": "/w/proj-a/src/f6.ts"
+   },
+   {
+    "ts": "2026-10-30T14:49:00Z",
+    "sessionId": "s-2",
+    "host": "claude-code",
+    "toolId": "WebFetch",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "product": "cursor",
+    "project": "proj-b",
+    "targetPath": "https://h7.example/p"
+   },
+   {
+    "ts": "2026-10-30T22:56:00Z",
+    "sessionId": "s-3",
+    "host": "claude-code",
+    "toolId": "Bash",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "summary": "shell cmd8 (+1 args)"
+   },
+   {
+    "ts": "2026-10-31T03:03:00Z",
+    "sessionId": "s-1",
+    "host": "claude-code",
+    "toolId": "Read",
+    "verdict": "DENY",
+    "reasonCode": "never",
+    "mode": "observe",
+    "product": "claude-code",
+    "project": "proj-a",
+    "targetPath": "/Users/zz-user/.ssh/id_rsa"
+   },
+   {
+    "ts": "2026-10-31T09:10:00Z",
+    "sessionId": "s-2",
+    "host": "claude-code",
+    "toolId": "mcp__gh__create_issue",
+    "verdict": "REQUIRE_APPROVE",
+    "reasonCode": "ok",
+    "mode": "hold",
+    "product": "cursor",
+    "project": "proj-b",
+    "targetPath": "https://api10.example/x"
+   },
+   {
+    "ts": "2026-10-31T14:17:00Z",
+    "sessionId": "s-3",
+    "host": "claude-code",
+    "toolId": "Edit",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "targetPath": "/tmp/build-11/x"
+   },
+   {
+    "ts": "2026-10-31T22:24:00Z",
+    "sessionId": "s-1",
+    "host": "claude-code",
+    "toolId": "Write",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "product": "claude-code",
+    "project": "proj-a",
+    "targetPath": "/w/proj-a/src/f12.ts"
+   },
+   {
+    "ts": "2026-11-01T03:31:00Z",
+    "sessionId": "s-2",
+    "host": "claude-code",
+    "toolId": "WebFetch",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "product": "cursor",
+    "project": "proj-b",
+    "targetPath": "https://h13.example/p"
+   },
+   {
+    "ts": "2026-11-01T09:38:00Z",
+    "sessionId": "s-3",
+    "host": "claude-code",
+    "toolId": "Bash",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "summary": "shell cmd14 (+1 args)"
+   },
+   {
+    "ts": "2026-11-01T14:45:00Z",
+    "sessionId": "s-1",
+    "host": "claude-code",
+    "toolId": "Read",
+    "verdict": "DENY",
+    "reasonCode": "never",
+    "mode": "observe",
+    "product": "claude-code",
+    "project": "proj-a",
+    "targetPath": "/Users/zz-user/.ssh/id_rsa"
+   },
+   {
+    "ts": "2026-11-01T22:52:00Z",
+    "sessionId": "s-2",
+    "host": "claude-code",
+    "toolId": "mcp__gh__create_issue",
+    "verdict": "REQUIRE_APPROVE",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "product": "cursor",
+    "project": "proj-b",
+    "targetPath": "https://api16.example/x"
+   },
+   {
+    "ts": "2026-11-02T03:59:00Z",
+    "sessionId": "s-3",
+    "host": "claude-code",
+    "toolId": "Edit",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "targetPath": "/tmp/build-17/x"
+   },
+   {
+    "ts": "2026-11-02T09:06:00Z",
+    "sessionId": "s-1",
+    "host": "claude-code",
+    "toolId": "Write",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "product": "claude-code",
+    "project": "proj-a",
+    "targetPath": "/w/proj-a/src/f18.ts"
+   },
+   {
+    "ts": "2026-11-02T14:13:00Z",
+    "sessionId": "s-2",
+    "host": "claude-code",
+    "toolId": "WebFetch",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "product": "cursor",
+    "project": "proj-b",
+    "targetPath": "https://h19.example/p"
+   },
+   {
+    "ts": "2026-11-02T22:20:00Z",
+    "sessionId": "s-3",
+    "host": "claude-code",
+    "toolId": "Bash",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "summary": "shell cmd20 (+1 args)"
+   },
+   {
+    "ts": "2026-11-03T03:27:00Z",
+    "sessionId": "s-1",
+    "host": "claude-code",
+    "toolId": "Read",
+    "verdict": "DENY",
+    "reasonCode": "never",
+    "mode": "observe",
+    "product": "claude-code",
+    "project": "proj-a",
+    "targetPath": "/Users/zz-user/.ssh/id_rsa"
+   },
+   {
+    "ts": "2026-11-03T09:34:00Z",
+    "sessionId": "s-2",
+    "host": "claude-code",
+    "toolId": "mcp__gh__create_issue",
+    "verdict": "REQUIRE_APPROVE",
+    "reasonCode": "ok",
+    "mode": "hold",
+    "product": "cursor",
+    "project": "proj-b",
+    "targetPath": "https://api22.example/x"
+   },
+   {
+    "ts": "2026-11-03T14:41:00Z",
+    "sessionId": "s-3",
+    "host": "claude-code",
+    "toolId": "Edit",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "targetPath": "/tmp/build-23/x"
+   },
+   {
+    "ts": "2026-11-03T22:48:00Z",
+    "sessionId": "s-1",
+    "host": "claude-code",
+    "toolId": "Write",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "product": "claude-code",
+    "project": "proj-a",
+    "targetPath": "/w/proj-a/src/f24.ts"
+   },
+   {
+    "ts": "2026-11-04T03:55:00Z",
+    "sessionId": "s-2",
+    "host": "claude-code",
+    "toolId": "WebFetch",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "product": "cursor",
+    "project": "proj-b",
+    "targetPath": "https://h25.example/p"
+   },
+   {
+    "ts": "2026-11-04T09:02:00Z",
+    "sessionId": "s-3",
+    "host": "claude-code",
+    "toolId": "Bash",
+    "verdict": "ALLOW",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "summary": "shell cmd26 (+1 args)"
+   },
+   {
+    "ts": "2026-11-04T14:09:00Z",
+    "sessionId": "s-1",
+    "host": "claude-code",
+    "toolId": "Read",
+    "verdict": "DENY",
+    "reasonCode": "never",
+    "mode": "observe",
+    "product": "claude-code",
+    "project": "proj-a",
+    "targetPath": "/Users/zz-user/.ssh/id_rsa"
+   },
+   {
+    "ts": "2026-11-04T22:16:00Z",
+    "sessionId": "s-2",
+    "host": "claude-code",
+    "toolId": "mcp__gh__create_issue",
+    "verdict": "REQUIRE_APPROVE",
+    "reasonCode": "ok",
+    "mode": "observe",
+    "product": "cursor",
+    "project": "proj-b",
+    "targetPath": "https://api28.example/x"
+   }
+  ],
+  "expected": {
+   "schemaVersion": 1,
+   "view": {
+    "source": "trail",
+    "rowsRead": 28,
+    "rowsSkipped": 0,
+    "rowsOutOfWindow": 0,
+    "legacyRows": 9,
+    "truncated": true,
+    "capExceeded": false,
+    "grouped": {
+     "agents": 0,
+     "tools": 0,
+     "targets": 10
+    },
+    "edgesDropped": 0
+   },
+   "nodes": [
+    {
+     "kind": "device",
+     "id": "device:local",
+     "label": "this machine",
+     "count": 28,
+     "verdicts": {
+      "allow": 18,
+      "deny": 5,
+      "hold": 2,
+      "observed": 3
+     },
+     "firstTs": "2026-10-29T03:07:00Z",
+     "lastTs": "2026-11-04T22:16:00Z"
+    },
+    {
+     "kind": "agent",
+     "id": "agent:1aa5e53aa0d4edde",
+     "label": null,
+     "count": 9,
+     "verdicts": {
+      "allow": 9,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T09:14:00Z",
+     "lastTs": "2026-11-04T09:02:00Z",
+     "product": "unknown",
+     "sessionHash": "1aa5e53aa0d4edde",
+     "legacy": true
+    },
+    {
+     "kind": "agent",
+     "id": "agent:551e034e3117b33d",
+     "label": "proj-a",
+     "count": 9,
+     "verdicts": {
+      "allow": 4,
+      "deny": 5,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T14:21:00Z",
+     "lastTs": "2026-11-04T14:09:00Z",
+     "product": "claude-code",
+     "sessionHash": "551e034e3117b33d",
+     "legacy": false
+    },
+    {
+     "kind": "agent",
+     "id": "agent:6b06b9b0ac13fbc7",
+     "label": "proj-b",
+     "count": 10,
+     "verdicts": {
+      "allow": 5,
+      "deny": 0,
+      "hold": 2,
+      "observed": 3
+     },
+     "firstTs": "2026-10-29T03:07:00Z",
+     "lastTs": "2026-11-04T22:16:00Z",
+     "product": "cursor",
+     "sessionHash": "6b06b9b0ac13fbc7",
+     "legacy": false
+    },
+    {
+     "kind": "tool",
+     "id": "tool:Bash",
+     "label": "Bash",
+     "count": 5,
+     "verdicts": {
+      "allow": 5,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T09:14:00Z",
+     "lastTs": "2026-11-04T09:02:00Z",
+     "toolId": "Bash",
+     "toolClass": "shell"
+    },
+    {
+     "kind": "tool",
+     "id": "tool:Edit",
+     "label": "Edit",
+     "count": 4,
+     "verdicts": {
+      "allow": 4,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-30T03:35:00Z",
+     "lastTs": "2026-11-03T14:41:00Z",
+     "toolId": "Edit",
+     "toolClass": "write"
+    },
+    {
+     "kind": "tool",
+     "id": "tool:Read",
+     "label": "Read",
+     "count": 5,
+     "verdicts": {
+      "allow": 0,
+      "deny": 5,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T14:21:00Z",
+     "lastTs": "2026-11-04T14:09:00Z",
+     "toolId": "Read",
+     "toolClass": "read"
+    },
+    {
+     "kind": "tool",
+     "id": "tool:WebFetch",
+     "label": "WebFetch",
+     "count": 5,
+     "verdicts": {
+      "allow": 5,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T03:07:00Z",
+     "lastTs": "2026-11-04T03:55:00Z",
+     "toolId": "WebFetch",
+     "toolClass": "network"
+    },
+    {
+     "kind": "tool",
+     "id": "tool:Write",
+     "label": "Write",
+     "count": 4,
+     "verdicts": {
+      "allow": 4,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-30T09:42:00Z",
+     "lastTs": "2026-11-03T22:48:00Z",
+     "toolId": "Write",
+     "toolClass": "write"
+    },
+    {
+     "kind": "tool",
+     "id": "tool:mcp__gh__create_issue",
+     "label": "mcp__gh__create_issue",
+     "count": 5,
+     "verdicts": {
+      "allow": 0,
+      "deny": 0,
+      "hold": 2,
+      "observed": 3
+     },
+     "firstTs": "2026-10-29T22:28:00Z",
+     "lastTs": "2026-11-04T22:16:00Z",
+     "toolId": "mcp__gh__create_issue",
+     "toolClass": "mcp"
+    },
+    {
+     "kind": "target",
+     "id": "target:command:cmd26",
+     "label": "command:cmd26",
+     "count": 1,
+     "verdicts": {
+      "allow": 1,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-11-04T09:02:00Z",
+     "lastTs": "2026-11-04T09:02:00Z",
+     "class": "command:cmd26",
+     "family": "command"
+    },
+    {
+     "kind": "target",
+     "id": "target:network:api10.example",
+     "label": "network:api10.example",
+     "count": 1,
+     "verdicts": {
+      "allow": 0,
+      "deny": 0,
+      "hold": 1,
+      "observed": 0
+     },
+     "firstTs": "2026-10-31T09:10:00Z",
+     "lastTs": "2026-10-31T09:10:00Z",
+     "class": "network:api10.example",
+     "family": "network"
+    },
+    {
+     "kind": "target",
+     "id": "target:network:api22.example",
+     "label": "network:api22.example",
+     "count": 1,
+     "verdicts": {
+      "allow": 0,
+      "deny": 0,
+      "hold": 1,
+      "observed": 0
+     },
+     "firstTs": "2026-11-03T09:34:00Z",
+     "lastTs": "2026-11-03T09:34:00Z",
+     "class": "network:api22.example",
+     "family": "network"
+    },
+    {
+     "kind": "target",
+     "id": "target:network:api28.example",
+     "label": "network:api28.example",
+     "count": 1,
+     "verdicts": {
+      "allow": 0,
+      "deny": 0,
+      "hold": 0,
+      "observed": 1
+     },
+     "firstTs": "2026-11-04T22:16:00Z",
+     "lastTs": "2026-11-04T22:16:00Z",
+     "class": "network:api28.example",
+     "family": "network"
+    },
+    {
+     "kind": "target",
+     "id": "target:network:h25.example",
+     "label": "network:h25.example",
+     "count": 1,
+     "verdicts": {
+      "allow": 1,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-11-04T03:55:00Z",
+     "lastTs": "2026-11-04T03:55:00Z",
+     "class": "network:h25.example",
+     "family": "network"
+    },
+    {
+     "kind": "target",
+     "id": "target:other:command",
+     "label": "other command (4)",
+     "class": "other:command",
+     "family": "command",
+     "count": 4,
+     "verdicts": {
+      "allow": 4,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T09:14:00Z",
+     "lastTs": "2026-11-02T22:20:00Z",
+     "grouped": 4
+    },
+    {
+     "kind": "target",
+     "id": "target:other:network",
+     "label": "other network (6)",
+     "class": "other:network",
+     "family": "network",
+     "count": 6,
+     "verdicts": {
+      "allow": 4,
+      "deny": 0,
+      "hold": 0,
+      "observed": 2
+     },
+     "firstTs": "2026-10-29T03:07:00Z",
+     "lastTs": "2026-11-02T14:13:00Z",
+     "grouped": 6
+    },
+    {
+     "kind": "target",
+     "id": "target:project:proj-a/src/**",
+     "label": "project:proj-a/src/**",
+     "count": 4,
+     "verdicts": {
+      "allow": 4,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-30T09:42:00Z",
+     "lastTs": "2026-11-03T22:48:00Z",
+     "class": "project:proj-a/src/**",
+     "family": "project"
+    },
+    {
+     "kind": "target",
+     "id": "target:secret:ssh-key",
+     "label": "secret:ssh-key",
+     "count": 5,
+     "verdicts": {
+      "allow": 0,
+      "deny": 5,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T14:21:00Z",
+     "lastTs": "2026-11-04T14:09:00Z",
+     "class": "secret:ssh-key",
+     "family": "secret"
+    },
+    {
+     "kind": "target",
+     "id": "target:tmp:/**",
+     "label": "tmp:/**",
+     "count": 4,
+     "verdicts": {
+      "allow": 4,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-30T03:35:00Z",
+     "lastTs": "2026-11-03T14:41:00Z",
+     "class": "tmp:/**",
+     "family": "tmp"
+    }
+   ],
+   "edges": [
+    {
+     "from": "agent:1aa5e53aa0d4edde",
+     "to": "target:command:cmd26",
+     "kind": "touches",
+     "tool": "Bash",
+     "count": 1,
+     "verdicts": {
+      "allow": 1,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-11-04T09:02:00Z",
+     "lastTs": "2026-11-04T09:02:00Z"
+    },
+    {
+     "from": "agent:1aa5e53aa0d4edde",
+     "to": "target:other:command",
+     "kind": "touches",
+     "tool": "Bash",
+     "count": 4,
+     "verdicts": {
+      "allow": 4,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T09:14:00Z",
+     "lastTs": "2026-11-02T22:20:00Z"
+    },
+    {
+     "from": "agent:1aa5e53aa0d4edde",
+     "to": "target:tmp:/**",
+     "kind": "touches",
+     "tool": "Edit",
+     "count": 4,
+     "verdicts": {
+      "allow": 4,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-30T03:35:00Z",
+     "lastTs": "2026-11-03T14:41:00Z"
+    },
+    {
+     "from": "agent:1aa5e53aa0d4edde",
+     "to": "tool:Bash",
+     "kind": "uses",
+     "count": 5,
+     "verdicts": {
+      "allow": 5,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T09:14:00Z",
+     "lastTs": "2026-11-04T09:02:00Z"
+    },
+    {
+     "from": "agent:1aa5e53aa0d4edde",
+     "to": "tool:Edit",
+     "kind": "uses",
+     "count": 4,
+     "verdicts": {
+      "allow": 4,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-30T03:35:00Z",
+     "lastTs": "2026-11-03T14:41:00Z"
+    },
+    {
+     "from": "agent:551e034e3117b33d",
+     "to": "target:project:proj-a/src/**",
+     "kind": "touches",
+     "tool": "Write",
+     "count": 4,
+     "verdicts": {
+      "allow": 4,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-30T09:42:00Z",
+     "lastTs": "2026-11-03T22:48:00Z"
+    },
+    {
+     "from": "agent:551e034e3117b33d",
+     "to": "target:secret:ssh-key",
+     "kind": "touches",
+     "tool": "Read",
+     "count": 5,
+     "verdicts": {
+      "allow": 0,
+      "deny": 5,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T14:21:00Z",
+     "lastTs": "2026-11-04T14:09:00Z"
+    },
+    {
+     "from": "agent:551e034e3117b33d",
+     "to": "tool:Read",
+     "kind": "uses",
+     "count": 5,
+     "verdicts": {
+      "allow": 0,
+      "deny": 5,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T14:21:00Z",
+     "lastTs": "2026-11-04T14:09:00Z"
+    },
+    {
+     "from": "agent:551e034e3117b33d",
+     "to": "tool:Write",
+     "kind": "uses",
+     "count": 4,
+     "verdicts": {
+      "allow": 4,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-30T09:42:00Z",
+     "lastTs": "2026-11-03T22:48:00Z"
+    },
+    {
+     "from": "agent:6b06b9b0ac13fbc7",
+     "to": "target:network:api10.example",
+     "kind": "touches",
+     "tool": "mcp__gh__create_issue",
+     "count": 1,
+     "verdicts": {
+      "allow": 0,
+      "deny": 0,
+      "hold": 1,
+      "observed": 0
+     },
+     "firstTs": "2026-10-31T09:10:00Z",
+     "lastTs": "2026-10-31T09:10:00Z"
+    },
+    {
+     "from": "agent:6b06b9b0ac13fbc7",
+     "to": "target:network:api22.example",
+     "kind": "touches",
+     "tool": "mcp__gh__create_issue",
+     "count": 1,
+     "verdicts": {
+      "allow": 0,
+      "deny": 0,
+      "hold": 1,
+      "observed": 0
+     },
+     "firstTs": "2026-11-03T09:34:00Z",
+     "lastTs": "2026-11-03T09:34:00Z"
+    },
+    {
+     "from": "agent:6b06b9b0ac13fbc7",
+     "to": "target:network:api28.example",
+     "kind": "touches",
+     "tool": "mcp__gh__create_issue",
+     "count": 1,
+     "verdicts": {
+      "allow": 0,
+      "deny": 0,
+      "hold": 0,
+      "observed": 1
+     },
+     "firstTs": "2026-11-04T22:16:00Z",
+     "lastTs": "2026-11-04T22:16:00Z"
+    },
+    {
+     "from": "agent:6b06b9b0ac13fbc7",
+     "to": "target:network:h25.example",
+     "kind": "touches",
+     "tool": "WebFetch",
+     "count": 1,
+     "verdicts": {
+      "allow": 1,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-11-04T03:55:00Z",
+     "lastTs": "2026-11-04T03:55:00Z"
+    },
+    {
+     "from": "agent:6b06b9b0ac13fbc7",
+     "to": "target:other:network",
+     "kind": "touches",
+     "tool": "WebFetch",
+     "count": 4,
+     "verdicts": {
+      "allow": 4,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T03:07:00Z",
+     "lastTs": "2026-11-02T14:13:00Z"
+    },
+    {
+     "from": "agent:6b06b9b0ac13fbc7",
+     "to": "target:other:network",
+     "kind": "touches",
+     "tool": "mcp__gh__create_issue",
+     "count": 2,
+     "verdicts": {
+      "allow": 0,
+      "deny": 0,
+      "hold": 0,
+      "observed": 2
+     },
+     "firstTs": "2026-10-29T22:28:00Z",
+     "lastTs": "2026-11-01T22:52:00Z"
+    },
+    {
+     "from": "agent:6b06b9b0ac13fbc7",
+     "to": "tool:WebFetch",
+     "kind": "uses",
+     "count": 5,
+     "verdicts": {
+      "allow": 5,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T03:07:00Z",
+     "lastTs": "2026-11-04T03:55:00Z"
+    },
+    {
+     "from": "agent:6b06b9b0ac13fbc7",
+     "to": "tool:mcp__gh__create_issue",
+     "kind": "uses",
+     "count": 5,
+     "verdicts": {
+      "allow": 0,
+      "deny": 0,
+      "hold": 2,
+      "observed": 3
+     },
+     "firstTs": "2026-10-29T22:28:00Z",
+     "lastTs": "2026-11-04T22:16:00Z"
+    },
+    {
+     "from": "device:local",
+     "to": "agent:1aa5e53aa0d4edde",
+     "kind": "runs",
+     "count": 9,
+     "verdicts": {
+      "allow": 9,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T09:14:00Z",
+     "lastTs": "2026-11-04T09:02:00Z"
+    },
+    {
+     "from": "device:local",
+     "to": "agent:551e034e3117b33d",
+     "kind": "runs",
+     "count": 9,
+     "verdicts": {
+      "allow": 4,
+      "deny": 5,
+      "hold": 0,
+      "observed": 0
+     },
+     "firstTs": "2026-10-29T14:21:00Z",
+     "lastTs": "2026-11-04T14:09:00Z"
+    },
+    {
+     "from": "device:local",
+     "to": "agent:6b06b9b0ac13fbc7",
+     "kind": "runs",
+     "count": 10,
+     "verdicts": {
+      "allow": 5,
+      "deny": 0,
+      "hold": 2,
+      "observed": 3
+     },
+     "firstTs": "2026-10-29T03:07:00Z",
+     "lastTs": "2026-11-04T22:16:00Z"
+    }
+   ]
+  }
+ },
+ "heat": {
+  "now": "2026-11-04T23:00:00Z",
+  "days": 7,
+  "expected": {
+   "when": {
+    "days": [
+     "2026-10-29",
+     "2026-10-30",
+     "2026-10-31",
+     "2026-11-01",
+     "2026-11-02",
+     "2026-11-03",
+     "2026-11-04"
+    ],
+    "hours": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23
+    ],
+    "cells": [
+     [
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0
+     ]
+    ],
+    "verdictCells": [
+     [
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 1,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 1
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      }
+     ],
+     [
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      }
+     ],
+     [
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 1,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 1,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      }
+     ],
+     [
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 1,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 1
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      }
+     ],
+     [
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      }
+     ],
+     [
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 1,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 1,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      }
+     ],
+     [
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 1,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 1,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 1
+      },
+      {
+       "allow": 0,
+       "deny": 0,
+       "hold": 0,
+       "observed": 0
+      }
+     ]
+    ],
+    "max": 1
+   },
+   "where": {
+    "rows": [
+     {
+      "class": "secret:ssh-key",
+      "family": "secret",
+      "allow": 0,
+      "deny": 5,
+      "hold": 0,
+      "observed": 0,
+      "total": 5
+     },
+     {
+      "class": "project:proj-a/src/**",
+      "family": "project",
+      "allow": 4,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0,
+      "total": 4
+     },
+     {
+      "class": "tmp:/**",
+      "family": "tmp",
+      "allow": 4,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0,
+      "total": 4
+     },
+     {
+      "class": "command:cmd14",
+      "family": "command",
+      "allow": 1,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0,
+      "total": 1
+     },
+     {
+      "class": "command:cmd2",
+      "family": "command",
+      "allow": 1,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0,
+      "total": 1
+     },
+     {
+      "class": "command:cmd20",
+      "family": "command",
+      "allow": 1,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0,
+      "total": 1
+     },
+     {
+      "class": "command:cmd26",
+      "family": "command",
+      "allow": 1,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0,
+      "total": 1
+     },
+     {
+      "class": "command:cmd8",
+      "family": "command",
+      "allow": 1,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0,
+      "total": 1
+     },
+     {
+      "class": "network:api10.example",
+      "family": "network",
+      "allow": 0,
+      "deny": 0,
+      "hold": 1,
+      "observed": 0,
+      "total": 1
+     },
+     {
+      "class": "network:api16.example",
+      "family": "network",
+      "allow": 0,
+      "deny": 0,
+      "hold": 0,
+      "observed": 1,
+      "total": 1
+     },
+     {
+      "class": "network:api22.example",
+      "family": "network",
+      "allow": 0,
+      "deny": 0,
+      "hold": 1,
+      "observed": 0,
+      "total": 1
+     },
+     {
+      "class": "network:api28.example",
+      "family": "network",
+      "allow": 0,
+      "deny": 0,
+      "hold": 0,
+      "observed": 1,
+      "total": 1
+     },
+     {
+      "class": "network:api4.example",
+      "family": "network",
+      "allow": 0,
+      "deny": 0,
+      "hold": 0,
+      "observed": 1,
+      "total": 1
+     },
+     {
+      "class": "network:h1.example",
+      "family": "network",
+      "allow": 1,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0,
+      "total": 1
+     },
+     {
+      "class": "network:h13.example",
+      "family": "network",
+      "allow": 1,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0,
+      "total": 1
+     },
+     {
+      "class": "network:h19.example",
+      "family": "network",
+      "allow": 1,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0,
+      "total": 1
+     },
+     {
+      "class": "network:h25.example",
+      "family": "network",
+      "allow": 1,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0,
+      "total": 1
+     },
+     {
+      "class": "network:h7.example",
+      "family": "network",
+      "allow": 1,
+      "deny": 0,
+      "hold": 0,
+      "observed": 0,
+      "total": 1
+     }
+    ],
+    "max": 5
+   }
+  }
+ }
+}

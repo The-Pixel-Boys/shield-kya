@@ -3,6 +3,7 @@
  * a crontab stub at a fixed path (never PATH), the real detached child process, and the built hook when dist exists.
  * Feature id and command, named as written: kya-ioc-scan, kya doctor --iocs.
  */
+import { count, reportZones } from "./support/report-zones.js";
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -306,6 +307,11 @@ describe.skipIf(!posix)("kya-ioc-scan: stored result, display and opt-out", () =
     const html = readFileSync(join(dirty.cwd, ".kya", "receipts", "last-3d.html"), "utf8");
     expect(html).toContain('aria-label="IoC findings"');
     expect(html).toContain("~/.cursor/extensions/anthropic.claude-code-2.1.313");
+    // The short banner repeats on every page; the detail is once, in the System zone.
+    const dirtyZones = reportZones(html);
+    expect(dirtyZones.top).toContain('aria-label="IoC findings"');
+    expect(dirtyZones.top).not.toContain("anthropic.claude-code-2.1.313");
+    expect(dirtyZones.zones["system"]).toContain("~/.cursor/extensions/anthropic.claude-code-2.1.313");
 
     const clean = fixture();
     process.env.KYA_HOME = clean.home;
@@ -314,6 +320,11 @@ describe.skipIf(!posix)("kya-ioc-scan: stored result, display and opt-out", () =
     const cleanHtml = readFileSync(join(clean.cwd, ".kya", "receipts", "last-3d.html"), "utf8");
     expect(cleanHtml).toContain('aria-label="IoC check"');
     expect(cleanHtml).not.toContain('aria-label="IoC findings"');
+    const cleanZones = reportZones(cleanHtml);
+    expect(cleanZones.top).not.toContain("IoC check");
+    expect(cleanZones.zones["system"]).toContain('aria-label="IoC check"');
+    expect(count(cleanHtml, 'aria-label="Developer setup"')).toBe(1);
+    expect(cleanZones.zones["system"]).toContain('aria-label="Developer setup"');
   });
 
   it("the dash ioc pane shows the findings", async () => {

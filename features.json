@@ -1474,6 +1474,20 @@
       "plan": "hosted"
     },
     {
+      "id": "kya-hosted-map",
+      "name": "Hosted agent map",
+      "summary": "Map of agent actions on the hosted console, by plane and session. Preview. Not live: gated by a feature flag.",
+      "cli": [],
+      "docs": [],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/KyaAgentMapE2eIT.java",
+        "../../app/src/test/java/com/shieldagent/app/KyaAgentMapFlagOffE2eIT.java",
+        "../../app/src/test/java/com/shieldagent/app/KyaAgentMapLimitE2eIT.java"
+      ],
+      "status": "flagged",
+      "plan": "hosted"
+    },
+    {
       "id": "kya-drata",
       "name": "Drata link",
       "summary": "Drata link. Not live: gated by a feature flag.",

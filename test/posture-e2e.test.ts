@@ -1,5 +1,6 @@
 // Real-stack e2e for `kya posture`: a loopback stub plays the hosted console, the real CLI
 // functions and the real HTTP client run against it. Happy paths and denied paths.
+import { count, reportZones } from "./support/report-zones.js";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { spawnSync } from "node:child_process";
@@ -255,6 +256,16 @@ describe("live receipt server and the card", () => {
         });
         expect(denied.status).toBe(401);
         expect(readPostureConfig(env).share).toBe(false);
+
+        // The card shows once, in the System zone, with the toggle and its result box.
+        const page = await (await fetch(`http://127.0.0.1:${s.port}/?t=${s.token}`)).text();
+        const { top, zones } = reportZones(page);
+        expect(count(page, 'aria-label="Developer setup"')).toBe(1);
+        expect(top).not.toContain("Developer setup");
+        expect(zones["system"]).toContain('data-report-action="posture" data-posture-share="on"');
+        expect(zones["system"]).toContain('id="report-action-result-posture"');
+        expect(page).toContain("A send also adds a random device id and a label.");
+        expect(page).not.toContain(DEVICE_ID);
 
         const bad = await fetch(`http://127.0.0.1:${s.port}/action/posture?t=${s.token}`, {
           method: "POST",

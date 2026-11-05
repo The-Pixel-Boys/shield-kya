@@ -48,7 +48,7 @@ describe("feature coverage: real tree", () => {
   it("passes on sdks/kya with every known gap listed", () => {
     const { problems, summary } = runChecks(PKG);
     expect(problems).toEqual([]);
-    expect(summary).toContain("86 rows");
+    expect(summary).toContain("87 rows");
     expect(summary).toContain("38 HELP commands");
   });
 
