@@ -14,7 +14,7 @@ kya doctor --iocs --json   # machine-readable output
 
 The last result is also shown in:
 
-- `kya receipt`: a banner at the top when there are findings, or an **IoC check** card when there are none.
+- `kya receipt`: the **IoC check** card is on the System page. When there are findings, a short banner also shows at the top of every page.
 - `kya dash`: pane 9 (`ioc`).
 
 ## Background scan

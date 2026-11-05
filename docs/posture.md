@@ -17,7 +17,7 @@ kya posture label NAME          # the name shown in the console (default: 8 hex 
 
 `kya posture on` never switches on a report that fails the local check. In scripts, use `kya posture on --yes`.
 
-The same switch is in the receipt report ("Developer setup" card, on the live report) and in `kya dash` (press `P`). The dashboard shows the preview first. A second `P` turns sharing on.
+The same switch is in the receipt report and in `kya dash` (press `P`). In the report, the "Developer setup" card is on the System page. The button shows on the live report only. A static report shows the commands. The card preview omits the device id and the label. A real send adds them. The dashboard shows the preview first. A second `P` turns sharing on.
 
 ## What is sent
 

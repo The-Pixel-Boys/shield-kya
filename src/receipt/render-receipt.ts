@@ -112,7 +112,7 @@ export interface ReceiptModel {
   readonly otel?: OtelStats;
   /** Last IoC scan result from ~/.kya/ioc-latest.json. Advisory; never sent by buildSharePayload. */
   readonly ioc?: IocResult;
-  /** Developer setup card: the posture preview and the local toggle. No device id, no label. */
+  /** Developer setup card: the posture preview and the local toggle. The preview omits the device id and the label. */
   readonly posture?: PostureCard;
 }
 
@@ -2369,7 +2369,20 @@ export function buildLiveFragments(
   };
 }
 
-/** IoC check: a banner when a scan found something, otherwise a quiet card. Nothing before the first scan. */
+/**
+ * IoC banner: only when a scan found something. It sits above the zones, so it shows on every
+ * page as a safety signal. The detail is in the System zone.
+ */
+function iocBannerHtml(ioc: IocResult | undefined): string {
+  const n = ioc?.findings.length ?? 0;
+  if (n === 0) return "";
+  return `<aside class="alert" aria-label="IoC findings">
+  <strong>IoC check: ${n} finding${n === 1 ? "" : "s"} (advisory)</strong>
+  <a href="#system">See the details on the System page</a>
+</aside>`;
+}
+
+/** IoC card for the System zone: the findings list, or a quiet line when clean. Nothing before the first scan. */
 function iocSectionHtml(ioc: IocResult | undefined): string {
   if (!ioc) return "";
   const n = ioc.findings.length;
@@ -2377,11 +2390,11 @@ function iocSectionHtml(ioc: IocResult | undefined): string {
     const items = ioc.findings
       .map((f) => `<li><code>${esc(f.ioc)}</code> ${esc(f.check)} <code>${esc(f.evidence)}</code><br><span class="mute">Fix: ${esc(f.hint)}</span></li>`)
       .join("");
-    return `<aside class="alert" aria-label="IoC findings">
-  <strong>IoC check: ${n} finding${n === 1 ? "" : "s"} (advisory)</strong>
+    return `<section class="card" aria-label="IoC check details">
+  <h3>IoC check: ${n} finding${n === 1 ? "" : "s"} (advisory)</h3>
   <ul>${items}</ul>
-  <span class="mute">List ${esc(ioc.listVersion)} · checked ${esc(ioc.checkedAt)}. A clean check does not prove the machine is clean.</span>
-</aside>`;
+  <p class="mute">List ${esc(ioc.listVersion)} · checked ${esc(ioc.checkedAt)}. A clean check does not prove the machine is clean.</p>
+</section>`;
   }
   return `<section class="card" aria-label="IoC check">
   <h3>IoC check</h3>
@@ -2406,7 +2419,8 @@ function postureSectionHtml(card: PostureCard | undefined, live: boolean): strin
   return `<section class="card" aria-label="Developer setup">
   <h3>Developer setup</h3>
   <p class="mute">Sharing is <strong>${card.share ? "on" : "off"}</strong>. Hosted login: ${card.hosted ? "yes" : "no"}. Workspace policy (cached): ${esc(card.policy)}${card.lastSentAt ? `. Last sent: ${esc(card.lastSentAt)}` : ""}.</p>
-  <p class="mute small">What a send would contain. No device id, no label, no paths, no environment values, no user name:</p>
+  <p class="mute small">Nothing is sent unless you have a hosted login and your workspace admin turned it on. Turning this on only changes a setting on this machine.${card.hosted ? "" : " Hosted login: no, so nothing is sent from this machine."}</p>
+  <p class="mute small">This list is what the report says about this machine. A send also adds a random device id and a label. The default label is 8 hex characters of a hash. Change it with <code>kya posture label NAME</code>. A send contains no paths, no environment values and no user name:</p>
   <ul>
     <li>Agent hosts: ${list(card.hosts)}</li>
     <li>Agent extensions: ${list(card.extensions)}</li>
@@ -2453,7 +2467,8 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       ? model.mcpSeen.map((m) => m.toolId)
       : [...new Set(events.map((e) => e.toolId))];
 
-  const iocHtml = iocSectionHtml(model.ioc) + postureSectionHtml(model.posture, !!model.liveToken);
+  // Only the findings banner repeats on every page; the quiet cards live in the System zone.
+  const iocBanner = iocBannerHtml(model.ioc);
   const blockedBanner =
     blocked.length === 0
       ? ""
@@ -3207,6 +3222,8 @@ export function renderReceiptHtml(model: ReceiptModel): string {
   // overview and certify bodies through the same helper.)
   const systemBody = zoneBody(
     [
+      iocSectionHtml(model.ioc),
+      postureSectionHtml(model.posture, !!model.liveToken),
       capabilitiesPanel(model),
       gatePanel(model.gate, nowMs),
       wiredHostsPanel(model.wiredHosts),
@@ -3267,7 +3284,7 @@ ${model.liveToken ? '<main data-live-token="1">' : '<main>'}
     ${identityLine(model.identity)}
   </header>
   ${blockedBanner}
-  ${iocHtml}
+  ${iocBanner}
   <section class="zone" id="overview" aria-labelledby="tab-overview">
     <div class="hero">
       ${fr.fragments.heroCertify}
