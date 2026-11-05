@@ -12,6 +12,7 @@ import {
   ADVISORY_LINE,
   MAP_CSP,
   MAP_SCRIPT,
+  NAV_LINE,
   TONE_COLOUR,
   cytoscapeSource,
   drawModel,
@@ -24,6 +25,7 @@ import {
   scanMapOutput,
 } from "../src/map/page.js";
 import type { TrailEventLike } from "../src/map/types.js";
+import { busyTrail } from "./support/map-busy-trail.js";
 
 const SALT = "0".repeat(64);
 const NOW = new Date("2026-11-02T12:00:00.000Z");
@@ -172,5 +174,36 @@ describe("renderMapBody: very large graphs (review item 4)", () => {
     expect(MAP_SCRIPT).toContain("Graph not drawn: ");
     // the message goes in through textContent, never innerHTML
     expect(MAP_SCRIPT).toMatch(/host\.textContent = 'Graph not drawn: '/);
+  });
+});
+
+describe("renderMapBody: navigation commands in the summary list", () => {
+  const rows = busyTrail(NOW);
+  const { graph, heat } = build(rows);
+  const body = renderMapBody(graph, heat, 3);
+  const top = /<ol class="map-top">([\s\S]*?)<\/ol>/.exec(body)?.[1] ?? "";
+
+  it("the Top target classes list hides command:cd, command:ls and command:pwd and says so in one line", () => {
+    expect(top).not.toBe("");
+    for (const cls of ["command:cd", "command:ls", "command:pwd"]) expect(top).not.toContain(`<code>${cls}</code>`);
+    expect(top.match(/<li>/g)).toHaveLength(5);
+    expect(top).toContain("<li><code>project:app/src/**</code>");
+    expect(body.split(NAV_LINE)).toHaveLength(2);
+  });
+
+  it("a graph without navigation commands has no navigation line", () => {
+    const small = build(denyRows());
+    expect(small.graph.nodes.some((n) => n.id.startsWith("target:command:"))).toBe(true);
+    expect(renderMapBody(small.graph, small.heat, 3)).not.toContain(NAV_LINE);
+  });
+
+  it("the event total, the graph data and the Where table still count the navigation commands", () => {
+    expect(body).toContain(`<strong>${rows.length}</strong> events`);
+    const data = JSON.parse(/<script type="application\/json" id="kya-map-data">([\s\S]*?)<\/script>/.exec(body)![1]!);
+    expect(data).toEqual(JSON.parse(JSON.stringify(drawModel(graph))));
+    const cd = graph.nodes.find((n) => n.id === "target:command:cd");
+    expect(cd?.count).toBe(2492);
+    expect(graph.nodes.map((n) => n.id)).toEqual(expect.arrayContaining(["target:command:ls", "target:command:pwd"]));
+    expect(body).toMatch(/<th scope="row"><code>command:cd<\/code><\/th>/);
   });
 });

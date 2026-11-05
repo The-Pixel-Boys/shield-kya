@@ -354,6 +354,7 @@
       "tests": [
         "test/map-command.test.ts",
         "test/map-page.test.ts",
+        "test/map-layout.test.ts",
         "test/map-live.test.ts"
       ],
       "status": "beta",
