@@ -14,11 +14,11 @@ The live report has a **Map** tab too. Run `kya start` or `kya receipt --open`, 
 
 ## What it shows
 
-- **Graph.** Four kinds of node: the device, the agent session, the tool, and the target class. Each edge counts how often a step happened. Click a node to see its class, counts per verdict, and first and last time.
-- **Edge colour.** Red means deny. Amber means hold. Grey means observed: recorded, but enforcement is not recorded. Green means allow. An edge with any deny is red. Edge width grows with the count.
+- **Graph.** Four columns, left to right: the device, the agent session, the tool, and the target class. Rows sort by count. A column with more than 21 nodes shows the top 20 and one "+N more" node; click it to see N and the summed count. Two sessions with the same label (for example two `gtm` sessions) get the event count after the label, for example `gtm · 238 events`. Each edge counts how often a step happened. Click a node to see its class, counts per verdict, and first and last time; the rest of the graph fades. Click the background to show all again.
+- **Edge colour.** Red means deny. Amber means hold. Grey means observed: recorded, but enforcement is not recorded. Green means allow. An edge with any deny is red. Edge width grows with the count. Deny and hold edges are strong. Allow and observed edges are drawn light until you click a node.
 - **When.** Events per hour for the last 7 days. A cell with a deny has a red outline.
 - **Where.** Events per target class and verdict.
-- **Summary.** Event count, session count, device count, and the top 5 target classes.
+- **Summary.** Event count, session count, device count, and the top 5 target classes. The list hides the navigation commands `command:cd`, `command:ls` and `command:pwd`. The graph, the heat views and `--json` still count them.
 
 ## What it does not show
 

@@ -95,6 +95,10 @@ function detailOf(n: MapNode): string {
 
 const SHOWN_TARGETS = 5;
 
+/** Navigation-only commands. The summary list hides them; the graph, the heat views and the JSON keep them. */
+export const NAV_CLASSES: ReadonlySet<string> = new Set(["command:cd", "command:ls", "command:pwd"]);
+export const NAV_LINE = "Navigation commands (cd, ls, pwd) are not listed.";
+
 function sum(nums: readonly number[]): number {
   return nums.reduce((a, b) => a + b, 0);
 }
@@ -110,7 +114,7 @@ function summaryHtml(graph: MapGraph): string {
   const events = sum(devices.map((n) => n.count));
   const sessions = sum(graph.nodes.filter((n) => n.kind === "agent").map((n) => n.grouped ?? 1));
   const classes = graph.nodes
-    .filter((n): n is Extract<MapNode, { kind: "target" }> => n.kind === "target" && n.grouped === undefined)
+    .filter((n): n is Extract<MapNode, { kind: "target" }> => n.kind === "target" && n.grouped === undefined && !NAV_CLASSES.has(n.class))
     .sort((a, b) => b.count - a.count || (a.class < b.class ? -1 : a.class > b.class ? 1 : 0))
     .slice(0, SHOWN_TARGETS);
   const top = classes.length
@@ -120,6 +124,7 @@ function summaryHtml(graph: MapGraph): string {
   <p><strong>${events}</strong> events · <strong>${sessions}</strong> sessions · <strong>${devices.length}</strong> device${devices.length === 1 ? "" : "s"}</p>
   <p class="small">Top ${SHOWN_TARGETS} target classes:</p>
   ${top}
+  ${graph.nodes.some((n) => n.kind === "target" && NAV_CLASSES.has(n.class)) ? `<p class="small mute map-nav-note">${NAV_LINE}</p>` : ""}
 </div>`;
 }
 
@@ -166,10 +171,10 @@ export function renderMapBody(graph: MapGraph, heat: Heat, days: number): string
     events === 0
       ? ""
       : `<div class="map-canvas">
-  <div id="kya-map-graph" class="map-graph" aria-label="Map of agent actions"></div>
+  <div class="map-graph-scroll"><div id="kya-map-graph" class="map-graph" aria-label="Map of agent actions"></div></div>
   <aside id="kya-map-panel" class="map-panel" aria-live="polite"><p class="mute">Click a node to see its class, counts and first and last time.</p></aside>
 </div>
-<p class="map-legend small">Edges: red = deny, amber = hold, grey = observed (recorded, not enforced), green = allow. Width grows with the count.</p>`;
+<p class="map-legend small">Edges: red = deny, amber = hold, grey = observed (recorded, not enforced), green = allow. Width grows with the count. Allow and observed edges are drawn light until you click a node.</p>`;
   return `<div class="map-body">
   <p class="map-advisory">${esc(ADVISORY_LINE)}</p>
   ${summaryHtml(graph)}
@@ -227,49 +232,216 @@ export const MAP_SCRIPT = `(function () {
     if (!panel) return;
     while (panel.firstChild) panel.removeChild(panel.firstChild);
     add(panel, 'h3', node.kind + ': ' + node.label);
-    add(panel, 'p', 'Class: ' + node.detail);
+    add(panel, 'p', node.more ? node.detail : 'Class: ' + node.detail);
     var list = document.createElement('dl');
     panel.appendChild(list);
     [['Events', node.count], ['Allow', node.verdicts.allow], ['Deny', node.verdicts.deny], ['Hold', node.verdicts.hold],
      ['Observed', node.verdicts.observed], ['First seen', node.firstTs || '-'], ['Last seen', node.lastTs || '-']]
       .forEach(function (r) { add(list, 'dt', r[0]); add(list, 'dd', r[1]); });
   }
-  function style(d) {
-    var out = [
-      { selector: 'node', style: { 'label': 'data(label)', 'font-size': 10, 'text-wrap': 'ellipsis', 'text-max-width': 130, 'min-zoomed-font-size': 9,
+  // kya-map-layout:begin
+  // Layered layout: one column per node kind (device, agent, tool, target), left to right. Rows sort by count.
+  // This block is pure (same input, same output) and is byte-identical in page.ts and kya-map.js (a test checks it).
+  var KYA_LAYOUT = { kinds: ['device', 'agent', 'tool', 'target'], colGap: 220, rowGap: 28, maxRows: 20, maxLabel: 22,
+    dupLabel: 28, labelRoom: 140, padBottom: 44, pad: 48, minZoom: 0.8 };
+  // Cuts by code point, so an emoji is never split.
+  function kyaCut(s, max) {
+    var a = Array.from(String(s));
+    return a.length > max ? a.slice(0, max - 1).join('') + '…' : a.join('');
+  }
+  function kyaCmp(a, b) {
+    return a < b ? -1 : a > b ? 1 : 0;
+  }
+  function kyaTone(v) {
+    if (v.deny > 0) return 'deny';
+    if (v.hold > 0) return 'hold';
+    if (v.observed > 0) return 'observed';
+    return 'allow';
+  }
+  function kyaVerdicts() {
+    return { allow: 0, deny: 0, hold: 0, observed: 0 };
+  }
+  function kyaAddVerdicts(into, v) {
+    ['allow', 'deny', 'hold', 'observed'].forEach(function (k) { into[k] += (v && v[k]) || 0; });
+  }
+  // Unique labels in one column. Each label is cut at maxLabel. When two nodes draw the same text (the same label, or
+  // two long labels that look the same after the cut), they get the event count. A unique text gets no suffix.
+  // Texts that are still equal get a number.
+  function kyaLabels(col) {
+    var L = KYA_LAYOUT;
+    function bump(m, k) { m[k] = (m[k] || 0) + 1; }
+    function fit(s, suffix) { return kyaCut(s, Math.max(4, L.dupLabel - suffix.length)) + suffix; }
+    function events(i) { return ' · ' + col[i].count + (col[i].count === 1 ? ' event' : ' events'); }
+    var plain = col.map(function (n) {
+      var s = n.label == null ? String(n.id) : String(n.label);
+      return s === '' ? '(no label)' : s;
+    });
+    var suffix = plain.map(function () { return ''; });
+    var text = plain.map(function (s) { return kyaCut(s, L.maxLabel); });
+    var drawn = {};
+    text.forEach(function (t) { bump(drawn, t); });
+    text = text.map(function (t, i) {
+      if (drawn[t] < 2) return t;
+      suffix[i] = events(i);
+      return fit(plain[i], suffix[i]);
+    });
+    var again = {};
+    var used = {};
+    text.forEach(function (t) { bump(again, t); });
+    return text.map(function (t, i) {
+      if (again[t] < 2) return t;
+      bump(used, t);
+      return fit(plain[i], suffix[i] + ' (' + used[t] + ')');
+    });
+  }
+  // Zoom, minimum width and height of the graph box for a scroll box that is avail px wide (0 when hidden).
+  // The zoom never goes below minZoom, so labels stay readable; a narrow box scrolls sideways instead.
+  function kyaMapSize(avail, lay) {
+    var L = KYA_LAYOUT;
+    var zoom = avail > 0 ? Math.min(1, Math.max(L.minZoom, (avail - L.pad) / lay.width)) : 1;
+    return { zoom: zoom, minWidth: Math.ceil(lay.width * L.minZoom + L.pad),
+      height: Math.max(360, Math.ceil(lay.height * zoom + L.pad)) };
+  }
+  // nodes and edges: the draw data. colours: tone to colour. Returns Cytoscape elements with preset positions.
+  function kyaMapLayout(nodes, edges, colours) {
+    var L = KYA_LAYOUT;
+    var cols = L.kinds.map(function () { return []; });
+    nodes.forEach(function (n) {
+      var c = L.kinds.indexOf(n.kind);
+      if (c >= 0) cols[c].push(n);
+    });
+    var outNodes = [];
+    var moved = {};
+    var rows = 0;
+    cols.forEach(function (col, c) {
+      col.sort(function (a, b) {
+        return (b.count - a.count) || kyaCmp(String(a.label), String(b.label)) || kyaCmp(a.id, b.id);
+      });
+      // Cap only when two or more nodes would hide: one "+1 more" node would take the row of the node it hides.
+      var shown = col.length > L.maxRows + 1 ? col.slice(0, L.maxRows) : col.slice();
+      var rest = col.slice(shown.length);
+      var labels = kyaLabels(shown);
+      shown.forEach(function (n, i) {
+        var data = {};
+        Object.keys(n).forEach(function (k) { data[k] = n[k]; });
+        data.text = labels[i];
+        data.col = c;
+        outNodes.push({ data: data, position: { x: c * L.colGap, y: i * L.rowGap } });
+      });
+      if (rest.length) {
+        var id = 'more:' + L.kinds[c];
+        var v = kyaVerdicts();
+        var count = 0;
+        rest.forEach(function (n) { moved[n.id] = id; count += n.count || 0; kyaAddVerdicts(v, n.verdicts); });
+        var text = '+' + rest.length + ' more';
+        outNodes.push({ data: { id: id, kind: L.kinds[c], label: text, text: text, col: c, more: rest.length, count: count,
+          verdicts: v, detail: rest.length + ' more ' + L.kinds[c] + ' nodes, not drawn (' + count + ' events)', firstTs: '', lastTs: '' },
+          position: { x: c * L.colGap, y: shown.length * L.rowGap } });
+      }
+      rows = Math.max(rows, shown.length + (rest.length ? 1 : 0));
+    });
+    var outEdges = [];
+    var merged = {};
+    var m = 0;
+    edges.forEach(function (e) {
+      var s = moved[e.source] || e.source;
+      var t = moved[e.target] || e.target;
+      if (s === e.source && t === e.target) {
+        var copy = {};
+        Object.keys(e).forEach(function (k) { copy[k] = e[k]; });
+        if (e.verdicts) copy.tone = kyaTone(e.verdicts);
+        outEdges.push({ data: copy });
+        return;
+      }
+      var key = s + ' ' + t;
+      if (!merged[key]) {
+        merged[key] = { id: 'm' + m, source: s, target: t, count: 0, verdicts: kyaVerdicts() };
+        m += 1;
+        outEdges.push({ data: merged[key] });
+      }
+      merged[key].count += e.count || 0;
+      kyaAddVerdicts(merged[key].verdicts, e.verdicts);
+    });
+    Object.keys(merged).forEach(function (k) {
+      var x = merged[k];
+      x.tone = kyaTone(x.verdicts);
+      x.colour = colours[x.tone];
+      x.width = Math.round((1 + 2 * Math.log10(Math.max(1, x.count))) * 100) / 100;
+    });
+    return { nodes: outNodes, edges: outEdges, rows: rows,
+      width: (L.kinds.length - 1) * L.colGap + 2 * L.labelRoom, height: Math.max(0, rows - 1) * L.rowGap + L.padBottom };
+  }
+  // Styles: labels beside the nodes (left of the device and agent columns, right of the tool and target columns).
+  // Allow and observed edges are thin and quiet. Deny and hold edges stay strong. A tap on a node fades the rest
+  // (class faded) and brightens its edges (class hl).
+  function kyaMapStyle() {
+    return [
+      { selector: 'node', style: { 'label': 'data(text)', 'font-size': 11, 'text-valign': 'center',
         'text-background-color': '#ffffff', 'text-background-opacity': 0.8, 'text-background-padding': 1,
-        'width': 18, 'height': 18, 'background-color': '#98a2b3', 'color': '#101828' } },
-      { selector: 'node[kind = "device"]', style: { 'background-color': '#344054', 'shape': 'round-rectangle', 'width': 34, 'height': 34 } },
+        'width': 16, 'height': 16, 'background-color': '#98a2b3', 'color': '#101828' } },
+      { selector: 'node[col < 2]', style: { 'text-halign': 'left', 'text-margin-x': -6 } },
+      { selector: 'node[col >= 2]', style: { 'text-halign': 'right', 'text-margin-x': 6 } },
+      { selector: 'node[kind = "device"]', style: { 'background-color': '#344054', 'shape': 'round-rectangle', 'width': 26, 'height': 26 } },
       { selector: 'node[kind = "agent"]', style: { 'background-color': '#1d4ed8' } },
       { selector: 'node[kind = "tool"]', style: { 'background-color': '#7a5af8', 'shape': 'round-rectangle' } },
       { selector: 'node[kind = "target"]', style: { 'background-color': '#0e9384' } },
-      { selector: 'edge', style: { 'width': 'data(width)', 'line-color': 'data(colour)', 'target-arrow-color': 'data(colour)',
-        'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'opacity': 0.9 } }
+      { selector: 'node[more]', style: { 'background-color': '#d0d5dd', 'shape': 'round-rectangle', 'color': '#475467' } },
+      { selector: 'edge', style: { 'width': 'mapData(width, 1, 8, 0.6, 3)', 'line-color': 'data(colour)', 'target-arrow-color': 'data(colour)',
+        'target-arrow-shape': 'triangle', 'arrow-scale': 0.6, 'curve-style': 'bezier', 'opacity': 0.18 } },
+      { selector: 'edge[tone = "deny"], edge[tone = "hold"]', style: { 'opacity': 0.9, 'z-index': 2 } },
+      { selector: 'edge.hl', style: { 'width': 'data(width)', 'opacity': 1 } },
+      { selector: '.faded', style: { 'opacity': 0.1, 'text-opacity': 0.25 } }
     ];
-    return out;
   }
+  // Draws the layout into host. Host height follows the row count; the scroll box around host scrolls.
+  function kyaMapDraw(host, nodes, edges, colours) {
+    var lay = kyaMapLayout(nodes, edges, colours);
+    var size = kyaMapSize(host.parentNode ? host.parentNode.clientWidth : 0, lay);
+    host.style.minWidth = size.minWidth + 'px';
+    host.style.height = size.height + 'px';
+    var g = window.cytoscape({
+      container: host,
+      elements: { nodes: lay.nodes, edges: lay.edges },
+      style: kyaMapStyle(),
+      layout: { name: 'preset', fit: true, padding: 24 },
+      minZoom: KYA_LAYOUT.minZoom,
+      maxZoom: 1,
+      userZoomingEnabled: false,
+      userPanningEnabled: false,
+      boxSelectionEnabled: false,
+      autoungrabify: true
+    });
+    // The fit zoom uses the real label widths. Set the height again for that zoom and put the first row at the top,
+    // so the bottom pad (one row gap and the node radius) stays below the last row.
+    var z = g.zoom();
+    host.style.height = Math.max(360, Math.ceil(lay.height * z + KYA_LAYOUT.pad)) + 'px';
+    g.resize();
+    g.pan({ x: g.pan().x, y: KYA_LAYOUT.pad / 2 - g.elements().boundingBox().y1 * z });
+    g.on('tap', 'node', function (evt) {
+      g.elements().removeClass('hl').addClass('faded');
+      var near = evt.target.closedNeighborhood();
+      near.removeClass('faded');
+      near.edges().addClass('hl');
+    });
+    g.on('tap', function (evt) {
+      if (evt.target === g) g.elements().removeClass('faded').removeClass('hl');
+    });
+    return g;
+  }
+  // kya-map-layout:end
   var MAX_DRAW_NODES = 400;
   function draw() {
     var host = document.getElementById('kya-map-graph');
     var d = model();
     if (cy) { cy.destroy(); cy = null; }
     if (!host || !d || !window.cytoscape || !d.nodes || !d.nodes.length) return;
-    // A force layout on thousands of nodes hangs the tab. The JSON and both heat views still hold everything.
+    // Thousands of nodes make the page too slow to use. The JSON and both heat views still hold everything.
     if (d.nodes.length > MAX_DRAW_NODES) {
       host.textContent = 'Graph not drawn: ' + d.nodes.length + ' nodes is too many for the page. Use a shorter window (kya map --days 1) or kya map --json.';
       return;
     }
-    cy = window.cytoscape({
-      container: host,
-      elements: {
-        nodes: d.nodes.map(function (n) { return { data: n }; }),
-        edges: d.edges.map(function (e) { return { data: e }; })
-      },
-      style: style(d),
-      layout: { name: 'cose', animate: false, randomize: true, fit: true, padding: 24, numIter: 900, nodeRepulsion: function () { return 9000; }, idealEdgeLength: function () { return 80; }, nodeOverlap: 14, gravity: 0.35 }
-    });
+    cy = kyaMapDraw(host, d.nodes, d.edges, d.colours);
     cy.on('tap', 'node', function (evt) { showNode(evt.target.data()); });
-    cy.fit();
   }
   function refresh() {
     if (!live) return;
@@ -309,7 +481,8 @@ export const MAP_SCRIPT = `(function () {
   window.addEventListener('hashchange', function () {
     if (location.hash !== '#map') return;
     refresh();
-    setTimeout(function () { if (cy) { cy.resize(); cy.fit(); } }, 0);
+    // Draw again now that the tab shows: a draw while the tab was hidden measured a width of 0.
+    setTimeout(draw, 0);
   });
   if (live) loadLibrary(refresh); else draw();
 })();`;
@@ -329,7 +502,8 @@ export const MAP_CSS = `
   .map-stats p { margin: 4px 0; }
   .map-top { margin: 4px 0 12px 20px; padding: 0; }
   .map-canvas { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; margin: 12px 0; }
-  .map-graph { height: 60vh; min-height: 360px; border: 1px solid var(--line, #d0d5dd); border-radius: 6px; }
+  .map-graph-scroll { max-height: 80vh; overflow: auto; border: 1px solid var(--line, #d0d5dd); border-radius: 6px; }
+  .map-graph { min-height: 360px; }
   .map-panel { border: 1px solid var(--line, #d0d5dd); border-radius: 6px; padding: 8px 12px; overflow: auto; }
   .map-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
   .map-panel dt { color: var(--mute, #667085); }
