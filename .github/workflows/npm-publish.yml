@@ -12,8 +12,9 @@
 # the main head (checked below), so it is the reviewed file on main.
 #
 # Two jobs. `build` runs dependency code (install, build, test) and has NO id-token. `publish` gets
-# the id-token, but runs no source checkout, no dependency code and no pnpm: it only publishes the
-# tarball that `build` made, after checks of its sha256, name, version, scripts and files. Both jobs
+# the id-token, but runs no source checkout, no dependency code and no pnpm: it installs one pinned npm
+# (exact version, sha512 check, no scripts), publishes the tarball that `build` made, after checks of
+# its sha256, name, version, scripts and files, and then moves dist-tag `next` up. Both jobs
 # are in one workflow run, so the provenance names this workflow, this run and the tagged commit.
 # The build job is the trust boundary: a compromised build can still make a bad tarball.
 name: npm-publish
@@ -148,7 +149,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # This job holds the id-token: no checkout, no dependency code, no pnpm, no npx. The lint in the
+  # This job holds the id-token: no checkout, no dependency code, no pnpm, no npx. Its only install is
+  # the pinned npm (step "Install npm 11.21.1"), from a tarball with a checked sha512. The lint in the
   # release monorepo pins the sha256 of this whole file: any change to the file fails that pin until a
   # reviewer reads the whole file and updates the hash. The pin detects drift; the gates are the
   # platform settings (tag and main rulesets, environment npm, trusted publisher binding, SHA pinning).
@@ -180,6 +182,24 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
+
+      # The npm of Node 24 can be older than 11.21.0 (11.19.1 in the npm-v0.33.3 run). "Move next up" needs
+      # 11.21.0 or later for the OIDC tag change. Install one exact npm before the credential refusal step and
+      # the publish. The tarball sha512 must equal NPM_CLI_SHA512, which is dist.integrity of npm@11.21.1 in hex.
+      # --ignore-scripts: no lifecycle script runs. The npm tarball bundles its dependencies: no other fetch.
+      - name: Install npm 11.21.1 (pinned sha512)
+        env:
+          NODE_AUTH_TOKEN: ''
+          NPM_CLI_SHA512: 613ccbe90044257c87713bb426251ced128ca7e9b3949b65eeb18b98445a5d441e14720c73d6ad76be86f4cf42f2f0d66efe347a9a13400ccd2f6fcfb5954385
+        run: |
+          d="$RUNNER_TEMP/npm-cli"
+          mkdir -p "$d"
+          npm pack npm@11.21.1 --pack-destination "$d" --ignore-scripts
+          have=$(sha512sum "$d/npm-11.21.1.tgz" | cut -d' ' -f1)
+          [ "$have" = "$NPM_CLI_SHA512" ] || { echo "::error::npm-11.21.1.tgz has $have, not the pinned $NPM_CLI_SHA512: not installed"; exit 1; }
+          npm install -g --ignore-scripts "$d/npm-11.21.1.tgz"
+          hash -r
+          [ "$(npm --version)" = 11.21.1 ] || { echo "::error::npm --version is $(npm --version) after the install, not 11.21.1"; exit 1; }
 
       - name: npm 11.5.1 or later (trusted publishing)
         run: |
@@ -292,9 +312,10 @@ jobs:
 
       # After a stable publish, move dist-tag `next` up to it, so `npm i @shield-agent/kya@next` never installs an
       # older rc. npm runs the OIDC exchange for `npm dist-tag` only from npm 11.21.0 (npm/cli 1f38f64, #10056)
-      # or 12.2.0 (9741b64, #10038). With an older npm this step prints the owner fix and skips: the run stays
-      # green. It never moves next backwards and never touches latest. A re-run reaches it too (the publish
-      # step skips a version that npm serves).
+      # or 12.2.0 (9741b64, #10038). The step "Install npm 11.21.1" gives this job such an npm. With an older
+      # npm this step fails with the manual fix: a skip kept next old for several releases. It never moves next
+      # backwards and never touches latest. A re-run reaches it too (the publish step skips a version that npm
+      # serves).
       - name: Move next up to the stable (npm 11.21.0 or later)
         env:
           NODE_AUTH_TOKEN: ''
@@ -309,8 +330,8 @@ jobs:
           ma=${BASH_REMATCH[1]}
           mi=${BASH_REMATCH[2]}
           if ! { [ "$ma" -gt 12 ] || { [ "$ma" -eq 12 ] && [ "$mi" -ge 2 ]; } || { [ "$ma" -eq 11 ] && [ "$mi" -ge 21 ]; }; }; then
-            echo "::notice::this npm ($nv) has no OIDC for tag changes (it needs 11.21.0 or later, or 12.2.0 or later): next is not moved. Owner fix: $fix"
-            exit 0
+            echo "::error::this npm ($nv) has no OIDC for tag changes (it needs 11.21.0 or later, or 12.2.0 or later): next is not moved. Check the step \"Install npm 11.21.1\". Manual fix: $fix"
+            exit 1
           fi
           # The registry can serve the old latest for a short time after the publish: read it up to 10 times.
           for i in $(seq 1 10); do
