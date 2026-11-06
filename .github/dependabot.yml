@@ -1,0 +1,74 @@
+# Version-update PRs are OFF (open-pull-requests-limit: 0). Security updates stay ON.
+# Schedule and security groups below are unchanged. Reason: a merged config with version
+# updates ON opened many PRs at once (see shield-agent PR #571 for the policy).
+# Dependabot policy: docs/operations/dependency-security-policy.md in The-Pixel-Boys/shield-agent (CVE first).
+# Version updates run daily at 03:00 Europe/Bucharest. Security updates open when an alert is raised,
+# outside this schedule. Merges: the nightly merge job, only when every gate passes
+# (owner authorised, shield-agent docs/operations/dependency-security-policy.md section 2b).
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+      - "/vscode"
+      - "/vscode/e2e/prod-harness"
+    schedule:
+      interval: "daily"
+      time: "03:00"
+      timezone: "Europe/Bucharest"
+    open-pull-requests-limit: 0
+    labels: ["dependencies", "security"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: "docker"
+    directories:
+      - "/.oss-scanner"
+      - "/packaging/docker"
+      - "/packaging/ci/bitbucket-pipe"
+    schedule:
+      interval: "daily"
+      time: "03:00"
+      timezone: "Europe/Bucharest"
+    open-pull-requests-limit: 0
+    labels: ["dependencies", "security"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: "pip"
+    directory: "/kya-python"
+    schedule:
+      interval: "daily"
+      time: "03:00"
+      timezone: "Europe/Bucharest"
+    open-pull-requests-limit: 0
+    labels: ["dependencies", "security"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "03:00"
+      timezone: "Europe/Bucharest"
+    open-pull-requests-limit: 0
+    labels: ["dependencies", "security"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
