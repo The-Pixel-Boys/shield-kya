@@ -45,7 +45,9 @@ afterEach(async () => {
     const s = servers.pop()!;
     await new Promise<void>((resolve) => s.close(() => resolve()));
   }
-  while (dirs.length) rmSync(dirs.pop()!, { recursive: true, force: true });
+  // The hook's detached export helper can still write under $HOME/.kya after the hook exits:
+  // rmSync then meets ENOTEMPTY. Node retries ENOTEMPTY/EBUSY with maxRetries.
+  while (dirs.length) rmSync(dirs.pop()!, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   captured.length = 0;
 });
 
