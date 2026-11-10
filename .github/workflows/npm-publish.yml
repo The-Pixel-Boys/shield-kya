@@ -358,6 +358,11 @@ jobs:
             echo "::error::the dist-tag add failed. Owner task: tick Allow dist-tag on the trusted publisher of @shield-agent/kya at npmjs.com (docs/operations/kya-npm-oidc.md). Owner fix now: $fix"
             exit 1
           fi
-          curl -fsS "$TAGS_URL" -o "$RUNNER_TEMP/tags.json" || { echo "::error::cannot read $TAGS_URL"; exit 1; }
-          [ "$(jq -r '.next // ""' "$RUNNER_TEMP/tags.json")" = "$VERSION" ] || { echo "::error::next is still not $VERSION after dist-tag add. Owner fix: $fix"; exit 1; }
-          echo "npm next is now $VERSION"
+          # The registry can serve the old next for a short time after the change: read it up to 12 times, 5 s apart.
+          for i in $(seq 1 12); do
+            curl -fsS "$TAGS_URL" -o "$RUNNER_TEMP/tags.json" || { echo "::error::cannot read $TAGS_URL"; exit 1; }
+            [ "$(jq -r '.next // ""' "$RUNNER_TEMP/tags.json")" != "$VERSION" ] || { echo "npm next is now $VERSION"; exit 0; }
+            [ "$i" = 12 ] || sleep 5
+          done
+          echo "::error::next is still not $VERSION 60 s after dist-tag add. Owner fix: $fix"
+          exit 1
