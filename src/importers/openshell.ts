@@ -17,8 +17,8 @@
  * Re-imports are idempotent: existing rows with `importedFrom: "openshell"` and
  * the same `sourceHash` (the OCSF `uid`) are skipped.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { appendTrail, globalTrailPath, type TrailEvent } from "../trail.js";
+import { readFileSync } from "node:fs";
+import { appendTrail, trailScanPaths, type TrailEvent } from "../trail.js";
 import { redactTrailText } from "../trail-summary.js";
 import type { ImportResult } from "./index.js";
 
@@ -160,12 +160,10 @@ function mapEvent(raw: unknown, fallbackSession: string, nowMs: number, lineHint
   return { ok: true, value: { event, sourceHash: uid } };
 }
 
-/** Imported openshell rows by uid (full scan: readTrail is tail-capped at 1MB). */
+/** Imported openshell rows by uid (full scan of the live trail and its archive: readTrail is tail-capped at 1MB). */
 function importedOpenshellUids(env: NodeJS.ProcessEnv): Set<string> {
   const seen = new Set<string>();
-  const path = globalTrailPath(env);
-  if (!existsSync(path)) return seen;
-  for (const line of readFileSync(path, "utf8").split("\n")) {
+  for (const line of trailScanPaths(env).flatMap((p) => readFileSync(p, "utf8").split("\n"))) {
     if (!line.includes('"importedFrom":"openshell"')) continue;
     try {
       const e = JSON.parse(line) as Record<string, unknown>;

@@ -9,7 +9,9 @@ import {
   openSync,
   readFileSync,
   readSync,
+  renameSync,
   statSync,
+  unlinkSync,
 } from "node:fs";
 import { basename, join } from "node:path";
 import { configDir, globalConfigDir } from "./config.js";
@@ -77,6 +79,64 @@ export interface TrailEvent {
 
 export function globalTrailPath(env: NodeJS.ProcessEnv = process.env): string {
   return join(globalConfigDir(env), "trail.jsonl");
+}
+
+/** The one archive kept by rotation: the previous trail.jsonl, replaced at each rotation. */
+export function archivedTrailPath(env: NodeJS.ProcessEnv = process.env): string {
+  return join(globalConfigDir(env), "trail.1.jsonl");
+}
+
+/** Archive first, then the live file: the order a full scan of the record must read. */
+export function trailScanPaths(env: NodeJS.ProcessEnv = process.env): string[] {
+  return [archivedTrailPath(env), globalTrailPath(env)].filter((p) => existsSync(p));
+}
+
+/** trail.jsonl is renamed to trail.1.jsonl when it reaches this size: at most about 2 x 8 MiB on disk. */
+export const TRAIL_ROTATE_BYTES = 8 * 1024 * 1024;
+/** A rotation lock older than this is left over from a killed process. */
+const ROTATE_LOCK_STALE_MS = 60_000;
+
+/**
+ * Renames the live trail to the archive once it reaches TRAIL_ROTATE_BYTES (the old archive is replaced).
+ * rename is atomic and appenders open the file by path, so no event is lost. An O_EXCL lock stops two
+ * processes from rotating twice in a row, which would replace the archive with a nearly empty file.
+ * Never throws: recording must not fail because rotation did.
+ */
+export function rotateTrailIfNeeded(env: NodeJS.ProcessEnv = process.env): boolean {
+  const path = globalTrailPath(env);
+  try {
+    if (statSync(path).size < TRAIL_ROTATE_BYTES) return false;
+  } catch {
+    return false;
+  }
+  const lock = join(globalConfigDir(env), "trail.rotate.lock");
+  let fd: number;
+  try {
+    fd = openSync(lock, "wx");
+  } catch {
+    try {
+      if (Date.now() - statSync(lock).mtimeMs < ROTATE_LOCK_STALE_MS) return false;
+      unlinkSync(lock);
+      fd = openSync(lock, "wx");
+    } catch {
+      return false;
+    }
+  }
+  try {
+    // Another process may have rotated between our stat and the lock.
+    if (statSync(path).size < TRAIL_ROTATE_BYTES) return false;
+    renameSync(path, archivedTrailPath(env));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    try {
+      closeSync(fd);
+      unlinkSync(lock);
+    } catch {
+      /* a stale lock expires after ROTATE_LOCK_STALE_MS */
+    }
+  }
 }
 
 /** Pre-0.3.0 per-project trail location, still merged on read. */
@@ -163,6 +223,7 @@ export function appendTrail(
   env: NodeJS.ProcessEnv = process.env,
 ): void {
   mkdirSync(globalConfigDir(env), { recursive: true });
+  rotateTrailIfNeeded(env);
   const enriched: TrailEvent = {
     ...event,
     product: event.product ?? detectProduct(env, event.host),
@@ -253,17 +314,18 @@ function nonNegNumber(v: unknown): number | undefined {
 /** trail.jsonl read cap - oversized files are tail-read (recent events win). */
 export const MAX_TRAIL_BYTES = 1024 * 1024;
 
-function readTrailText(path: string): string {
+/** The last `max` bytes of a file, whole lines only. */
+function readTailText(path: string, max: number): string {
   const size = statSync(path).size;
-  if (size <= MAX_TRAIL_BYTES) {
+  if (size <= max) {
     return readFileSync(path, "utf8");
   }
   const fd = openSync(path, "r");
   let tail: string;
   try {
-    const buf = Buffer.alloc(MAX_TRAIL_BYTES);
-    const position = Math.max(0, size - MAX_TRAIL_BYTES);
-    const read = readSync(fd, buf, 0, MAX_TRAIL_BYTES, position);
+    const buf = Buffer.alloc(max);
+    const position = Math.max(0, size - max);
+    const read = readSync(fd, buf, 0, max, position);
     tail = buf.subarray(0, read).toString("utf8");
   } finally {
     closeSync(fd);
@@ -273,8 +335,22 @@ function readTrailText(path: string): string {
   return nl === -1 ? "" : tail.slice(nl + 1);
 }
 
+/**
+ * Newest MAX_TRAIL_BYTES of the record. Just after a rotation the live file is small, so the rest of
+ * the budget comes from the end of the archive: the view does not empty out at each rotation.
+ */
+function readTrailText(path: string, archive?: string): string {
+  const text = existsSync(path) ? readTailText(path, MAX_TRAIL_BYTES) : "";
+  const room = MAX_TRAIL_BYTES - Buffer.byteLength(text, "utf8");
+  if (!archive || room <= 0 || !existsSync(archive)) return text;
+  const older = readTailText(archive, room);
+  return older && !older.endsWith("\n") ? `${older}\n${text}` : older + text;
+}
+
 /** True when the global or legacy trail file is over the read cap, so a report shows only its newest part. */
 export function trailTruncated(cwd: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  // An archive exists only after the live file reached TRAIL_ROTATE_BYTES, so its events are past the cap.
+  if (existsSync(archivedTrailPath(env))) return true;
   for (const path of [globalTrailPath(env), legacyTrailPath(cwd)]) {
     try {
       if (statSync(path).size > MAX_TRAIL_BYTES) return true;
@@ -285,9 +361,9 @@ export function trailTruncated(cwd: string, env: NodeJS.ProcessEnv = process.env
   return false;
 }
 
-function readTrailFile(path: string): TrailEvent[] {
-  if (!existsSync(path)) return [];
-  const lines = readTrailText(path).split("\n").filter(Boolean);
+function readTrailFile(path: string, archive?: string): TrailEvent[] {
+  if (!existsSync(path) && !(archive && existsSync(archive))) return [];
+  const lines = readTrailText(path, archive).split("\n").filter(Boolean);
   const out: TrailEvent[] = [];
   for (const line of lines) {
     try {
@@ -307,7 +383,7 @@ function readTrailFile(path: string): TrailEvent[] {
 export function readTrail(cwd: string, env: NodeJS.ProcessEnv = process.env): TrailEvent[] {
   const globalPath = globalTrailPath(env);
   const legacy = legacyTrailPath(cwd);
-  const events = readTrailFile(globalPath);
+  const events = readTrailFile(globalPath, archivedTrailPath(env));
   if (legacy !== globalPath) events.push(...readTrailFile(legacy));
   return events
     .map((event, i) => ({ event, i, t: Date.parse(event.ts) }))

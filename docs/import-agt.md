@@ -75,7 +75,7 @@ shows `already imported: N record(s)` for the rest.
   duplicate rows. Run one import at a time (re-running afterwards never adds more).
 - `readTrail` reads only the newest 1MB of `trail.jsonl`, so a very large import (AGT's 10,000-entry
   log adds roughly 3.5MB) pushes older rows out of the receipt, certify and investigate views. The rows
-  stay in the file. This applies to every importer.
+  stay on disk until the trail rotates (at 8 MB; one archive, `trail.1.jsonl`, is kept). This applies to every importer.
 
 - Follow-up: the receipt does not show `chainVerified` or an AGT import card yet (AGT rows use
   `IMPORTED_AGT_*` reason codes, so the import summary card does not count them).

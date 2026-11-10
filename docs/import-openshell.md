@@ -77,7 +77,7 @@ duplicate check and write duplicate rows. Run one import at a time (re-running
 afterwards never adds more).
 - `readTrail` reads only the newest 1MB of `trail.jsonl`, so a very large
 import pushes older rows out of the receipt, certify and investigate views.
-The rows stay in the file. This applies to every importer.
+The rows stay on disk until the trail rotates (at 8 MB; one archive, `trail.1.jsonl`, is kept). This applies to every importer.
 
 ## Notes
 

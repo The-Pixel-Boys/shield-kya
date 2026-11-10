@@ -247,7 +247,7 @@ Install hub: [https://shield-agent.com/install](https://shield-agent.com/install
 
 ## Activity record (global)
 
-One record (trail) for all projects: `~/.kya/trail.jsonl` (`KYA_HOME` overrides `~`). `kya receipt --open` from any directory shows activity from every project. Each event carries its project folder name. The report adds a Projects rollup once two or more projects appear, and shows the project on each feed entry. Older per-project `<project>/.kya/trail.jsonl` files are still read and merged; no migration. Reports read only the last 1 MB of the record (oldest events drop out of the view); it is shared across all projects.
+One record (trail) for all projects: `~/.kya/trail.jsonl` (`KYA_HOME` overrides `~`). `kya receipt --open` from any directory shows activity from every project. Each event carries its project folder name. The report adds a Projects rollup once two or more projects appear, and shows the project on each feed entry. Older per-project `<project>/.kya/trail.jsonl` files are still read and merged; no migration. Reports read only the last 1 MB of the record (oldest events drop out of the view); it is shared across all projects. When `trail.jsonl` reaches 8 MB, KYA renames it to `trail.1.jsonl` and starts a new file; the next rotation replaces that archive. So the record uses about 16 MB on disk at most, and older events are deleted. Imports still check both files for rows they already added.
 
 The report itself is a dashboard. A hero row on top shows the live **Certify** result, the decision mix, an activity sparkline, and showback (cost per agent). Tabbed sections sit below: **Overview** (analytics, sessions, reasons), **Certify** (the full live requirement table: every requirement grouped by domain with status, evidence, and attestation), **Activity** (the filterable event feed), **System** (wired hosts, sandboxes, ORR). Everything is one standalone offline HTML page. The live view adds a single external link: "Star on GitHub". The live daemon from `kya start` re-renders it on every event.
 
@@ -383,7 +383,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.33.4", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.33.5", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -427,7 +427,7 @@ Framework recipes (each one tested with a scripted model and the published CLI):
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.33.4 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.33.5 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -438,7 +438,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.33.4 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.33.5 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -701,6 +701,7 @@ Generated from `sdks/kya/features.json` by `pnpm sync:features`. Do not edit by 
 - [Install hub](https://shield-agent.com/install)
 - [How KYA works](https://shield-agent.com/how-kya-works)
 - [Per-host recipes (23 hosts)](docs/hosts/)
+- [Herdr mod: KYA calls beside your agent terminals](docs/herdr.md)
 - [Top-20 MCP server support matrix (taxonomy + gate recipes)](docs/mcp-servers.md)
 - [OTLP metrics (OSS + hosted)](docs/otlp.md)
 - [Anonymous usage stats (opt-in): what is sent, controls, retention](docs/telemetry.md)

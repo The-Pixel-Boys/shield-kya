@@ -17,10 +17,10 @@
  * the same AGT entry hash are skipped.
  */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { appendTrail, globalTrailPath, type TrailEvent } from "../trail.js";
+import { appendTrail, trailScanPaths, type TrailEvent } from "../trail.js";
 import { redactTrailText } from "../trail-summary.js";
 import type { ImportResult } from "./index.js";
 
@@ -111,12 +111,10 @@ interface Seen {
   readonly verified: Set<string>;
 }
 
-/** Imported AGT rows by key (full scan: readTrail is tail-capped at 1MB). */
+/** Imported AGT rows by key (full scan of the live trail and its archive: readTrail is tail-capped at 1MB). */
 function importedAgtHashes(env: NodeJS.ProcessEnv): Seen {
   const seen: Seen = { any: new Set(), verified: new Set() };
-  const path = globalTrailPath(env);
-  if (!existsSync(path)) return seen;
-  for (const line of readFileSync(path, "utf8").split("\n")) {
+  for (const line of trailScanPaths(env).flatMap((p) => readFileSync(p, "utf8").split("\n"))) {
     if (!line.includes('"importedFrom":"agt"')) continue;
     try {
       const e = JSON.parse(line) as Record<string, unknown>;
