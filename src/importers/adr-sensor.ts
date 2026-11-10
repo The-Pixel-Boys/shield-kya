@@ -12,8 +12,8 @@
  * Re-imports are idempotent: existing rows with `importedFrom: "adr-sensor"` and
  * the same `sourceHash` (the event `uuid`) are skipped.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { appendTrail, globalTrailPath, type TrailEvent } from "../trail.js";
+import { readFileSync } from "node:fs";
+import { appendTrail, trailScanPaths, type TrailEvent } from "../trail.js";
 import { redactTrailText } from "../trail-summary.js";
 import type { ImportResult } from "./index.js";
 
@@ -180,12 +180,10 @@ function mapEvent(raw: unknown, fallbackSession: string, nowMs: number): Mapped 
   return { ok: true, value: { events, sourceHash: uuid, fallback } };
 }
 
-/** Imported adr-sensor rows by uuid (full scan: readTrail is tail-capped at 1MB). */
+/** Imported adr-sensor rows by uuid (full scan of the live trail and its archive: readTrail is tail-capped at 1MB). */
 function importedAdrSensorUuids(env: NodeJS.ProcessEnv): Set<string> {
   const seen = new Set<string>();
-  const path = globalTrailPath(env);
-  if (!existsSync(path)) return seen;
-  for (const line of readFileSync(path, "utf8").split("\n")) {
+  for (const line of trailScanPaths(env).flatMap((p) => readFileSync(p, "utf8").split("\n"))) {
     if (!line.includes('"importedFrom":"adr-sensor"')) continue;
     try {
       const e = JSON.parse(line) as Record<string, unknown>;
