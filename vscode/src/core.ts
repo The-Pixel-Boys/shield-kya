@@ -1,7 +1,7 @@
 // Pure logic for the Shield KYA editor extension: no `vscode` import, so node:test covers it
 // directly. The extension wires these into views, commands and the status bar.
 import { closeSync, existsSync, openSync, readFileSync, readSync, realpathSync, statSync, accessSync, constants } from "node:fs";
-import { delimiter, dirname, isAbsolute, join, relative, sep } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, relative, sep } from "node:path";
 
 // ---------- trail rows ----------
 
@@ -129,8 +129,17 @@ export const MAX_ROWS = 200;
  * last call. First call and any shrink (truncate / rotate) re-read the last TAIL_BYTES. A partial
  * last line is held until its newline arrives.
  */
+/**
+ * kya rotates `trail.jsonl` to `trail.1.jsonl` at 8 MiB (one archive kept). The archive of a trail at a custom
+ * path that is not named trail.jsonl is not known: none.
+ */
+export function trailArchivePath(path: string): string | undefined {
+  return basename(path) === "trail.jsonl" ? join(dirname(path), "trail.1.jsonl") : undefined;
+}
+
 export class TrailTailer {
   private offset = -1;
+  private ino = -1;
   /** Bytes after the last newline. Lines are split on byte 0x0A before decoding, so a multibyte
    * character split across two writes is never decoded half (0x0A never occurs inside UTF-8). */
   private pending: Buffer = Buffer.alloc(0);
@@ -148,10 +157,16 @@ export class TrailTailer {
       const st = statSync(this.path);
       if (!st.isFile()) return { rows: [], reset: false, error: "not a file" };
       size = st.size;
+      // A new file at the path (kya rotated it): read it from the start, whatever its size.
+      if (st.ino !== this.ino) {
+        if (this.ino !== -1) this.offset = -1;
+        this.ino = st.ino;
+      }
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code;
       const reset = this.offset > 0;
       this.offset = -1;
+      this.ino = -1;
       this.pending = Buffer.alloc(0);
       return { rows: [], reset, ...(code === "ENOENT" ? {} : { error: code ?? "unreadable" }) };
     }
@@ -174,6 +189,7 @@ export class TrailTailer {
     }
     this.offset = size;
     let chunk = Buffer.concat([this.pending, bytes]);
+    if (reset && start === 0) chunk = Buffer.concat([this.archiveTail(this.tailBytes - size), chunk]);
     if (reset && start > 0) {
       // Mid-file start: the first line is partial.
       const nl = chunk.indexOf(0x0a);
@@ -189,6 +205,25 @@ export class TrailTailer {
       if (row) rows.push(row);
     }
     return { rows, reset };
+  }
+
+  /** Whole lines from the end of the archive, at most `budget` bytes: fills the view right after a rotation. */
+  private archiveTail(budget: number): Buffer {
+    const archive = trailArchivePath(this.path);
+    if (!archive || budget <= 0) return Buffer.alloc(0);
+    try {
+      const size = statSync(archive).size;
+      const start = Math.max(0, size - budget);
+      let bytes = readRange(archive, start, size - start);
+      if (start > 0) {
+        const nl = bytes.indexOf(0x0a);
+        bytes = nl === -1 ? Buffer.alloc(0) : bytes.subarray(nl + 1);
+      }
+      const last = bytes.lastIndexOf(0x0a);
+      return last === -1 ? Buffer.alloc(0) : Buffer.from(bytes.subarray(0, last + 1));
+    } catch {
+      return Buffer.alloc(0); // no archive, or unreadable: the live file alone
+    }
   }
 }
 

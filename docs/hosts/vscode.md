@@ -18,7 +18,7 @@ It needs an installed kya (`npm i -g @shield-agent/kya`, Node.js 24+). `kya star
 
 ## What you get
 
-- **Verdicts** view: a live tail of `~/.kya/trail.jsonl` (or `$KYA_HOME/.kya/trail.jsonl`, or `shieldKya.trailPath`).
+- **Verdicts** view: a live tail of `~/.kya/trail.jsonl` (or `$KYA_HOME/.kya/trail.jsonl`, or `shieldKya.trailPath`). When kya rotates the trail (at 8 MB it renames `trail.jsonl` to `trail.1.jsonl`), the feed reloads and fills from the end of `trail.1.jsonl`, so it does not empty out.
   - Rows show ALLOW, REVIEW, HOLD and DENY. Never-list denies are marked.
   - Previews are the redacted, clipped text kya stores, and the extension redacts them again before display.
   - REVIEW means kya recorded `REQUIRE_APPROVE` with no Hold path armed. An advisory hook let the call run; a local `--strict` hook denied it, and its rows look the same.

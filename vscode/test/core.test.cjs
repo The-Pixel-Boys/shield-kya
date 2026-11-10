@@ -74,6 +74,50 @@ test("TrailTailer: incremental, partial line held, truncate resets, missing file
   assert.equal(t.poll().reset, true, "deleted file resets");
 });
 
+test("TrailTailer: after kya rotates the trail, the view fills from trail.1.jsonl", () => {
+  const dir = tmp();
+  const f = path.join(dir, "trail.jsonl");
+  const t = new core.TrailTailer(f, 4096);
+  fs.writeFileSync(f, Array.from({ length: 40 }, (_, i) => row({ project: `old-${i}` })).join("\n") + "\n");
+  assert.equal(t.poll().rows.length > 0, true);
+  fs.renameSync(f, path.join(dir, "trail.1.jsonl"));
+  fs.writeFileSync(f, row({ project: "new", verdict: "DENY", neverEvent: true }) + "\n");
+  const p = t.poll();
+  assert.equal(p.reset, true, "rotation resets");
+  assert.equal(p.rows.at(-1).project, "new", "live rows come last");
+  assert.equal(p.rows.at(-2).project, "old-39", "archive tail comes first, newest archive row next to the live rows");
+  const bytes = p.rows.length * (row({ project: "old-10" }).length + 1);
+  assert.ok(bytes <= 4096 + 200, `view stays inside the tail window (${bytes})`);
+  assert.equal(t.poll().rows.length, 0, "nothing new after the rotation read");
+  fs.appendFileSync(f, row({ project: "after" }) + "\n");
+  assert.deepEqual(t.poll().rows.map((r) => r.project), ["after"], "back to incremental reads");
+});
+
+test("TrailTailer: a rotated file larger than the old offset still resets (inode change)", () => {
+  const dir = tmp();
+  const f = path.join(dir, "trail.jsonl");
+  const t = new core.TrailTailer(f, 1 << 20);
+  fs.writeFileSync(f, row({ project: "a" }) + "\n");
+  t.poll();
+  fs.renameSync(f, path.join(dir, "trail.1.jsonl"));
+  fs.writeFileSync(f, Array.from({ length: 5 }, (_, i) => row({ project: `b-${i}` })).join("\n") + "\n");
+  const p = t.poll();
+  assert.equal(p.reset, true);
+  assert.deepEqual(p.rows.map((r) => r.project), ["a", "b-0", "b-1", "b-2", "b-3", "b-4"]);
+});
+
+test("TrailTailer: a custom trail path has no archive; a missing archive is fine", () => {
+  const dir = tmp();
+  const f = path.join(dir, "my-trail.jsonl");
+  fs.writeFileSync(path.join(dir, "trail.1.jsonl"), row({ project: "not-mine" }) + "\n");
+  fs.writeFileSync(f, row({ project: "mine" }) + "\n");
+  assert.deepEqual(new core.TrailTailer(f).poll().rows.map((r) => r.project), ["mine"]);
+  assert.equal(core.trailArchivePath(f), undefined);
+  const g = path.join(tmp(), "trail.jsonl");
+  fs.writeFileSync(g, row({ project: "only" }) + "\n");
+  assert.deepEqual(new core.TrailTailer(g).poll().rows.map((r) => r.project), ["only"]);
+});
+
 test("TrailTailer: huge file reads only the tail and drops the cut first line", () => {
   const dir = tmp();
   const f = path.join(dir, "trail.jsonl");
