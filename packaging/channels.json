@@ -1,11 +1,11 @@
 {
-  "$comment": "Registry of every kya distribution channel: the single source of truth the maintainers' release fan-out gate and daily drift watchdog read. Every channel kya has or plans is listed with how its version is updated and a live probe. A file under the package that carries a version must be a channel file here or be listed in not_channels with a reason, or CI fails. Paths are relative to the maintainers' monorepo root; {version} in a probe url is the version under test. No version pins in this file.",
+  "$comment": "Registry of every kya distribution channel: the single source of truth the maintainers' release fan-out gate and daily drift watchdog read. Every channel kya has or plans is listed with how its version is updated and a live probe. A file under the package that carries a version must be a channel file here or be listed in not_channels with a reason, or CI fails. A channel with its own version line (VS Code extension, n8n node) has own_version {file, pattern}: at a kya tag the expected live version is captured from that file at the tag, not the kya version. Paths are relative to the maintainers' monorepo root; {version} in a probe url is the version under test. No version pins in this file.",
   "update_values": {
-    "auto-pipeline": "a monorepo Woodpecker workflow updates it on every kya-v* tag; a lag after grace_hours is red",
+    "auto-pipeline": "a monorepo Woodpecker workflow updates it on every kya-v* tag; a lag after grace_hours is red. Optional min_version: tags older than it print UNRESOLVED (the channel was automated later); lint fails when it is more than one minor above sdks/kya/package.json",
     "auto-mirror": "it lives in the public repo The-Pixel-Boys/shield-kya, which kya-public-sync mirrors on every tag; a lag after grace_hours is red",
     "auto-runtime": "it installs npm latest when it runs; nothing to bump per release",
-    "manual-owner": "a human updates it; always printed as UNRESOLVED with the action, never green",
-    "not-built": "planned or drafted, not published; always printed as UNRESOLVED with what blocks it"
+    "manual-owner": "a human updates it; always printed as UNRESOLVED with the action, never green. Needs owner_reason and a since date (YYYY-MM-DD): without them the release gate is red; a reason older than 30 days prints WARN, and lint fails past 90 days",
+    "not-built": "planned or drafted, not published; always printed as UNRESOLVED with what blocks it. Same owner_reason and since rule as manual-owner"
   },
   "channels": [
     {
@@ -82,11 +82,11 @@
       "id": "copilot-plugin",
       "kind": "GitHub Copilot CLI plugin marketplace (Agent Plugins v1)",
       "where": "public main plugins/kya-copilot/plugin.json (marketplace .plugin/marketplace.json, which Copilot reads before .claude-plugin/; hooks com.github.copilot/hooks/hooks.json)",
-      "update": "not-built",
-      "by": "maintainers' release pipeline: public repo sync step (from the first kya-v* tag after it was added)",
+      "update": "auto-mirror",
+      "by": "maintainers' release pipeline: public repo sync step",
       "files": ["sdks/kya/.plugin/marketplace.json", "sdks/kya/plugins/kya-copilot/plugin.json"],
       "probe": { "type": "json", "url": "https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/plugins/kya-copilot/plugin.json", "path": "version" },
-      "action": "Not on public main yet: the next kya-v* tag mirrors .plugin/marketplace.json and plugins/kya-copilot/plugin.json (version bumped by pnpm sync:version like the other plugin manifests). Once that tag is live and the probe reads its version, set update to auto-mirror with grace_hours 3."
+      "grace_hours": 3
     },
     {
       "id": "awesome-copilot",
@@ -95,6 +95,8 @@
       "update": "manual-owner",
       "by": "owner, through the awesome-copilot external plugin issue form",
       "files": [],
+      "owner_reason": "Owner submits the awesome-copilot issue form once a public tag with plugins/kya-copilot exists. No submission yet.",
+      "since": "2026-11-12",
       "action": "Not listed yet. Submit once with a public tag vX.Y.Z whose plugins/kya-copilot/plugin.json exists (ref vX.Y.Z, its 40-char sha, version X.Y.Z, path plugins/kya-copilot). The entry pins that ref, so later releases stay listed at the old version until the owner sends an update through the same form; their re-review runs every 6 months."
     },
     {
@@ -164,12 +166,15 @@
     },
     {
       "id": "claude-desktop-mcpb",
-      "kind": "Claude Desktop extension bundle",
-      "where": "sdks/kya/manifest.json, packed locally by the user (npx @anthropic-ai/mcpb pack)",
-      "update": "not-built",
-      "by": "nobody: no .mcpb is published; the manifest version follows package.json via pnpm sync:version",
+      "kind": "Claude Desktop extension bundle (.mcpb)",
+      "where": "github.com/The-Pixel-Boys/shield-kya Release asset shield-kya-<version>.mcpb (manifest.json inside carries the version)",
+      "update": "auto-pipeline",
+      "by": "maintainers' release pipeline: kya-public-release step attach-mcpb (built from the npm tarball, no pnpm install, no token while building)",
       "files": ["sdks/kya/manifest.json"],
-      "action": "Not published. Before publishing a .mcpb (Release asset or directory), add a pipeline step that builds it from the tag and a probe here."
+      "probe": { "type": "mcpb", "url": "https://github.com/The-Pixel-Boys/shield-kya/releases/download/v{version}/shield-kya-{version}.mcpb" },
+      "grace_hours": 3,
+      "min_version": "0.34.0",
+      "note": "Enforced from the first tag cut with the attach-mcpb step. Older Releases have no .mcpb asset and print UNRESOLVED. Raise min_version if a tag is cut before the step is on main."
     },
     {
       "id": "pypi",
@@ -189,28 +194,42 @@
       "features": { "required": ["kya-start", "kya-connect", "kya-hook-never-list", "kya-wrap", "kya-serve-mcp", "kya-telemetry"], "source": "sdks/kya/vscode/README.md" },
       "kind": "VS Code Marketplace extension (own version line, starts at 0.1.0)",
       "where": "marketplace.visualstudio.com shield-agent.shield-kya (sdks/kya/vscode/package.json version)",
-      "update": "manual-owner",
-      "by": "owner: publisher shield-agent; the listing is live at 0.1.0 (checked 2026-10-29)",
+      "update": "auto-pipeline",
+      "by": "GitHub Actions workflow kya-vsix-publish.yml on the kya-v* tag (vsce, Trusted Publishing with OIDC, no stored token)",
       "files": ["sdks/kya/vscode/package.json"],
-      "action": "Published at 0.1.0. Owner builds and publishes each new .vsix (vsce publish, token in env or keychain, never argv), then adds a probe here. The extension has its own version line, so it can only become auto once the registry tracks independent versions. Listing text = channel-copy long plus the features in features.required. Per-item owner go."
+      "own_version": { "file": "sdks/kya/vscode/package.json", "pattern": "^\\s*\"version\":\\s*\"([^\"]+)\"" },
+      "probe": { "type": "json", "url": "https://shield-agent.gallery.vsassets.io/_apis/public/gallery/publisher/shield-agent/extension/shield-kya/latest/assetbyname/Microsoft.VisualStudio.Code.Manifest", "path": "version" },
+      "grace_hours": 3,
+      "min_version": "0.34.0",
+      "note": "The extension has its own version line: at a kya tag the expected live version is the one in sdks/kya/vscode/package.json at that tag, not the kya version. Enforced from the first tag cut with kya-vsix-publish.yml; older tags carried 0.1.0 and were never pipeline-published, so they print UNRESOLVED. The workflow publishes only when that version is not live yet, so a kya tag without a vscode version bump keeps the live version and stays green. Listing text = channel-copy variants.vscode plus the features in features.required."
     },
     {
       "id": "open-vsx",
       "kind": "Open VSX extension (Cursor, VSCodium; same package as vscode-marketplace)",
       "where": "open-vsx.org shield-agent/shield-kya",
       "update": "manual-owner",
-      "by": "nobody yet (Eclipse account, publisher agreement and namespace not created)",
-      "files": [],
-      "action": "Not published (open-vsx.org API 404). Owner signs the Open VSX publisher agreement, creates the shield-agent namespace (token via OVSX_PAT env, never -p), publishes the same .vsix and claims the namespace. Listing text = channel-copy long. Per-item owner go."
+      "by": "GitHub Actions workflow kya-vsix-publish.yml uploads the .vsix (OVSX_PAT); the owner waits for Eclipse to verify the namespace",
+      "files": ["sdks/kya/vscode/package.json"],
+      "own_version": { "file": "sdks/kya/vscode/package.json", "pattern": "^\\s*\"version\":\\s*\"([^\"]+)\"" },
+      "probe": { "type": "json", "url": "https://open-vsx.org/api/shield-agent/shield-kya", "path": "version" },
+      "grace_hours": 3,
+      "min_version": "0.34.0",
+      "owner_reason": "0.1.1 published by the pipeline but inactive until Eclipse verifies the namespace claim EclipseFdn/open-vsx.org#15656",
+      "since": "2026-11-13",
+      "action": "Uploaded by the pipeline but inactive: the open-vsx.org API returns 404 until Eclipse approves the namespace claim https://github.com/EclipseFdn/open-vsx.org/issues/15656. When the claim is approved and the probe reads the version, set update to auto-pipeline. Listing text = channel-copy variants.vscode."
     },
     {
       "id": "n8n-community-node",
       "kind": "n8n community node @shield-agent/n8n-nodes-kya (own version line, starts at 0.1.0)",
       "where": "npm @shield-agent/n8n-nodes-kya (integrations/n8n/package.json version), n8n Creator Portal",
       "update": "manual-owner",
-      "by": "nobody yet (public source repo and npm trusted publisher not created)",
+      "by": "Woodpecker kya-n8n-mirror.yml mirrors the source to The-Pixel-Boys/n8n-nodes-kya; the owner completes the npm steps",
       "files": ["integrations/n8n/package.json"],
-      "action": "Not published. Owner creates the public source repo, mirrors integrations/n8n into it, sets the npm trusted publisher (provenance is mandatory for n8n verification), tags 0.1.0, then submits in the n8n Creator Portal. Then add a probe here. Per-item owner go."
+      "own_version": { "file": "integrations/n8n/package.json", "pattern": "^\\s*\"version\":\\s*\"([^\"]+)\"" },
+      "probe": { "type": "json", "url": "https://registry.npmjs.org/@shield-agent/n8n-nodes-kya/latest", "path": "version" },
+      "owner_reason": "Source is mirrored (kya-n8n-mirror.yml, no tag), npm is not published. Owner steps: (1) publish a placeholder 0.0.1 under --tag bootstrap, (2) set the npm trusted publisher for @shield-agent/n8n-nodes-kya (repo The-Pixel-Boys/n8n-nodes-kya, workflow npm-publish.yml), (3) run kya-n8n-mirror by hand so it tags v0.1.0 and publishes with provenance, (4) submit in the n8n Creator Portal.",
+      "since": "2026-11-13",
+      "action": "Not published (npm 404). Owner does steps 1 to 4 in owner_reason, in that order. When the probe reads the version, set update to auto-pipeline (add grace_hours and by for the publishing workflow). Provenance is mandatory for n8n verification."
     },
     {
       "id": "zapier-app",
@@ -219,6 +238,8 @@
       "update": "manual-owner",
       "by": "nobody yet (Zapier developer account not created)",
       "files": ["integrations/zapier/package.json"],
+      "owner_reason": "Owner has no Zapier developer account yet. Automation waits for the owner sign-in (node N10 part b).",
+      "since": "2026-11-12",
       "action": "Not published. Owner logs in to the Zapier CLI (deploy key stays in ~/.zapierrc), registers and pushes the private app, tests both Zaps with a real hosted API key, then submits for publishing. Per-item owner go."
     },
     {
@@ -226,9 +247,11 @@
       "kind": "container image",
       "where": "ghcr.io/the-pixel-boys/shield-kya:<version> and :latest",
       "update": "not-built",
-      "by": "nobody yet",
+      "by": "GitHub Actions workflow kya-ghcr-publish.yml on the kya-v* tag (merged, not run yet)",
       "files": ["sdks/kya/packaging/docker/Dockerfile"],
-      "action": "Blocked on the ghcr_token Woodpecker secret (owner) and a tag-triggered build + push step (packaging/README.md, Docker / GHCR). Then switch to auto-pipeline with a probe."
+      "owner_reason": "publish workflow merged (#663); the first kya-v* tag after it pushes the image; owner then sets the package public",
+      "since": "2026-11-13",
+      "action": "The first kya-v* tag after #663 runs kya-ghcr-publish.yml and pushes ghcr.io/the-pixel-boys/shield-kya:<version> and :latest. Then the owner sets the GHCR package public. Then switch to auto-pipeline with a probe (a public registry probe is not available yet)."
     },
     {
       "id": "winget",
@@ -241,6 +264,8 @@
         "sdks/kya/packaging/winget/manifests/t/The-Pixel-Boys/ShieldKYA/0.19.0/The-Pixel-Boys.ShieldKYA.installer.yaml",
         "sdks/kya/packaging/winget/manifests/t/The-Pixel-Boys/ShieldKYA/0.19.0/The-Pixel-Boys.ShieldKYA.locale.en-US.yaml"
       ],
+      "owner_reason": "Needs a Windows installer asset, a winget PAT and the Microsoft CLA from the owner (node N10 part b).",
+      "since": "2026-11-12",
       "action": "Draft stuck at an old version with a placeholder hash: needs a Windows installer asset (exe/msi/zip), a winget PAT and the Microsoft CLA (owner). packaging/README.md, CI registries and WinGet."
     },
     {
@@ -250,6 +275,8 @@
       "update": "not-built",
       "by": "nobody yet",
       "files": [],
+      "owner_reason": "Owner must register the snap name, file the classic confinement request and create the store credentials (node N10 part b).",
+      "since": "2026-11-12",
       "action": "Not started: owner registers the name, files the classic confinement request and creates snapcraft_store_credentials (packaging/README.md, Secrets)."
     },
     {
@@ -263,6 +290,8 @@
         "sdks/kya/packaging/ci/bitbucket-pipe/pipe.yml",
         "sdks/kya/packaging/ci/bitbucket-pipe/run.sh"
       ],
+      "owner_reason": "Owner must create the CircleCI namespace, the GitLab catalog project and the pipe image (node N10 part b).",
+      "since": "2026-11-12",
       "action": "Drafts. Publishing needs owner accounts (CircleCI namespace, GitLab catalog project, pipe image). Then switch to auto-runtime."
     },
     {
@@ -273,7 +302,9 @@
       "update": "manual-owner",
       "by": "owner",
       "files": [],
-      "action": "Not readable or editable from CI. When channel-copy.json changes, paste the texts from sdks/kya/packaging/README.md 'Copy and screenshot parity' (repo About = long, Claude directory = variants.plugin, Cursor = long). The GitHub repo description is also checked live by kya-channel-copy-live.sh."
+      "owner_reason": "kya-channel-copy-live.sh reads and compares GitHub About, npm, PyPI, MCP registry, VS Code and Open VSX. Claude directory and Cursor pages have no readable source: check them by hand at each release.",
+      "since": "2026-11-12",
+      "action": "Only the Claude plugin directory and the Cursor marketplace page are not readable from CI: when channel-copy.json changes, paste the texts from sdks/kya/packaging/README.md 'Copy and screenshot parity' (Claude directory = variants.plugin at https://claude.com/plugins, Cursor = long at https://cursor.com/marketplace). GitHub repo About, npm, PyPI, MCP registry, VS Code Marketplace and Open VSX are compared live by kya-channel-copy-live.sh: the release fan-out goes red on a mismatch and the daily run keeps one listing drift issue."
     }
   ],
   "not_channels": [

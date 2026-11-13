@@ -5,7 +5,7 @@
  * Config comes from the `notify` key of the parsed `.kya/config.json` object (the module receives
  * the parsed object, it does not read files):
  *
- *   notify: { webhooks: [ { url, events?: ["DENY","REQUIRE_APPROVE"],
+ *   notify: { webhooks: [ { url, events?: ["DENY","REQUIRE_APPROVE","incident.opened"],
  *                           template?: "slack"|"teams"|"linear"|"jira"|"generic",
  *                           headers?: Record<string,string>, timeoutMs? } ] }
  *
@@ -28,6 +28,12 @@ import {
   type NotifyTemplate,
 } from "./templates.js";
 import { sendWithRetry, type NotifyDeps } from "./sender.js";
+import { INCIDENT_EVENT } from "../alerts/constants.js";
+import type { IncidentAlert } from "../alerts/incident-alert.js";
+import { buildIncidentMinimizedPayload, buildIncidentPayload } from "./incident-templates.js";
+
+export { INCIDENT_EVENT } from "../alerts/constants.js";
+export { buildIncidentPayload } from "./incident-templates.js";
 
 export {
   appendNotifyLog,
@@ -97,6 +103,8 @@ export interface ResolvedWebhook {
 }
 
 export const NOTIFYABLE_VERDICTS: readonly string[] = ["DENY", "REQUIRE_APPROVE"];
+/** Every event name a webhook `events` list may hold. A webhook with no usable filter gets all of them from config. */
+const KNOWN_EVENTS: readonly string[] = [...NOTIFYABLE_VERDICTS, INCIDENT_EVENT];
 export const ENV_WEBHOOK_VAR = "KYA_NOTIFY_WEBHOOK";
 
 function isHttpUrl(raw: string): boolean {
@@ -113,10 +121,10 @@ function parseWebhook(raw: unknown): ResolvedWebhook | undefined {
   const w = raw as Record<string, unknown>;
   if (typeof w["url"] !== "string" || !isHttpUrl(w["url"].trim())) return undefined;
 
-  let events: readonly string[] = NOTIFYABLE_VERDICTS;
+  let events: readonly string[] = KNOWN_EVENTS;
   if (Array.isArray(w["events"])) {
     const filtered = w["events"].filter(
-      (e): e is string => typeof e === "string" && NOTIFYABLE_VERDICTS.includes(e),
+      (e): e is string => typeof e === "string" && KNOWN_EVENTS.includes(e),
     );
     if (filtered.length > 0) events = filtered;
   }
@@ -211,5 +219,56 @@ export async function notifyOnTrailEvent(
     );
   } catch {
     /* notify must never change the gate path */
+  }
+}
+
+/** Serialized `incident.opened` body for one receiver, downgraded to the minimized shape if the secret scan trips. */
+export function serializeIncidentPayload(template: NotifyTemplate, alert: IncidentAlert): string {
+  const body = JSON.stringify(buildIncidentPayload(template, alert));
+  try {
+    assertNoSecrets(body);
+    return body;
+  } catch {
+    return JSON.stringify(buildIncidentMinimizedPayload(alert));
+  }
+}
+
+/** Receivers of `incident.opened`: configured webhooks whose `events` hold it, or that have no filter. */
+export function resolveIncidentWebhooks(config: NotifyFileConfig | undefined): ResolvedWebhook[] {
+  return resolveWebhooks(config, {}).filter((w) => w.events.includes(INCIDENT_EVENT));
+}
+
+/**
+ * Deliver one incident alert to every given receiver (retries, breaker and rate limit from sender.ts,
+ * one ledger line per attempt). Returns how many receivers accepted it. Never throws.
+ */
+export async function notifyIncident(
+  alert: IncidentAlert,
+  targets: readonly ResolvedWebhook[],
+  env: NodeJS.ProcessEnv = process.env,
+  deps: NotifyDeps = {},
+): Promise<number> {
+  try {
+    const results = await Promise.all(
+      targets.map(async (w) => {
+        try {
+          return await sendWithRetry(
+            {
+              url: w.url,
+              body: serializeIncidentPayload(w.template, alert),
+              ...(w.headers ? { headers: w.headers } : {}),
+              ...(w.timeoutMs !== undefined ? { timeoutMs: w.timeoutMs } : {}),
+              ledger: { env, verdict: INCIDENT_EVENT },
+            },
+            deps,
+          );
+        } catch {
+          return false;
+        }
+      }),
+    );
+    return results.filter(Boolean).length;
+  } catch {
+    return 0;
   }
 }

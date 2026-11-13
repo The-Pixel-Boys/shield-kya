@@ -13,7 +13,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { optInHint, optInRefusal, readOptInConfig } from "../src/otel/map-attrs-optin.js";
 
 const captured: Array<{ cwd: string; projectDir?: string }> = [];
@@ -34,6 +34,18 @@ const AGENT = "0190f2a4-7c1e-7d3a-9b2c-123456789abc";
 const RAW_SESSION = "raw-host-session-optin-4b2d";
 
 const dirs: string[] = [];
+/** Temp dirs a detached helper was still writing to when afterEach ran. */
+const leftover: string[] = [];
+afterAll(async () => {
+  await new Promise((r) => setTimeout(r, 3000));
+  for (const d of leftover) {
+    try {
+      rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    } catch (e) {
+      console.warn(`otlp-optin-hosted: left temp dir ${d}: ${(e as Error).message}`);
+    }
+  }
+}, 30_000);
 const servers: Server[] = [];
 function tmp(prefix: string, base = tmpdir()): string {
   const d = realpathSync(mkdtempSync(join(base, prefix)));
@@ -46,8 +58,16 @@ afterEach(async () => {
     await new Promise<void>((resolve) => s.close(() => resolve()));
   }
   // The hook's detached export helper can still write under $HOME/.kya after the hook exits:
-  // rmSync then meets ENOTEMPTY. Node retries ENOTEMPTY/EBUSY with maxRetries.
-  while (dirs.length) rmSync(dirs.pop()!, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  // rmSync then meets ENOTEMPTY. Node retries ENOTEMPTY/EBUSY with maxRetries. A temp dir that still cannot be
+  // removed is not a test failure: it is tried again after the file, then left to the OS temp cleanup.
+  while (dirs.length) {
+    const d = dirs.pop()!;
+    try {
+      rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    } catch {
+      leftover.push(d);
+    }
+  }
   captured.length = 0;
 });
 

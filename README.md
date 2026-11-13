@@ -228,7 +228,7 @@ kya gate doctor   # binary, config, listener health, loopback-only posture
 
 If another process already holds a default port (`port` 3930 or `otlpPort` 3931), `kya gate run` stops with `EADDRINUSE`. Set free ports in `.kya/gateways.json` (`port` and `otlpPort`), then run it again.
 
-`kya gate stop` stops the supervisor and the binary with it. Honest notes: `kya gate setup` (and `kya start`'s auto-bootstrap, only when it found servers to govern) downloads the pinned gateway binary from our releases. Nothing else downloads anything. The only other network use is the opt-in anonymous usage stats in [docs/telemetry.md](docs/telemetry.md), off unless you say yes. `run` never downloads. Observe mode means allowed calls are recorded, not blocked. The deny set above is the only hard stop, and plane enforcement stays with `kya.policy_evaluate`. `kya connect <host> --gate` covers the same hosts as plain `connect`. Grok gets a `[mcp_servers.shield-kya-gate]` url table in its config.toml (Grok supports remote MCP servers over HTTP). Per-server tiers and recipes: [docs/mcp-servers.md](docs/mcp-servers.md).
+`kya gate stop` stops the supervisor and the binary with it. Honest notes: `kya gate setup` (and `kya start`'s auto-bootstrap, only when it found servers to govern) downloads the pinned gateway binary from our releases. Nothing else downloads anything by default. The opt-in offers download only after you say yes: the security alerts offer (the local triage model and its runtime, see [docs/alerts.md](docs/alerts.md)) and the plain-language search offer. The only other network use is the opt-in anonymous usage stats in [docs/telemetry.md](docs/telemetry.md), off unless you say yes. `run` never downloads. Observe mode means allowed calls are recorded, not blocked. The deny set above is the only hard stop, and plane enforcement stays with `kya.policy_evaluate`. `kya connect <host> --gate` covers the same hosts as plain `connect`. Grok gets a `[mcp_servers.shield-kya-gate]` url table in its config.toml (Grok supports remote MCP servers over HTTP). Per-server tiers and recipes: [docs/mcp-servers.md](docs/mcp-servers.md).
 
 ## Longer path (optional)
 
@@ -383,7 +383,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.33.6", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.34.0", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
@@ -427,7 +427,7 @@ Framework recipes (each one tested with a scripted model and the published CLI):
 
 ```bash
 # Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.33.6 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.34.0 serve-mcp --stdio
 # Or after npm i -g / local install:
 kya serve-mcp --stdio
 ```
@@ -438,7 +438,7 @@ Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP setting
 
 ## OpenAI (Codex / Responses)
 
-**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.33.6 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
+**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.34.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
 
 **Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
 
@@ -597,6 +597,21 @@ The `teams` template sends one Adaptive Card to a Teams Workflows webhook (in Te
 
 `KYA_NOTIFY_WEBHOOK=<url>` is the zero-config variant (generic payload). Delivery retries with exponential backoff (250ms/1s/4s + jitter), per-attempt timeouts, a per-URL circuit breaker (stops sending to a target that keeps failing), and a send rate limiter. Payloads are built only from redacted record fields, with an automatic minimized fallback if the secret scan finds something. From short-lived hook/wrap spawns, a detached helper (`kya notify-flush`) sends the webhooks, so the gate path never waits on the network. Every delivery attempt is appended to `~/.kya/notify-log.jsonl` (target host only, never the full URL; capped at the last 500 entries), and the report's System tab shows an **Alerts** panel with per-target delivered/failed counts and the last attempt.
 
+## Security alerts
+
+`kya` can alert you when its detectors find an incident, for example a never-list tool that an agent tries again and again. The fixed detectors decide that it is an incident. An optional local model (about 150 MB plus a local runtime of about 100 MB, fully offline after one download, advisory) adds a category, an urgency and a next step. Alerts are **off by default** and **advisory**: they never block a tool call, and the model never removes an alert.
+
+`kya start` asks once, in a terminal: `Turn on security alerts? [Y/n]`. Yes installs the local runtime and model, turns alerts on and sends one test alert (desktop notification and webhooks). No is remembered and never asked again; turn it on later with `KYA_ALERTS=on kya start`. `KYA_ALERTS=off` never asks. Without a terminal `kya start` prints one hint line. If the install fails, `kya start` still works and alerts use the detector severity only. To turn alerts off: `kya alerts off` (or `KYA_ALERTS=off`). Each new incident also shows a desktop notification (fixed text, no agent text); turn it off with `"alerts": {"desktop": false}`.
+
+```bash
+kya alerts on        # write alerts.enabled to ~/.kya/config.json (no model download)
+kya alerts status    # setting, severity floor, desktop, triage model, receivers, last 10 alerts (--json for scripts)
+kya alerts test      # send one synthetic incident, marked as a test, to the desktop and to each receiver
+kya alerts off
+```
+
+The alert goes to every webhook in `notify.webhooks` of `~/.kya/config.json` whose `events` list holds `"incident.opened"` (or that has no `events` list). It uses the same templates, retries, circuit breaker and rate limit as the decision alerts. The live report also lists the incidents that alerted, with the triage. The `triage` object holds `model`, `category`, `urgency` and `action` (each `{id, p}`) and `benign` (the probability that the incident is harmless); the model cannot change the severity or remove an alert, and a missing model means no `triage` object. Settings (user level only, a repo config cannot change them): `{"alerts": {"enabled": true, "minSeverity": "high", "windowMinutes": 120, "desktop": true}}`. `KYA_ALERTS=on|off` overrides `enabled`. See [docs/alerts.md](docs/alerts.md).
+
 ## Optional sandbox wrap (Firecracker, OpenShell)
 
 Beside the gate, not inside MCP. Opt-in only:
@@ -677,7 +692,8 @@ Generated from `sdks/kya/features.json` by `pnpm sync:features`. Do not edit by 
 | Detections and fix briefs | `kya investigate`, `--json` | beta |
 | Endpoint discovery | `kya discover`, `--json`, `--diff`, `--push`, `--file` | beta |
 | Opt-in Firecracker wrap | `kya sandbox`, `--sandbox`, `--sandbox-id`, `--cmd`, `--path`, `--offline`, `KYA_SANDBOX` | beta |
-| Alert webhooks | none | beta |
+| Alerts | `kya alerts`, `kya alerts status`, `kya alerts test`, `kya alerts on`, `kya alerts off`, `--json`, `KYA_ALERTS=on`, `alerts.desktop`, `KYA_ALERTS_DESKTOP=off` | beta |
+| Local triage model for security alerts | `KYA_ALERTS=on`, `KYA_ALERTS=off`, `KYA_TRIAGE_MODEL_PATH` | beta |
 | OTLP export | `otlpPort` | beta |
 | OTLP map attributes | `otlpExport.mapAttrs` | beta |
 | In-process SDK shims | none | stable |
@@ -711,6 +727,7 @@ Generated from `sdks/kya/features.json` by `pnpm sync:features`. Do not edit by 
 - [Import the AGT audit log (CLI)](docs/import-agt.md) · [hosted](docs/import-agt-hosted.md)
 - [kya certify - Agent Trust Baseline gap reports](docs/certify.md)
 - [EU AI Act crosswalk for the Agent Trust Baseline](docs/certify-eu-ai-act.md)
+- [Security alerts for detected incidents (optional local triage model, advisory)](docs/alerts.md)
 - [Sandbox backends (mock / firecracker / openshell)](docs/sandbox.md)
 - [Works with your observability stack](docs/marketing/observability-stack.md)
 - [SDK & framework integrations (in-process shims)](docs/sdk-integrations.md)

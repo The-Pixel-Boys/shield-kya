@@ -1,0 +1,52 @@
+{
+  "version": "1",
+  "questions": [
+    {
+      "id": "category",
+      "type": "choice",
+      "prompt": "What kind of security incident is this?",
+      "choices": [
+        { "id": "destructive-change", "description": "The agent deleted, overwrote or reset data, files or infrastructure." },
+        { "id": "credential-access", "description": "The agent read, listed or used secrets, keys or tokens." },
+        { "id": "data-exfiltration", "description": "The agent sent or copied data to a place outside the project." },
+        { "id": "privilege-change", "description": "The agent changed permissions, roles, policy files or its own limits." },
+        { "id": "policy-evasion", "description": "The agent retried or rephrased a call after a deny to get around a rule." },
+        { "id": "supply-chain", "description": "The agent installed, fetched or ran code from an outside source." },
+        { "id": "prompt-injection-driven", "description": "The calls look like they follow instructions that came from tool output or fetched content." },
+        { "id": "benign-noise", "description": "The calls look like normal work, a test or a gate misconfiguration." }
+      ]
+    },
+    {
+      "id": "urgency",
+      "type": "choice",
+      "prompt": "How fast must a person look at this incident?",
+      "choices": [
+        { "id": "page-now", "description": "Wake someone. Damage or loss may be in progress." },
+        { "id": "within-hour", "description": "Someone must look in the next hour in working time." },
+        { "id": "daily-digest", "description": "Put it in the next daily summary." },
+        { "id": "ignore", "description": "No person needs to look at it." }
+      ]
+    },
+    {
+      "id": "action",
+      "type": "choice",
+      "prompt": "What is the best next step for a person?",
+      "choices": [
+        { "id": "stop-agent", "description": "Stop the agent session now." },
+        { "id": "review-session", "description": "Read the session and decide." },
+        { "id": "rotate-secret", "description": "Rotate the secret or key that the agent may have seen." },
+        { "id": "tighten-policy", "description": "Change the policy or never-list so this cannot repeat." },
+        { "id": "none", "description": "No action is needed." }
+      ]
+    },
+    {
+      "id": "benign",
+      "type": "choice",
+      "prompt": "Is this incident most likely harmless?",
+      "choices": [
+        { "id": "yes", "description": "Most likely harmless." },
+        { "id": "no", "description": "Not harmless, or not sure." }
+      ]
+    }
+  ]
+}

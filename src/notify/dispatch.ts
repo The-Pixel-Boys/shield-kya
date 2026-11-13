@@ -8,12 +8,14 @@
  */
 import { spawn } from "node:child_process";
 import { kyaHome, readFileConfig } from "../config.js";
+import { resolveAlertsConfig } from "../alerts/config.js";
 import { NOTIFYABLE_VERDICTS, ENV_WEBHOOK_VAR } from "./index.js";
 import type { TrailEvent } from "../trail.js";
 
-/** Cheap pre-spawn check: is any sink configured at all? */
+/** Cheap pre-spawn check: is any sink configured at all (or are incident alerts on)? */
 export function notifyDispatchEnabled(env: NodeJS.ProcessEnv, cwd: string): boolean {
   try {
+    if (resolveAlertsConfig(env).enabled) return true;
     if (env[ENV_WEBHOOK_VAR]?.trim() || env.KYA_OTLP_EXPORT_ENDPOINT?.trim()) return true;
     const merged = { ...readFileConfig(kyaHome(env)), ...readFileConfig(cwd) } as Record<
       string,

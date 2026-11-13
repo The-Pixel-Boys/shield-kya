@@ -1,0 +1,17 @@
+{
+  "$comment": "Links every screenshot, video or demo listed in channel-copy.json to the features.json ids it shows. Rule R9 of scripts/check-feature-coverage.mjs: a PR that changes one of these feature rows must retake the picture, or add stillValid.<id> = { rowSha, note } here (rowSha is printed by the failing check). Docs: docs/operations/kya-published-refs.md in the monorepo.",
+  "screenshots": {
+    "assets/logo.svg": { "features": [] },
+    "assets/activity-receipt.png": { "features": ["kya-receipt"] },
+    "assets/report-activity.png": { "features": ["kya-receipt"] },
+    "assets/report-certify.png": { "features": ["kya-certify", "kya-receipt"] },
+    "assets/report-changes.png": { "features": ["kya-diff-preview", "kya-receipt"] },
+    "assets/report-gateway-backends.png": { "features": ["kya-gate"] },
+    "assets/report-gateway-listeners.png": { "features": ["kya-gate"] },
+    "assets/report-gateway-playground.png": { "features": ["kya-gate"] },
+    "assets/report-gateway-policies.png": { "features": ["kya-gate", "kya-gate-deny"] },
+    "assets/report-gateway-routes.png": { "features": ["kya-gate"] },
+    "assets/report-gateway.png": { "features": ["kya-gate"] },
+    "assets/report-overview.png": { "features": ["kya-receipt", "kya-certify"] }
+  }
+}

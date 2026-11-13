@@ -5,6 +5,7 @@
   "variants": {
     "mcp": "Audit trail and traceability for AI agents. MCP gate: evaluate, ingest, request approval.",
     "plugin": "Audit trail and traceability for AI agents. See what every coding agent did. Advisory: records every tool call, blocks the never-list and the guard pack, fails open.",
+    "vscode": "Audit trail and traceability for AI agents. See kya verdicts for every coding agent tool call in your editor. Advisory: kya records every call, blocks the never-list and the guard pack, fails open.",
     "python": "Audit trail and traceability for AI agents. In-process kya shim for Python agent frameworks (offline evaluate via the kya CLI).",
     "webInstall": "Audit trail and traceability for AI agents. Install in minutes: offline demo, MCP gate, local free console, or hosted. No private protocol.",
     "webHowKyaWorks": "Audit trail and traceability for AI agents. Register an agent, wrap a tool, get Allow, Hold, or Deny. What to do after a local or company install."

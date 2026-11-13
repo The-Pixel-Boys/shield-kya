@@ -10,10 +10,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 // @ts-expect-error plain .mjs script, no type declarations
-import { parseCaseLabels, parseHelp, runChecks } from "../scripts/check-feature-coverage.mjs";
+import { parseCaseLabels, parseHelp, rowSha, runChecks } from "../scripts/check-feature-coverage.mjs";
 
 const PKG = join(dirname(fileURLToPath(import.meta.url)), "..");
-const COPIED = ["src", "docs", "test", "README.md", "vscode/README.md", "features.json"];
+const COPIED = ["src", "docs", "test", "README.md", "vscode/README.md", "features.json", "assets", "channel-copy.json"];
 
 let dir: string;
 const extraDirs: string[] = [];
@@ -48,8 +48,8 @@ describe("feature coverage: real tree", () => {
   it("passes on sdks/kya with every known gap listed", () => {
     const { problems, summary } = runChecks(PKG);
     expect(problems).toEqual([]);
-    expect(summary).toContain("87 rows");
-    expect(summary).toContain("38 HELP commands");
+    expect(summary).toContain("92 rows");
+    expect(summary).toContain("39 HELP commands");
   });
 
   it("has no R3-literal gap: the README prose names every command with an OSS docs row", () => {
@@ -75,10 +75,10 @@ describe("feature coverage: real tree", () => {
 });
 
 describe("parsers read text, so lazy command imports do not change them", () => {
-  it("finds the 38 HELP commands and the case labels", () => {
+  it("finds the 39 HELP commands and the case labels", () => {
     const cli = read("src/cli.ts");
     const help = parseHelp(cli);
-    expect(help.commands).toHaveLength(38);
+    expect(help.commands).toHaveLength(39);
     expect(help.commands).toContain("register-agent");
     expect(help.commands).toContain("export");
     expect(parseCaseLabels(cli)).toContain("notify-flush");
@@ -365,5 +365,112 @@ describe("R7: diff rule (needs history, PR CI passes --base)", () => {
     const { pkg } = repoWithPkg();
     const out = runChecks(pkg, { base: "no-such-ref" }).problems.join("\n");
     expect(out).toMatch(/R7: cannot compute the range/);
+  });
+});
+
+describe("R9: screenshots linked to features", () => {
+  const MANIFEST = "assets/screenshot-features.json";
+  const manifest = (): { screenshots: Record<string, { features: string[]; stillValid?: Record<string, unknown> }> } => JSON.parse(read(MANIFEST));
+  const saveManifest = (m: unknown): void => write(MANIFEST, JSON.stringify(m, null, 2));
+  const r9 = (opts: { base?: string } = {}): string => problemsOf(opts).filter((p) => p.startsWith("R9")).join("\n");
+
+  it("static: the real manifest passes and every screenshot of channel-copy.json is linked", () => {
+    expect(r9()).toBe("");
+    const copy = JSON.parse(read("channel-copy.json")) as { screenshots: Array<{ file: string }> };
+    for (const s of copy.screenshots) expect(Object.keys(manifest().screenshots)).toContain(s.file);
+  });
+
+  it("mutant: no manifest is red", () => {
+    rmSync(join(dir, MANIFEST));
+    expect(r9()).toMatch(/R9: assets\/screenshot-features.json is missing/);
+  });
+
+  it("mutant: a screenshot in channel-copy.json that the manifest does not link is red", () => {
+    const m = manifest();
+    delete m.screenshots["assets/report-certify.png"];
+    saveManifest(m);
+    expect(r9()).toMatch(/assets\/report-certify.png is in channel-copy.json but not in/);
+  });
+
+  it("mutant: an unknown feature id and a missing file are red", () => {
+    const m = manifest();
+    m.screenshots["assets/report-certify.png"].features.push("kya-nope");
+    m.screenshots["assets/gone.png"] = { features: [] };
+    saveManifest(m);
+    const out = r9();
+    expect(out).toMatch(/unknown feature kya-nope/);
+    expect(out).toMatch(/assets\/gone.png does not exist/);
+  });
+
+  it("mutant: a stillValid note without a real reason is red", () => {
+    const m = manifest();
+    m.screenshots["assets/report-certify.png"].stillValid = { "kya-certify": { rowSha: "x", note: "ok" } };
+    saveManifest(m);
+    expect(r9()).toMatch(/stillValid.kya-certify needs/);
+  });
+
+  describe("diff rule (--base)", () => {
+    const git = (cwd: string, args: string[]): string =>
+      execFileSync("git", ["-c", "commit.gpgsign=false", "-c", "user.name=t", "-c", "user.email=t@t.t", ...args], { cwd, encoding: "utf8" });
+    function repo(): { pkg: string; base: string } {
+      const root = mkdtempSync(join(tmpdir(), "kya-r9-"));
+      extraDirs.push(root);
+      mkdirSync(join(root, "sdks"), { recursive: true });
+      cpSync(dir, join(root, "sdks", "kya"), { recursive: true });
+      git(root, ["init", "-q"]);
+      git(root, ["add", "-A"]);
+      git(root, ["commit", "-qm", "base"]);
+      return { pkg: join(root, "sdks", "kya"), base: git(root, ["rev-parse", "HEAD"]).trim() };
+    }
+    const commit = (pkg: string): void => {
+      git(join(pkg, ".."), ["add", "-A"]);
+      git(join(pkg, ".."), ["commit", "-qm", "change"]);
+    };
+    const editRow = (pkg: string, id: string, summary: string): Record<string, any> => {
+      const reg = JSON.parse(readFileSync(join(pkg, "features.json"), "utf8"));
+      const found = reg.features.find((x: any) => x.id === id);
+      found.summary = summary;
+      writeFileSync(join(pkg, "features.json"), JSON.stringify(reg, null, 2));
+      return found;
+    };
+    const problemsAt = (pkg: string, base: string): string => runChecks(pkg, { base }).problems.filter((p: string) => p.startsWith("R9")).join("\n");
+
+    it("stale case: a changed row with unchanged screenshots is red and prints the rowSha to paste", () => {
+      const { pkg, base } = repo();
+      const row = editRow(pkg, "kya-certify", "Trust baseline gap report, changed text.");
+      commit(pkg);
+      const out = problemsAt(pkg, base);
+      expect(out).toMatch(/R9 kya-certify: row changed but its screenshots/);
+      expect(out).toContain(rowSha(row));
+    });
+
+    it("passes when a mapped screenshot changes in the same PR", () => {
+      const { pkg, base } = repo();
+      editRow(pkg, "kya-certify", "Trust baseline gap report, changed text.");
+      writeFileSync(join(pkg, "assets", "report-certify.png"), "retaken");
+      commit(pkg);
+      expect(problemsAt(pkg, base)).toBe("");
+    });
+
+    it("passes with a stillValid note for this exact row state, and goes red for another state", () => {
+      const { pkg, base } = repo();
+      const row = editRow(pkg, "kya-certify", "Trust baseline gap report, changed text.");
+      const mp = join(pkg, MANIFEST);
+      const m = JSON.parse(readFileSync(mp, "utf8"));
+      m.screenshots["assets/report-certify.png"].stillValid = { "kya-certify": { rowSha: rowSha(row), note: "Reworded the summary only, the table in the picture is unchanged." } };
+      writeFileSync(mp, JSON.stringify(m, null, 2));
+      commit(pkg);
+      expect(problemsAt(pkg, base)).toBe("");
+      editRow(pkg, "kya-certify", "Another change after the note.");
+      commit(pkg);
+      expect(problemsAt(pkg, base)).toMatch(/R9 kya-certify/);
+    });
+
+    it("a changed row with no screenshot is not affected", () => {
+      const { pkg, base } = repo();
+      editRow(pkg, "kya-version", "Prints the kya version, changed text.");
+      commit(pkg);
+      expect(problemsAt(pkg, base)).toBe("");
+    });
   });
 });

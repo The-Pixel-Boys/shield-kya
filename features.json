@@ -893,13 +893,50 @@
     },
     {
       "id": "kya-alerts",
-      "name": "Alert webhooks",
-      "summary": "Sends decision alerts to webhooks set in the config file.",
-      "cli": [],
+      "name": "Alerts",
+      "summary": "Sends decision alerts and incident alerts to webhooks set in the config file, and shows a desktop notification for each new incident alert. Incident alerts are off by default. `kya start` offers them once; an optional local triage model is part of the offer.",
+      "cli": [
+        "kya alerts",
+        "kya alerts status",
+        "kya alerts test",
+        "kya alerts on",
+        "kya alerts off",
+        "--json",
+        "KYA_ALERTS=on",
+        "alerts.desktop",
+        "KYA_ALERTS_DESKTOP=off"
+      ],
       "docs": [
+        "docs/alerts.md",
+        "docs/oss-vs-hosted.md",
         "README.md"
       ],
-      "tests": [],
+      "tests": [
+        "test/alerts-e2e.test.ts",
+        "test/alerts-incident.test.ts",
+        "test/alerts-report.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-alerts-local-triage",
+      "name": "Local triage model for security alerts",
+      "summary": "Optional offline model (ModernBERT-base, int8 ONNX, about 150 MB) that adds category, urgency, next step and a benign score to each incident alert. Offered once by `kya start` (Turn on security alerts? [Y/n]). One sha256-pinned download. Advisory: it never removes an alert and never changes the severity.",
+      "cli": [
+        "KYA_ALERTS=on",
+        "KYA_ALERTS=off",
+        "KYA_TRIAGE_MODEL_PATH"
+      ],
+      "docs": [
+        "docs/alerts.md",
+        "README.md"
+      ],
+      "tests": [
+        "test/alerts-triage-setup.test.ts",
+        "test/alerts-triage-model.test.ts",
+        "test/alerts-triage-e2e.test.ts"
+      ],
       "status": "beta",
       "plan": "oss"
     },
@@ -1332,12 +1369,39 @@
     {
       "id": "kya-incidents",
       "name": "Incidents and detections (console)",
-      "summary": "Incident and detection screens in the hosted console.",
+      "summary": "Incident and detection screens in the hosted console, with advisory model triage (category, urgency, action, benign) on all plans, by the same local classifier as the OSS CLI (flag engine: classifier, gemma or off). One open incident per pattern, status workflow (acknowledge, assign, resolve, mute, reopen) with history, and alerts only for a new incident or a severity rise. Auto-resolve of incidents with no activity (never critical).",
       "cli": [],
       "docs": [
         "https://shield-agent.com/docs/kya/hosted-commands#kya-incidents"
       ],
-      "tests": [],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/KyaHostedIncidentTriageE2eIT.java",
+        "../../app/src/test/java/com/shieldagent/app/KyaHostedClassifierE2eIT.java",
+        "../../app/src/test/java/com/shieldagent/app/KyaHostedClassifierFallbackE2eIT.java",
+        "../../app/src/test/java/com/shieldagent/app/KyaHostedClassifierOffE2eIT.java",
+        "../../app/src/test/java/com/shieldagent/app/KyaIncidentWorkflowE2eIT.java",
+        "../../app/src/test/java/com/shieldagent/app/KyaAlertRoutingE2eIT.java"
+      ],
+      "status": "beta",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-incident-api",
+      "name": "Incident API and signed incident webhooks",
+      "summary": "REST API to list and read incidents, acknowledge, assign, resolve, mute and reopen them, and read their history (keys: read scope for GET, write scope for POST; another workspace's incident is 404). Signed webhooks send kya.incident.opened for a new high or critical incident, with the optional triage, then kya.incident.updated on a severity rise and kya.incident.resolved. Webhooks need Pro or higher.",
+      "cli": [
+        "/api/v1/kya/incidents",
+        "kya.incident.opened",
+        "kya.incident.updated",
+        "kya.incident.resolved"
+      ],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-incident-api"
+      ],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/KyaIncidentWorkflowE2eIT.java",
+        "../../app/src/test/java/com/shieldagent/app/KyaHostedIncidentTriageE2eIT.java"
+      ],
       "status": "beta",
       "plan": "hosted"
     },
@@ -1521,6 +1585,49 @@
       ],
       "status": "flagged",
       "plan": "hosted"
+    },
+    {
+      "id": "kya-alert-routing",
+      "name": "Alert routing rules and channels (console)",
+      "summary": "Hosted per-workspace routing rules (first match wins, minimum severity, triage filters, quiet hours that never drop critical) and alert channels: email on all plans, Slack and Teams incident cards on Pro, escalation chains, PagerDuty and Opsgenie on Scale. Channel secrets are encrypted, email goes to active verified workspace members only.",
+      "cli": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-alert-routing"
+      ],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/KyaAlertRoutingE2eIT.java",
+        "../../app/src/test/java/com/shieldagent/app/KyaAlertConsoleE2eIT.java"
+      ],
+      "status": "beta",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-triage-feedback",
+      "name": "Triage feedback and calibration (console)",
+      "summary": "Hosted operators confirm or correct the four triage answers (category, urgency, action, benign) on the incident page or through the API. A weekly job and a Recalibrate now button fit one temperature for each question and workspace from its own labels (30 labels needed, kept only when held-out Brier improves). A per-workspace confidence threshold (default 0.6) makes a less sure category or urgency count as unsure for alert rules. A Triage quality panel shows accuracy against labels and a reliability table. Labels stay in the workspace and are never exported or used for training.",
+      "cli": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-triage-feedback"
+      ],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/KyaTriageFeedbackE2eIT.java"
+      ],
+      "status": "beta",
+      "plan": "hosted"
+    },
+    {
+      "id": "kya-webhook-subscriptions",
+      "name": "Webhook event subscriptions (console)",
+      "summary": "Console page that lists the signed webhook endpoints and lets an owner or admin tick which event types each one gets (approvals, policy, incidents).",
+      "cli": [],
+      "docs": [
+        "https://shield-agent.com/docs/kya/hosted-commands#kya-webhook-subscriptions"
+      ],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/KyaWebhookSubscriptionsE2eIT.java"
+      ],
+      "status": "beta",
+      "plan": "hosted"
     }
   ],
   "knownGaps": [
@@ -1564,12 +1671,6 @@
       "rule": "R6-tests",
       "id": "kya-certify-eu",
       "reason": "test/certify-eu-ai-act.test.ts exists but names neither the feature id nor a cli entry. Clears when it names kya-certify-eu.",
-      "clearedBy": "B6"
-    },
-    {
-      "rule": "R6-tests",
-      "id": "kya-alerts",
-      "reason": "No test names alert webhooks by id. It has no command or flag. Clears when a notify test covers it by id.",
       "clearedBy": "B6"
     },
     {
@@ -1636,12 +1737,6 @@
       "rule": "R6-tests",
       "id": "kya-sessions",
       "reason": "test/ops.test.ts exists but does not run kya sessions by name. Clears when a test names the command.",
-      "clearedBy": "B6"
-    },
-    {
-      "rule": "R6-tests",
-      "id": "kya-incidents",
-      "reason": "No test names the incident screens by id. Console pages are login-only. Clears when an e2e test names the id.",
       "clearedBy": "B6"
     },
     {

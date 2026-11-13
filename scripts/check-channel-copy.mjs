@@ -173,6 +173,8 @@ export function channels(root, copy) {
     { path: ".plugin/marketplace.json", channel: "Copilot marketplace plugin", key: "variants.plugin", field: jsonField("plugins[*].description"), many: true },
     { path: "gemini-extension.json", channel: "Gemini CLI extension", key: "variants.plugin", field: jsonField("description") },
     { path: ".cursor-plugin/plugin.json", channel: "Cursor plugin", key: "long", field: jsonField("description") },
+    // One .vsix feeds the VS Code Marketplace and Open VSX; kya-channel-copy-live.sh compares both live pages with variants.vscode.
+    { path: "vscode/package.json", channel: "VS Code extension (Marketplace, Open VSX)", key: "variants.vscode", field: jsonField("description") },
     // The Python shim, monorepo copy = the PyPI source: pypi-publish.yml builds sdks/kya-python on the kya-v* tag.
     { path: "../kya-python/pyproject.toml", channel: "kya-python pyproject (PyPI source, monorepo copy)", key: "variants.python", field: pyprojectDescription },
     { path: "packaging/homebrew/shield-kya.rb", channel: "Homebrew", key: "short", norm: noPeriod, brew: true, field: lineField("desc", /^(\s*desc\s+)("((?:[^"\\]|\\.)*)")/m, (v) => JSON.stringify(noPeriod(v))) },

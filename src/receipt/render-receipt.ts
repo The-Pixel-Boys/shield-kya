@@ -22,6 +22,7 @@ import {
   summarizeNotifyLog,
   type NotifyLogSummary,
 } from "../notify/log.js";
+import { readAlertsState, type AlertEntry } from "../alerts/state.js";
 import { readOtelStats, type OtelStats } from "../otel/stats.js";
 import {
   loadCertifyCard,
@@ -108,6 +109,8 @@ export interface ReceiptModel {
   readonly investigate?: InvestigateLastRun;
   /** Per-target alert delivery rollup from .kya/notify-log.jsonl. */
   readonly alerts?: NotifyLogSummary;
+  /** Incidents that alerted, oldest first, from .kya/alerts-state.json. */
+  readonly incidentAlerts?: readonly AlertEntry[];
   /** Persisted OTLP export counters from .kya/otel-stats.json. */
   readonly otel?: OtelStats;
   /** Last IoC scan result from ~/.kya/ioc-latest.json. Advisory; never sent by buildSharePayload. */
@@ -419,6 +422,7 @@ export function buildReceiptModel(
     discovery: extras?.discovery,
     investigate: extras?.investigate,
     alerts: extras?.alerts,
+    incidentAlerts: extras?.incidentAlerts,
     otel: extras?.otel,
     ioc: extras?.ioc,
     posture: extras?.posture,
@@ -454,6 +458,7 @@ export function buildWindowReceiptModel(
     discovery: extras?.discovery,
     investigate: extras?.investigate,
     alerts: extras?.alerts,
+    incidentAlerts: extras?.incidentAlerts,
     otel: extras?.otel,
     ioc: extras?.ioc,
     posture: extras?.posture,
@@ -499,6 +504,7 @@ export function loadReceiptModel(input: {
     discovery: loadDiscoveryCard(env),
     investigate: loadInvestigateLastRun(env),
     alerts: summarizeNotifyLog(readNotifyLog(env)),
+    incidentAlerts: readAlertsState(env),
     otel: readOtelStats(env),
     ioc: readIocResult(env),
     posture: postureCard(env),
@@ -2119,6 +2125,29 @@ ${card.findings
 </section>`;
 }
 
+/** Overview list of incidents that alerted, newest first. Renders nothing until one has alerted. */
+function incidentAlertsPanel(entries: readonly AlertEntry[] | undefined, nowMs: number): string {
+  if (!entries || entries.length === 0) return "";
+  const rows = [...entries]
+    .reverse()
+    .slice(0, 5)
+    .map((e) => {
+      const where = e.status === "sent" && e.delivered > 0 ? `sent to ${e.delivered}` : e.status === "sent" ? "report only" : "not delivered";
+      const tri = e.triage
+        ? `<br><span class="mute small">triage (local model, advisory): ${esc(e.triage.category.id)} ${Math.round(e.triage.category.p * 100)}% · ${esc(e.triage.urgency.id)} · ${esc(e.triage.action.id)} · harmless ${Math.round(e.triage.benign * 100)}%</span>`
+        : "";
+      return `    <li>${severityPill(e.severity)} ${esc(e.title)} <span class="mute">${esc(where)} · <time datetime="${esc(e.ts)}" title="${esc(e.ts)}">${esc(relativeTime(e.ts, nowMs))}</time></span>${tri}</li>`;
+    })
+    .join("\n");
+  return `<section class="panel" aria-label="Incident alerts">
+  <h2>Incident alerts</h2>
+  <ul class="rows">
+${rows}
+  </ul>
+  <p class="mute small">incidents that raised an alert · <code>kya alerts status</code> · local KYA is advisory</p>
+</section>`;
+}
+
 /**
  * System-tab Alerts panel: per-target delivery rollup from the notify ledger.
  * With no deliveries yet the panel still renders as an empty state (config
@@ -2349,7 +2378,7 @@ export function buildLiveFragments(
         showbackHeroCard(model.showback, events),
       ].join("\n        "),
       overviewPanels: zoneBody(
-        [dashboardPanel(dashboard), sessionsPanel(agg, nowMs, changes), reasonsPanel(agg)],
+        [incidentAlertsPanel(model.incidentAlerts, nowMs), dashboardPanel(dashboard), sessionsPanel(agg, nowMs, changes), reasonsPanel(agg)],
         "No activity in this window yet - analytics appear once events land.",
       ),
       certifyBody: zoneBody(

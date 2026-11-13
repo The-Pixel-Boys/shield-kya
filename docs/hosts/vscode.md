@@ -6,7 +6,7 @@ It is a viewer and a launcher, not a gate. Local kya is advisory: it records eve
 
 ## Install
 
-The extension is not yet listed on the VS Code Marketplace or Open VSX. Build and install the `.vsix` from source:
+Install Shield KYA from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=shield-agent.shield-kya) (`code --install-extension shield-agent.shield-kya`). The Open VSX listing is pending: Eclipse must verify the `shield-agent` namespace first. Until then, Cursor and other Open VSX editors need the `.vsix` that you build from source:
 
 ```bash
 git clone https://github.com/The-Pixel-Boys/shield-kya && cd shield-kya/vscode

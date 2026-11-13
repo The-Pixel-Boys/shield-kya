@@ -33,14 +33,14 @@ chat = client.chat.create(
 )
 ```
 
-`authorization` is sent as the MCP `Authorization` header. Confirm kwargs in [xAI remote MCP docs](https://docs.x.ai/docs/developers/tools/remote-mcp). The URL is always `https://shield-agent.com/mcp`.
+`authorization` is sent as the MCP `Authorization` header. Confirm kwargs in [xAI remote MCP docs](https://docs.x.ai/developers/tools/remote-mcp). The URL is always `https://shield-agent.com/mcp`.
 
 ## Local / OSS
 
 There is no grok.com stdio path. For a local agent host use the same stdio launch as Claude:
 
 ```bash
-npx --no-install @shield-agent/kya@0.33.6 serve-mcp --stdio
+npx --no-install @shield-agent/kya@0.34.0 serve-mcp --stdio
 ```
 
 Env: `KYA_BASE_URL`, `KYA_API_KEY`, `KYA_HOST`. Codex and Gemini example configs in this package show the full snippets.
