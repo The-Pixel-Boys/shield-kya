@@ -10,6 +10,7 @@ import { notifyOnTrailEvent, type NotifyFileConfig } from "../notify/index.js";
 import { exportVerdictSpan, resolveOtlpExportConfig } from "../otel/exporter.js";
 import { readOptInConfig } from "../otel/map-attrs-optin.js";
 import { NOTIFY_PROJECT_DIR_VAR } from "../notify/dispatch.js";
+import { runAlertScan } from "../alerts/scan.js";
 
 export async function runNotifyFlush(
   env: NodeJS.ProcessEnv,
@@ -33,6 +34,8 @@ export async function runNotifyFlush(
     ...readFileConfig(cwd),
   } as NotifyFileConfig;
   await notifyOnTrailEvent(event, fileConfig, env).catch(() => undefined);
+  // Incident alerts (off unless enabled in the user-level config or KYA_ALERTS=on). Never throws.
+  await runAlertScan(cwd, env).catch(() => undefined);
   // The project dir comes from the parent hook or wrap (dispatch.ts sets it on every spawn). Missing: the opt-in is refused.
   const otlp = resolveOtlpExportConfig(env, fileConfig, readOptInConfig(env[NOTIFY_PROJECT_DIR_VAR]));
   if (otlp) {

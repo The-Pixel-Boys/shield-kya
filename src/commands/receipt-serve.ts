@@ -7,6 +7,7 @@ import type { ResolvedConfig } from "../config.js";
 import { startLiveReceiptServer } from "../receipt/live-server.js";
 import { clearDaemonState, writeDaemonState } from "../receipt/daemon.js";
 import { semanticRuntimeInstalled } from "../receipt/semantic-status.js";
+import { triageInstalled } from "../alerts/triage-status.js";
 
 const DEFAULT_IDLE_MINUTES = 30;
 const DEFAULT_CWD_POLL_MS = 60_000;
@@ -41,11 +42,11 @@ function cwdPollMs(env: NodeJS.ProcessEnv): number {
  * (for example from a repo's settings) cannot weaken a safety property.
  */
 
-/** RSS ceiling in MB. KYA_RECEIPT_MAX_RSS_MB: "0" turns it off; empty or invalid means 512 (2048 when the search runtime is installed). */
+/** RSS ceiling in MB. KYA_RECEIPT_MAX_RSS_MB: "0" turns it off; empty or invalid means 512 (2048 when the search runtime or the local triage model is installed). */
 export function receiptMaxRssMb(env: NodeJS.ProcessEnv): number | undefined {
   const raw = env.KYA_RECEIPT_MAX_RSS_MB?.trim() ?? "";
   const mb = Number(raw);
-  if (raw === "" || !Number.isFinite(mb) || mb < 0) return semanticRuntimeInstalled(env) ? DEFAULT_MAX_RSS_MB_SEMANTIC : DEFAULT_MAX_RSS_MB;
+  if (raw === "" || !Number.isFinite(mb) || mb < 0) return semanticRuntimeInstalled(env) || triageInstalled(env) ? DEFAULT_MAX_RSS_MB_SEMANTIC : DEFAULT_MAX_RSS_MB;
   return mb === 0 ? undefined : mb;
 }
 

@@ -385,6 +385,19 @@ export function readTrail(cwd: string, env: NodeJS.ProcessEnv = process.env): Tr
   const legacy = legacyTrailPath(cwd);
   const events = readTrailFile(globalPath, archivedTrailPath(env));
   if (legacy !== globalPath) events.push(...readTrailFile(legacy));
+  return sortByTs(events);
+}
+
+/**
+ * Only the user-level trail (live file + archive, tail-capped like readTrail). Never the per-project
+ * legacy trail: a cloned repo can ship its own <project>/.kya/trail.jsonl, so anything that sends
+ * data out on the strength of trail rows (incident alerts) must not read it.
+ */
+export function readGlobalTrail(env: NodeJS.ProcessEnv = process.env): TrailEvent[] {
+  return sortByTs(readTrailFile(globalTrailPath(env), archivedTrailPath(env)));
+}
+
+function sortByTs(events: TrailEvent[]): TrailEvent[] {
   return events
     .map((event, i) => ({ event, i, t: Date.parse(event.ts) }))
     .sort((a, b) => {

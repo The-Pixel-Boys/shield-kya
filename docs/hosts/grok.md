@@ -72,7 +72,7 @@ Grok CLI: delete the `[mcp_servers.shield-kya]` table from `~/.grok/config.toml`
 ## Troubleshooting
 
 - **Connector rejected at save.** grok.com refuses localhost and private IPs. The URL must be exactly `https://shield-agent.com/mcp`.
-- **401/403 on calls.** The Bearer header didn't travel. In the SDK, confirm the kwarg is `authorization=f"Bearer {key}"` (see [xAI remote MCP docs](https://docs.x.ai/docs/developers/tools/remote-mcp)); in the UI, confirm the header field saved.
+- **401/403 on calls.** The Bearer header didn't travel. In the SDK, confirm the kwarg is `authorization=f"Bearer {key}"` (see [xAI remote MCP docs](https://docs.x.ai/developers/tools/remote-mcp)); in the UI, confirm the header field saved.
 - **Tempted to ngrok the OSS server.** Don't. A public tunnel to an unauthenticated local MCP is worse than no gate. Hosted endpoint + machine key is the supported path.
 
 ## Honesty note

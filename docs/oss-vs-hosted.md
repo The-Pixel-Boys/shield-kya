@@ -19,6 +19,8 @@ This page lists which is which, so you can decide what you need.
 | `kya wrap` | Puts the evaluate gate in front of any CLI. |
 | MCP gateway | `kya gate` on loopback. Observe mode records calls. The deny set is the only hard stop. See [mcp-servers.md](mcp-servers.md). |
 | Usage stats | Opt-in and off by default. See [telemetry.md](telemetry.md). |
+| Security incident alerts | Off by default. The fixed detectors of `kya investigate` decide that an incident exists. `kya` then sends an advisory alert to the live report, a desktop notification and the webhooks you set. It never blocks a tool call and it fails open. See [alerts.md](alerts.md). |
+| Local triage model (optional) | A small offline model (ModernBERT-base, about 150 MB, rule labels only) that adds a category, an urgency, a next step and a harmless-or-not score to each alert. `kya start` offers it once. One download, sha256 pinned, then no network. It is advisory: it never removes an alert and never changes a severity. If the model is missing or slow, the alert goes out with the detector severity. |
 
 ## Needs the hosted service (account and API key)
 
@@ -29,9 +31,23 @@ This page lists which is which, so you can decide what you need.
 | Human approvals | A Review verdict waits for a person in your workspace. |
 | Approval and policy events | Signed webhooks for pending, approved, rejected and expired approvals (expired only when the workspace sets an approval TTL), DENY and REQUIRE_APPROVE verdicts and incidents. The workspace also lists them for 30 days (`GET /api/v1/kya/events`) for clients without a public HTTPS URL, such as a local n8n. Receiving an event approves nothing. The local `notify.webhooks` alerts above are separate. |
 | Workspace and team features | Shared console, agents, seats. |
+| Incident triage, workflow and alert routing | Fleet-wide incidents with a model triage on all plans (the same classifier, run on our host), an incident workflow (acknowledge, assign, resolve, mute, reopen, history, auto-resolve), routing rules, email, Slack and Teams incident cards, escalation chains, PagerDuty and Opsgenie, and operator labels that tune a per-workspace calibration. Plan gating is in the table below. |
 | Operator SSO and SCIM | Hosted only. See [hosted-operator-sso.md](hosted-operator-sso.md). |
 | Fail-closed hosted hook mode (preview) | When the workspace cannot answer, the call is denied. The hosted hook also runs the local never-list and [guard pack](guard-pack.md#hosted-mode) first, and those denies cannot be lowered by the workspace. See [hosted-hook.md](hosted-hook.md). |
 | Plan limits | Caps on agents, seats and trail visibility depend on your plan. |
+
+## Security incident alerts, side by side
+
+| Capability | Open source client (local, free, advisory) | Hosted service (account, enforces) |
+|---|---|---|
+| Detection | 6 fixed detectors over your local trail. | The same six detectors over the trail of all devices, agents and users of the workspace, for the window of your plan (up to 90 days). |
+| Alert on a new incident | Report, desktop notification and the webhooks you set, for `high` and above by default. | Signed `kya.incident.*` webhooks (Pro and higher), email (all plans), and the channels below. One open incident for each pattern. |
+| Triage model | Optional local model, offered at `kya start`. Fixed shipped calibration. Advisory. | On for all plans. Every answer is stored with the model id, the input hash and the probabilities. A per-workspace calibration and a confidence threshold. |
+| Routing | A severity floor and the webhook list in `~/.kya/config.json`. | Routing rules (Pro and higher): first match wins, minimum severity, triage filters, quiet hours. A critical incident is never dropped. |
+| Channels | Slack, Teams, Linear, Jira and generic webhook templates. | Email (all plans). Slack and Teams incident cards (Pro and higher). PagerDuty and Opsgenie (Scale and higher). |
+| Workflow | None. A file and a report tab. | Acknowledge, assign, resolve, mute and reopen, with history and audit rows. Escalation chains (Scale and higher). |
+| Feedback | None. | Operators confirm or correct the answers. The labels stay in the workspace and never train a model. |
+| Failure mode | The open source client is advisory and fails open, apart from the never-list and the guard pack. A broken model or webhook never blocks anything and never removes an alert. | The service fails closed on policy, as before. Alerting never blocks a tool call, and the model alone never decides whether you get an alert (only a routing rule that you write can use its answer to narrow delivery). |
 
 The short version: the open source client is advisory and fails open, apart from the never-list and the guard pack. Real blocking runs on the MCP policy path against a hosted workspace, and the hosted service fails closed. The local `kya gate` observes: it records allowed calls and stops only its deny set.
 
@@ -64,6 +80,7 @@ Attestations in `.kya/attestations.json` are statements by the operator, recorde
 | `kya gate setup` | Downloads the pinned gateway binary from our releases (`kya start` does this only when it finds MCP servers to govern). No other default command downloads anything. |
 | Usage stats, if you said yes | A small anonymous heartbeat. `kya telemetry show` prints the exact payload. Never paths, prompts, tool arguments or keys. |
 | `kya receipt --share` | A redacted summary (verdict counts, rollups, Certify status) goes to a public, anonymous endpoint and you get a public link that expires after 7 days. The endpoint is rate limited. No paths, tool arguments or session IDs are included. The Certify status on the page is labelled as self-reported. |
+| Security alerts, if you said yes | `kya start` runs one `npm install` of `onnxruntime-node@1.30.0` (about 100 MB) and downloads one model file (about 150 MB) from `models.shield-agent.com`. https only, that one host, no redirects, sha256 pinned. After that, hook time and triage time use no network. The alert itself goes only to the webhooks you set. See [alerts.md](alerts.md). |
 | Alert webhooks and OTLP export, if you configure them | `notify.webhooks` and `otlpExport` in `.kya/config.json` (or `KYA_NOTIFY_WEBHOOK` and `KYA_OTLP_EXPORT_ENDPOINT`) send redacted events to the URLs you set. `KYA_OTLP_ENDPOINT` exports evaluate latency metrics. See [otlp.md](otlp.md). |
 | `KYA_BASE_URL` and an API key are set | Hosted calls: evaluate, ingest, approvals, and `discover --push`. Only these configured commands call your workspace. |
 

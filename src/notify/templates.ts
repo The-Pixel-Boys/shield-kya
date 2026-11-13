@@ -84,6 +84,18 @@ export function buildSlackPayload(event: TrailEvent): Record<string, unknown> {
 export const TEAMS_NOT_AN_APPROVAL =
   "A Teams reaction or reply is not an approval. Decide in kya or in the hosted console.";
 
+const AUTOLINK_SCHEME = /:\/\//g;
+const AUTOLINK_DOT = /(?<=[\p{L}\p{N}-])\.(?=[\p{L}\p{N}])/gu;
+
+/**
+ * Makes plain text unlinkable: `://` becomes `: //` and every dot between two letters or digits gets
+ * spaces around it, so no receiver can auto-link a host name or a leading `www.`. Shared by Teams
+ * (teamsText) and the Slack, Linear and Jira incident templates.
+ */
+export function breakAutolinks(value: string): string {
+  return value.replace(AUTOLINK_SCHEME, ": //").replace(AUTOLINK_DOT, " . ");
+}
+
 /**
  * Event text for a Teams card. Teams renders a Markdown subset, so the characters that make links, mentions
  * (`<at>`), bold or headings become a space, a leading list marker becomes a space, and `://` becomes `: //`.
@@ -94,8 +106,8 @@ export function teamsText(value: string): string {
   return value
     .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ")
     .replace(/[\\[\]()*~#<>&|!`]/g, " ")
-    .replace(/:\/\//g, ": //")
-    .replace(/(?<=[\p{L}\p{N}-])\.(?=[\p{L}\p{N}])/gu, " . ")
+    .replace(AUTOLINK_SCHEME, ": //")
+    .replace(AUTOLINK_DOT, " . ")
     .replace(/^\s*([-+]|\d+\.)(?=\s|$)/, " ");
 }
 

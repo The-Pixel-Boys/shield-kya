@@ -114,6 +114,17 @@ function scanPiiField(
   }
 }
 
+/**
+ * True when the pii-in-summary check would flag this text (e-mail, Luhn-valid card number, high-entropy
+ * token). Triage input uses it to drop a summary whole before it can reach a model. Same patterns and
+ * thresholds as the detector, so the two cannot drift. Mirrored in Java: Detectors.containsPii.
+ */
+export function containsPii(value: string | undefined): boolean {
+  const hits: PiiHit[] = [];
+  scanPiiField("summary", value, hits);
+  return hits.length > 0;
+}
+
 function isNever(e: TrailEvent): boolean {
   return e.neverEvent === true || e.reasonCode === "NEVER_EVENT";
 }

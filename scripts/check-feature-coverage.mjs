@@ -34,6 +34,11 @@
 //   R7 diff rule (--base only): a change to src/cli.ts or src/commands/*.ts needs features.json changed,
 //      or a commit in the range carries `Features: n/a <reason>` (reason per reasonOk, the same rule as
 //      Docs-Parity in scripts/ci/check-docs-parity.sh).
+//   R9 screenshots (assets/screenshot-features.json): every screenshot, video or demo in channel-copy.json
+//      `screenshots` is linked to the feature ids it shows; paths and ids must exist. With --base, a PR that
+//      changes a feature row (name, summary, cli, docs) must also change one of its screenshots, or record
+//      `stillValid.<id> = { rowSha, note }` in the manifest. rowSha is rowSha(row) of the new row, so a later row
+//      change needs a new check. A stale picture is a published wrong claim, like a stale listing text.
 //   R8 (generated surfaces skip flagged and planned rows) is enforced by scripts/sync-features.mjs and
 //      its tests. R3 reads each docs file with its generated feature block removed (stripBlock), so the
 //      generator cannot satisfy R3 for a command that the prose does not name.
@@ -41,6 +46,7 @@
 // Known gaps: features.json knownGaps lists today's real gaps, each with a reason and the node that
 // clears it. A gap that is not listed fails. A listed gap that is gone fails too (remove the entry).
 // Fail closed: when the parse finds too few commands or flags, the run fails instead of passing.
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -49,6 +55,7 @@ import { FORBIDDEN } from "./check-channel-copy.mjs";
 import { stripBlock } from "./sync-features.mjs";
 
 export const REGISTRY = "features.json";
+export const SHOT_MANIFEST = "assets/screenshot-features.json";
 const CLI = "src/cli.ts";
 const MIN_COMMANDS = 30; // HELP has 32 commands and cli.ts has 34 case labels today
 const MIN_FLAGS = 20; // about 80 today
@@ -171,6 +178,9 @@ function walkTs(dir) {
 function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 }
+
+/** Hash of the row parts a screenshot can go stale on. Used by R9 stillValid notes. */
+export const rowSha = (r) => createHash("sha256").update(JSON.stringify([r.name, r.summary, r.cli, r.docs])).digest("hex");
 
 const formatProblem = ({ rule, id, msg }) => `${rule}${id ? ` ${id}` : ""}: ${msg}`;
 
@@ -363,6 +373,35 @@ export function runChecks(pkg, { base } = {}) {
     if (!gaps.has(key)) bad("GAP", key.split("|")[1], `STALE knownGaps entry ${key}: it is no longer a gap. Remove the entry`);
   }
 
+  // R9: screenshots linked to features. Static part always; diff part with --base.
+  const shots = {};
+  const shotPath = join(pkg, SHOT_MANIFEST);
+  const ids = new Set(rows.map((r) => r.id));
+  if (!existsSync(shotPath)) bad("R9", undefined, `${SHOT_MANIFEST} is missing: it links every screenshot to the features it shows`);
+  else {
+    try {
+      Object.assign(shots, JSON.parse(readFileSync(shotPath, "utf8")).screenshots ?? {});
+    } catch (e) {
+      bad("R9", undefined, `${SHOT_MANIFEST} is not valid JSON: ${e.message}`);
+    }
+    for (const [file, e] of Object.entries(shots)) {
+      if (!existsSync(join(pkg, file))) bad("R9", undefined, `${SHOT_MANIFEST}: ${file} does not exist`);
+      if (!Array.isArray(e?.features)) bad("R9", undefined, `${SHOT_MANIFEST}: ${file} needs a features array (may be empty)`);
+      for (const id of e?.features ?? []) if (!ids.has(id)) bad("R9", undefined, `${SHOT_MANIFEST}: ${file} names unknown feature ${id}`);
+      for (const [id, v] of Object.entries(e?.stillValid ?? {})) {
+        if (!(e.features ?? []).includes(id) || typeof v?.rowSha !== "string" || !reasonOk(String(v?.note ?? ""))) {
+          bad("R9", undefined, `${SHOT_MANIFEST}: ${file} stillValid.${id} needs a mapped feature id, a rowSha and a real note`);
+        }
+      }
+    }
+    const copyPath = join(pkg, "channel-copy.json");
+    if (existsSync(copyPath)) {
+      for (const s of JSON.parse(readFileSync(copyPath, "utf8")).screenshots ?? []) {
+        if (!(s.file in shots)) bad("R9", undefined, `${s.file} is in channel-copy.json but not in ${SHOT_MANIFEST}: link it to its features (empty list if none)`);
+      }
+    }
+  }
+
   // R7: diff rule, needs history (PR CI passes --base).
   if (base) {
     let mb;
@@ -379,6 +418,24 @@ export function runChecks(pkg, { base } = {}) {
         if (!escape.some(reasonOk)) {
           const weak = escape.length > 0 ? " A Features: n/a line was found, but its reason is too short or repeated." : "";
           bad("R7", undefined, `src/cli.ts or src/commands changed without ${REGISTRY}. Update the registry in this PR, or add "Features: n/a <reason>" to a commit message.${weak}`);
+        }
+      }
+      // R9 diff part: a changed row needs a changed screenshot or a stillValid note for this row state.
+      let baseRows = [];
+      try {
+        baseRows = JSON.parse(git(pkg, ["show", `${mb}:./${REGISTRY}`])).features ?? [];
+      } catch {
+        bad("R9", undefined, `cannot read ${REGISTRY} at the merge-base ${mb.slice(0, 8)}`);
+      }
+      for (const r of rows) {
+        const old = baseRows.find((b) => b.id === r.id);
+        if (!old || rowSha(old) === rowSha(r)) continue;
+        const mapped = Object.entries(shots).filter(([, e]) => (e.features ?? []).includes(r.id));
+        if (mapped.length === 0) continue;
+        const touched = mapped.some(([file]) => changed.includes(file));
+        const noted = mapped.some(([, e]) => e.stillValid?.[r.id]?.rowSha === rowSha(r));
+        if (!touched && !noted) {
+          bad("R9", r.id, `row changed but its screenshots (${mapped.map(([f]) => f).join(", ")}) did not. Retake them, or add stillValid.${r.id} = { "rowSha": "${rowSha(r)}", "note": "<why the picture is still true>" } to ${SHOT_MANIFEST}`);
         }
       }
     }

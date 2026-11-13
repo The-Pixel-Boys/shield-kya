@@ -18,6 +18,8 @@ import { runGateDoctor, runGateRun, runGateStop } from "../commands/gate.js";
 import { runInvestigate } from "../commands/investigate.js";
 import { runOrr } from "../commands/orr.js";
 import { loadInvestigateLastRun } from "../investigate/last-run.js";
+import { resolveAlertsConfig } from "../alerts/config.js";
+import { runAlertScan } from "../alerts/scan.js";
 import { loadOrrCard, type OrrCard } from "./enrich.js";
 import {
   defaultAgtAuditPath,
@@ -67,6 +69,8 @@ export interface LiveReceiptOptions {
   readonly maxRssMb?: number;
   /** Memory check period in ms (default 30 s). */
   readonly memPollMs?: number;
+  /** Minimum ms between incident alert scans (default 60 s). Test seam. */
+  readonly alertScanMinMs?: number;
 }
 
 export interface LiveReceiptServer {
@@ -156,6 +160,9 @@ async function withLoopbackSink<T>(run: (url: string) => Promise<T>): Promise<T>
 function mergedFileConfig(cwd: string, env: NodeJS.ProcessEnv): Record<string, unknown> {
   return { ...readFileConfig(kyaHome(env)), ...readFileConfig(cwd) } as Record<string, unknown>;
 }
+
+/** The report daemon runs the incident alert scan at most this often. */
+export const ALERT_SCAN_MIN_MS = 60_000;
 
 const ORR_REPORT_REL = join("orr-report", "report.json");
 /** Re-run the board when the report is older than this (30 minutes). */
@@ -453,6 +460,46 @@ export function startLiveReceiptServer(
   const scheduleBroadcast = (source: "trail" | "orr" | "action"): void => {
     if (debounce) clearTimeout(debounce);
     debounce = setTimeout(() => broadcast(source), 120);
+  };
+
+  // Incident alerts: when the trail changes, run the detectors at most once per minute (off unless alerts are on).
+  // The scan never throws and never touches the page; a new alert only triggers a refresh.
+  let lastAlertScan = 0;
+  let alertScanRunning = false;
+  // A trail change that arrives during a scan must not be lost: scan again once the running scan ends.
+  let alertRescan = false;
+  let alertTimer: ReturnType<typeof setTimeout> | undefined;
+  const maybeScanAlerts = (): void => {
+    if (closed || !resolveAlertsConfig(process.env).enabled) return;
+    if (alertScanRunning) {
+      alertRescan = true;
+      return;
+    }
+    const wait = lastAlertScan + (options.alertScanMinMs ?? ALERT_SCAN_MIN_MS) - Date.now();
+    if (wait > 0) {
+      if (!alertTimer) {
+        alertTimer = setTimeout(() => {
+          alertTimer = undefined;
+          maybeScanAlerts();
+        }, wait);
+        alertTimer.unref?.();
+      }
+      return;
+    }
+    lastAlertScan = Date.now();
+    alertScanRunning = true;
+    void runAlertScan(cwd, process.env)
+      .then((r) => {
+        if (r.alerted.length > 0) scheduleBroadcast("action");
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        alertScanRunning = false;
+        if (alertRescan) {
+          alertRescan = false;
+          maybeScanAlerts();
+        }
+      });
   };
 
   const unauthorized = (res: ServerResponse): void => {
@@ -937,6 +984,7 @@ export function startLiveReceiptServer(
         process.removeListener("SIGTERM", onSignal);
         onSignal = undefined;
       }
+      if (alertTimer) clearTimeout(alertTimer);
       try {
         watcher?.close();
       } catch {
@@ -1005,6 +1053,7 @@ export function startLiveReceiptServer(
         watcher = watch(dirname(path), { persistent: true }, (_event, filename) => {
           if (!filename || String(filename).endsWith("trail.jsonl")) {
             scheduleBroadcast("trail");
+            maybeScanAlerts();
           }
         });
         watcher.on("error", () => {

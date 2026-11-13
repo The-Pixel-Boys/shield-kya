@@ -38,6 +38,8 @@ export function freshTestHome(): string {
 }
 
 process.env.KYA_HOME = freshTestHome();
+// A test run must never pop a real desktop notification. The desktop tests turn it on with a stub notifier on PATH.
+process.env.KYA_ALERTS_DESKTOP = "off";
 
 beforeEach(() => {
   process.env.KYA_HOME = freshTestHome();

@@ -263,7 +263,9 @@ describe("never-list input rules: linear time on adversarial input", () => {
       }
       expect(best, `adversarial input starting "${s.slice(0, 24)}"`).toBeLessThan(150);
     }
-  });
+    // Wall-clock limit only: the CPU budget above is the real check. Under host load the
+    // default 5000 ms tripped before any input was slow (main pipeline 5320).
+  }, 60_000);
 });
 
 describe("never-list input rules: doc stays in step with the table", () => {

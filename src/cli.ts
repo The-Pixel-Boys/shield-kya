@@ -115,6 +115,8 @@ Commands:
                     <file>, or --from agt [--file <path>] for the AGT audit log)
   investigate       Deterministic trail analysis: detectors, grouped incidents,
                     markdown fix briefs for coding agents (--json)
+  alerts            Security alerts for detected incidents, optional local triage model, off by default, advisory
+                    (status [--json] | test | on | off) - see docs/alerts.md
   discover          Scan this endpoint for AI agents, IDEs, runtimes, and MCP servers
                     (--json, --diff <snapshot>, --push)
 
@@ -272,6 +274,9 @@ export async function runCli(
         if (!config.json) {
           const { maybeOfferSemanticSearch } = await import("./receipt/semantic-setup.js");
           await maybeOfferSemanticSearch(io, env).catch(() => undefined);
+          // Security alerts with optional local triage: asked once, after the search offer, same rules. Never fails start.
+          const { maybeOfferTriageAlerts } = await import("./alerts/triage-setup.js");
+          await maybeOfferTriageAlerts(io, env).catch(() => undefined);
         }
         const result = await runStart(config, { force, open: !noOpen, gate: !noGate });
         if (config.json) {
@@ -1146,6 +1151,16 @@ export async function runCli(
       case "discover": {
         const { discoverOptionsFromArgs, runDiscover } = await import("./commands/discover.js");
         return await runDiscover(discoverOptionsFromArgs(parsed), io, cwd, env);
+      }
+
+      case "alerts": {
+        const { runAlerts } = await import("./commands/alerts.js");
+        return await runAlerts({
+          io: { log: (line) => io.log(line), error: (line) => io.error(line) },
+          env,
+          sub: parsed.positionals[0],
+          flags: parsed.flags,
+        });
       }
 
       case "notify-flush": {

@@ -2,7 +2,7 @@
   "name": "shield-kya",
   "displayName": "Shield KYA",
   "description": "Audit trail and traceability for AI agents. See kya verdicts for every coding agent tool call in your editor. Advisory: kya records every call, blocks the never-list and the guard pack, fails open.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "shield-agent",
   "license": "MIT",
   "icon": "media/icon.png",

@@ -27,6 +27,7 @@ const COPY = {
     mcp: "Tagline for agents. Gate surface.",
     plugin: "Tagline for agents. Plugin surface, advisory.",
     python: "Tagline for agents. Python shim.",
+    vscode: "Tagline for agents. Editor extension, advisory.",
     webInstall: "Tagline for agents. Install & go.",
     webHowKyaWorks: "Tagline for agents. How it works.",
   },
@@ -69,6 +70,7 @@ function fixture(): void {
   put(".plugin/marketplace.json", JSON.stringify({ description: COPY.variants.plugin, plugins: [{ description: COPY.variants.plugin }] }));
   put("gemini-extension.json", JSON.stringify({ name: "x", description: COPY.variants.plugin }));
   put(".cursor-plugin/plugin.json", JSON.stringify({ description: COPY.long }));
+  put("vscode/package.json", JSON.stringify({ name: "x", description: COPY.variants.vscode }));
   put("../kya-python/pyproject.toml", `[project]\nname = "x"\ndescription = ${JSON.stringify(COPY.variants.python)}\n`);
   put("packaging/homebrew/shield-kya.rb", `class ShieldKya < Formula\n  desc "Tagline for agents"\n  homepage "h"\nend\n`);
   put("packaging/scoop/shield-kya.json", JSON.stringify({ version: "1.0.0", description: COPY.long }, null, 4));
@@ -115,6 +117,7 @@ const DRIFT: Array<[string, string, string]> = [
   [".plugin/marketplace.json", COPY.variants.plugin, ".plugin/marketplace.json: Copilot marketplace:"],
   ["gemini-extension.json", COPY.variants.plugin, "gemini-extension.json: Gemini CLI extension:"],
   [".cursor-plugin/plugin.json", COPY.long, ".cursor-plugin/plugin.json: Cursor plugin:"],
+  ["vscode/package.json", COPY.variants.vscode, "vscode/package.json: VS Code extension (Marketplace, Open VSX):"],
   ["../kya-python/pyproject.toml", COPY.variants.python, "../kya-python/pyproject.toml: kya-python pyproject (PyPI source, monorepo copy):"],
   ["packaging/homebrew/shield-kya.rb", '"Tagline for agents"', "packaging/homebrew/shield-kya.rb: Homebrew:"],
   ["packaging/scoop/shield-kya.json", COPY.long, "packaging/scoop/shield-kya.json: Scoop:"],
