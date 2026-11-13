@@ -25,8 +25,9 @@ steps:
     commands:
       - "T=\"$(mktemp -d)\"; trap 'rm -rf \"$T\"' EXIT"
       - pnpm install
-      - pnpm test
+      # Build first: many tests run dist/cli.js (same order as ci.yml). Test before build failed every tag run.
       - pnpm build
+      - pnpm test
       # Smoke help + offline
       - |
         node dist/cli.js --help
