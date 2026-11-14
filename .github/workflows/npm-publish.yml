@@ -124,10 +124,14 @@ jobs:
           grep -qi observe "$T/wrap.txt"
           node dist/cli.js dash --once --offline | tee "$T/kya-dash.txt"
           grep -q FREE "$T/kya-dash.txt"
-          (cd "$T/start-work" && node "$GITHUB_WORKSPACE/dist/cli.js" start --no-open | tee "$T/start.txt")
+          # Temp home with Claude Code evidence: start writes config only for hosts it finds, and needs --yes off a terminal.
+          mkdir -p "$T/start-home/.claude"
+          (cd "$T/start-work" && HOME="$T/start-home" KYA_HOME="$T/start-home" node "$GITHUB_WORKSPACE/dist/cli.js" start --yes --no-open | tee "$T/start.txt")
           test -f "$T/start-work/.mcp.json"
           grep -q serve-mcp "$T/start-work/.mcp.json"
           grep -q 'KYA start' "$T/start.txt"
+          (cd "$T/start-work" && HOME="$T/start-home" KYA_HOME="$T/start-home" node "$GITHUB_WORKSPACE/dist/cli.js" uninstall | tee "$T/uninstall.txt")
+          test ! -f "$T/start-work/.mcp.json"
           test -f server.json
           node -e "const p=require('./package.json'); if(!p.mcpName) process.exit(1)"
 
