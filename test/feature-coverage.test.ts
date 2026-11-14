@@ -8,12 +8,15 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, write
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// These tests spawn CLIs or git, or wait on timers: 0.8 to 1.6 s each on an idle Mac, so the 5 s default is too tight on a loaded CI host. Hang guard only; budget assertions stay.
+vi.setConfig({ testTimeout: 30_000 });
 // @ts-expect-error plain .mjs script, no type declarations
 import { parseCaseLabels, parseHelp, rowSha, runChecks } from "../scripts/check-feature-coverage.mjs";
 
 const PKG = join(dirname(fileURLToPath(import.meta.url)), "..");
-const COPIED = ["src", "docs", "test", "README.md", "vscode/README.md", "features.json", "assets", "channel-copy.json"];
+const COPIED = ["src", "docs", "test", "README.md", "vscode/README.md", "plugins/kya-guard/README.md", "plugins/kya-guard/SECURITY.md", "plugins/kya-guard/HOSTS.md", "plugins/kya-guard/submission/README.md", "features.json", "assets", "channel-copy.json"];
 
 let dir: string;
 const extraDirs: string[] = [];
@@ -48,8 +51,8 @@ describe("feature coverage: real tree", () => {
   it("passes on sdks/kya with every known gap listed", () => {
     const { problems, summary } = runChecks(PKG);
     expect(problems).toEqual([]);
-    expect(summary).toContain("92 rows");
-    expect(summary).toContain("39 HELP commands");
+    expect(summary).toContain("99 rows");
+    expect(summary).toContain("40 HELP commands");
   });
 
   it("has no R3-literal gap: the README prose names every command with an OSS docs row", () => {
@@ -75,10 +78,10 @@ describe("feature coverage: real tree", () => {
 });
 
 describe("parsers read text, so lazy command imports do not change them", () => {
-  it("finds the 39 HELP commands and the case labels", () => {
+  it("finds the 40 HELP commands and the case labels", () => {
     const cli = read("src/cli.ts");
     const help = parseHelp(cli);
-    expect(help.commands).toHaveLength(39);
+    expect(help.commands).toHaveLength(40);
     expect(help.commands).toContain("register-agent");
     expect(help.commands).toContain("export");
     expect(parseCaseLabels(cli)).toContain("notify-flush");

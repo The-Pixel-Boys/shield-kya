@@ -1,0 +1,13 @@
+id: class-fly-volumes-destroy
+kind: class
+title: Fly.io volume destroy
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    fly volumes destroy --yes
+expect: deny
+rule: fly-destroy
+since: 0.35.0
+credit: ""

@@ -1,6 +1,6 @@
 # Claude Code plugin
 
-Audit trail and traceability for AI agents. See what every coding agent did.
+Stops your coding agent from deleting, leaking or dropping things. Records everything else.
 
 This repo is also a Claude Code plugin marketplace named `shield-kya`. It ships one plugin, `kya`.
 
@@ -23,13 +23,15 @@ Or from a shell: `claude plugin marketplace add The-Pixel-Boys/shield-kya`, then
 
 The plugin ships three things:
 
-1. **SessionStart** runs `scripts/bootstrap.mjs`. It installs the pinned `@shield-agent/kya` once into `${CLAUDE_PLUGIN_DATA}` (about 6 s) and checks it on later sessions (files, version, and a load check). It never edits your settings or permissions.
-2. **PreToolUse** (every tool) runs `node ${CLAUDE_PLUGIN_DATA}/node_modules/@shield-agent/kya/dist/cli.js hook --host claude`. No npx and no npm or registry traffic at hook time. The hook costs about 0.2 s per tool call.
-3. **MCP server** `shield-kya`, started from the same installed copy (`serve-mcp --stdio`).
+1. **SessionStart** runs `node ${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap.mjs`. It installs `@shield-agent/kya` at the version of the plugin manifest (`.claude-plugin/plugin.json`, equal to the kya release) once into `${CLAUDE_PLUGIN_DATA}` (about 6 s) and checks it on later sessions (files, version, and a load check). It never edits your settings or permissions.
+2. **PreToolUse** (every tool) runs `node ${CLAUDE_PLUGIN_ROOT}/scripts/kya.mjs hook --host claude`. `kya.mjs` finds the installed copy in `${CLAUDE_PLUGIN_DATA}` and runs it in the same process. No npx and no npm or registry traffic at hook time. The hook costs about 0.2 s per tool call.
+3. **MCP server** `shield-kya`, started the same way (`node ${CLAUDE_PLUGIN_ROOT}/scripts/kya.mjs serve-mcp --stdio`).
 
-The MCP server in this plugin sets `KYA_OFFLINE=1`, `KYA_BASE_URL=http://127.0.0.1:1` and an empty `KYA_API_KEY`. What that guarantees: neither the hook nor the server makes hosted-plane calls, because the only control-plane URL they know is an unroutable loopback port and they have no credential. `kya.session_ingest` and the Hold-request tool still try that URL and fail locally; they do not stay offline by themselves (making `--offline` refuse them in `serve-mcp` is a CLI follow-up). What it does not guarantee: no network at all. A notify webhook in the user config or in a project's `.kya/config.json` receives record fields (tool id, decision, reason, session) when a call is denied, from both the hook and the MCP server; OTLP export and opt-in telemetry can also send. Review `.kya/config.json` in repositories you open, and see [telemetry.md](../telemetry.md) and [otlp.md](../otlp.md). For the hosted plane, connect it yourself (see [claude.md](claude.md)).
+Every command line names one literal script path under `${CLAUDE_PLUGIN_ROOT}` as the first argument, with no shell, no inline code and no computed path. This is the shape the Claude plugin directory validator accepts. The installed copy path lives inside `kya.mjs`, not in a command. `kya.mjs` removes `KYA_API_KEY` and `SHIELD_API_KEY` from its environment before kya starts, so the plugin never uses a hosted-plane key from your machine. Before it removes them, it sets `KYA_HOSTED_LINKED=1` when either one was non-empty. That flag says only that a key existed on your machine; the key itself is never copied, stored or sent. The opt-in usage telemetry reads the flag, so a plugin user with a key still reports `hostedLinked=true`. Hosted users are not affected: the hosted hook needs `--plane-config`, not this plugin. The MCP config also passes `CLAUDE_PLUGIN_DATA` in the server env, because older Claude Code versions may not export it to MCP servers.
 
-Every pin and manifest `version` follows `package.json`; `pnpm sync:version` rewrites them and `node scripts/check-version-pins.mjs` checks them.
+The MCP server in this plugin sets `KYA_OFFLINE=1` and `KYA_BASE_URL=http://127.0.0.1:1`. What that guarantees: neither the hook nor the server makes hosted-plane calls, because the only control-plane URL they know is an unroutable loopback port and `kya.mjs` gives them no credential. `kya.session_ingest` and the Hold-request tool still try that URL and fail locally; they do not stay offline by themselves (making `--offline` refuse them in `serve-mcp` is a CLI follow-up). What it does not guarantee: no network at all. A notify webhook in the user config or in a project's `.kya/config.json` receives record fields (tool id, decision, reason, session) when a call is denied, from both the hook and the MCP server; OTLP export and opt-in telemetry can also send. Review `.kya/config.json` in repositories you open, and see [telemetry.md](../telemetry.md) and [otlp.md](../otlp.md). For the hosted plane, connect it yourself (see [claude.md](claude.md)).
+
+Every manifest `version` follows `package.json`; `pnpm sync:version` rewrites them and `node scripts/check-version-pins.mjs` checks them. The Claude plugin hooks carry no version pin of their own: the bootstrap reads the manifest version. (Codex, Copilot and Gemini pass an explicit pin argument to the same script.)
 
 ### Install hardening and limits
 
@@ -61,7 +63,7 @@ Run `kya team init` at the repository root and commit the `.claude/settings.json
 }
 ```
 
-`vX.Y.Z` is the release tag that matches the kya you ran (needs the first kya release that includes `kya team`; `kya --help` lists `team init` when yours has it). Write a tag here, never a branch: this file decides what runs on every teammate's machine. A tag is still not fixed: anyone with write access to the public repository can move it, Claude Code's GitHub marketplace source has no commit `sha` pin, and the public repository has no tag protection rule today (a `v*` tag ruleset is recommended). The command makes no network call; check the tag exists with `git ls-remote https://github.com/The-Pixel-Boys/shield-kya refs/tags/vX.Y.Z` (if it does not, the plugin is skipped, not reported as an error).
+`vX.Y.Z` is the release tag that matches the kya you ran (needs the first kya release that includes `kya team`; `kya help --all` lists `team init` when yours has it). Write a tag here, never a branch: this file decides what runs on every teammate's machine. A tag is still not fixed: anyone with write access to the public repository can move it, Claude Code's GitHub marketplace source has no commit `sha` pin, and the public repository has no tag protection rule today (a `v*` tag ruleset is recommended). The command makes no network call; check the tag exists with `git ls-remote https://github.com/The-Pixel-Boys/shield-kya refs/tags/vX.Y.Z` (if it does not, the plugin is skipped, not reported as an error).
 
 What a teammate sees:
 

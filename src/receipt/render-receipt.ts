@@ -10,7 +10,9 @@ import type {
   CertifyRequirementResult,
   RequirementStatus,
 } from "../certify/evaluate.js";
-import { productLabel, eventsSince, readTrail, type TrailEvent, type TrailImportFormat, type TrailProduct } from "../trail.js";
+import { productLabel, eventsSince, readTrail, countOutcomes, outcomeOf, wouldHoldInStrict, type OutcomeCounts, type TrailEvent, type TrailImportFormat, type TrailProduct } from "../trail.js";
+import { eventIdOf, isNearMiss } from "../card.js";
+import { readCredentials } from "../login/credentials.js";
 import { mcpServerLabel, parseMcpToolId } from "../mcp-servers.js";
 import type { KyaFileConfig } from "../config.js";
 import {
@@ -54,6 +56,7 @@ import {
   type GatePage,
 } from "./gate-page.js";
 import { receiptCss } from "./receipt-css.js";
+import { DEMO_CALLS, PROMISE } from "../guard-demo.js";
 import { applyChipFilters, rankEvents } from "./search.js";
 import { emptyOpenshellCard, loadOpenshellCard, type OpenshellCard } from "./openshell-card.js";
 import { readIocResult, type IocResult } from "../ioc/result.js";
@@ -87,6 +90,8 @@ export interface ReceiptModel {
   readonly searchQuery?: string;
   /** Local identity from .kya/config.json (inert text; never a link). */
   readonly identity?: KyaFileConfig;
+  /** True when a control plane is set up (API key, login, or a non-default base URL). The plane address shows only then. */
+  readonly planeConfigured?: boolean;
   /** Sandbox state + configured KYA_SANDBOX backend. */
   readonly sandboxes?: SandboxCard;
   /** OpenShell rollup: trail events, openshell sandboxes, detected CLI/prover. */
@@ -156,6 +161,11 @@ function mdInline(s: string): string {
   return stripEscapes(s).replace(/`/g, "'");
 }
 
+/**
+ * Counts for the report headline. A row with an outcome is counted by what happened to the call (`outcomes`); only a
+ * row without one (written before outcomes existed) is counted by its stored verdict (allow, deny, require).
+ * `never` is a policy overlay and counts every row.
+ */
 function countVerdicts(events: readonly TrailEvent[]) {
   let allow = 0;
   let deny = 0;
@@ -164,11 +174,74 @@ function countVerdicts(events: readonly TrailEvent[]) {
   for (const e of events) {
     const v = e.verdict.toUpperCase();
     if (e.neverEvent || e.reasonCode === "NEVER_EVENT") never++;
+    if (outcomeOf(e)) continue;
     if (v === "ALLOW") allow++;
     else if (v === "DENY") deny++;
     else if (v === "REQUIRE_APPROVE") require++;
   }
-  return { allow, deny, require, never };
+  return { allow, deny, require, never, outcomes: countOutcomes(events) };
+}
+
+/** Counts in the shape the headline helpers take. */
+type VerdictCounts = ReturnType<typeof countVerdicts>;
+
+const STRICT_NOTE = "would hold in strict mode";
+
+/** One line under the headline: how to turn strict mode on. Shown only when a call ran that strict mode would hold (STRICT_NOTE is the row note). */
+function strictHowTo(wouldHold: number, code: (s: string) => string): string {
+  return `${wouldHold} ${wouldHold === 1 ? "call that ran" : "calls that ran"} would hold in strict mode. To turn strict mode on, add ${code("--strict")} to the ${code("kya hook")} command in your tool's hook settings.`;
+}
+
+/** Headline text for the Markdown report: "Ran 11, Blocked 5, Held 0". Error is listed only when it is not 0. */
+function outcomeHeadline(o: OutcomeCounts): string {
+  return `Ran ${o.ran}, Blocked ${o.blocked}, Held ${o.held}${o.error > 0 ? `, Error ${o.error}` : ""}`;
+}
+
+const OUTCOME_WORD = { ran: "RAN", blocked: "BLOCKED", held: "HELD", error: "ERROR" } as const;
+
+/** A short note for a call that ran although policy said otherwise (REQUIRE_APPROVE, or DENY in shadow mode). */
+function ranNote(e: { readonly verdict: string; readonly outcome?: string }): string | undefined {
+  if (wouldHoldInStrict(e)) return STRICT_NOTE;
+  if (outcomeOf(e) === "ran" && e.verdict.toUpperCase() === "DENY") return "would block (shadow mode)";
+  return undefined;
+}
+
+/** Feed order: blocked rows (newest first) above everything else (newest first). Rows without an outcome sort as before. */
+function compareFeed(a: TrailEvent, b: TrailEvent): number {
+  const rank = (e: TrailEvent): number => (outcomeOf(e) === "blocked" ? 0 : 1);
+  return rank(a) - rank(b) || b.ts.localeCompare(a.ts);
+}
+
+export interface FeedRow {
+  /** The newest row of the run. */
+  readonly event: TrailEvent;
+  /** How many identical consecutive rows it stands for (1 = not collapsed). */
+  readonly count: number;
+}
+
+/** Key for rows that may collapse. Only rows with an outcome collapse; a blocked row, or one with a change preview, never does. */
+function collapseKey(e: TrailEvent): string | undefined {
+  const o = outcomeOf(e);
+  if (!o || o === "blocked" || e.diffPreview?.trim()) return undefined;
+  return JSON.stringify([e.toolId, o, e.verdict, e.reasonCode, e.summary ?? "", e.targetPath ?? "", e.argsHash ?? "", e.sessionId, e.product ?? "", e.project ?? "", e.mode]);
+}
+
+/** Merge identical consecutive rows ("shell echo, 10 times"). Input order is kept. */
+export function collapseFeedRows(ordered: readonly TrailEvent[]): FeedRow[] {
+  const out: { event: TrailEvent; count: number; key: string | undefined }[] = [];
+  for (const e of ordered) {
+    const key = collapseKey(e);
+    const last = out[out.length - 1];
+    if (last && key !== undefined && last.key === key) last.count++;
+    else out.push({ event: e, count: 1, key });
+  }
+  return out.map(({ event, count }) => ({ event, count }));
+}
+
+/** "shell echo (+1 args), 3 times" or just "3 times" when the row has no summary. */
+function repeatText(e: TrailEvent, count: number): string {
+  const base = e.summary?.trim();
+  return `${base ? `${base}, ` : ""}${count} times`;
 }
 
 function relativeTime(ts: string, nowMs: number): string {
@@ -223,6 +296,23 @@ function verdictWord(verdict: string): string {
   const v = verdict.toUpperCase();
   if (v === "REQUIRE_APPROVE") return "REVIEW";
   return v;
+}
+
+/** Row tone: by outcome when the row has one (a call that ran is ok, even if policy said review), else by verdict. */
+function rowTone(e: { readonly verdict: string; readonly outcome?: string }): "ok" | "bad" | "warn" | "mute" {
+  switch (outcomeOf(e)) {
+    case "ran": return "ok";
+    case "blocked": return "bad";
+    case "held": return "warn";
+    case "error": return "mute";
+    default: return tone(e.verdict);
+  }
+}
+
+/** Row label: RAN, BLOCKED, HELD or ERROR when the row has an outcome, else the verdict word as before. */
+function rowWord(e: { readonly verdict: string; readonly outcome?: string }): string {
+  const o = outcomeOf(e);
+  return o ? OUTCOME_WORD[o] : verdictWord(e.verdict);
 }
 
 export type WorstVerdict = "never" | "deny" | "hold" | "allow";
@@ -298,8 +388,12 @@ export function aggregateEvents(events: readonly TrailEvent[]): EventAggregates 
     }
     s.events++;
     if (e.neverEvent || e.reasonCode === "NEVER_EVENT") s.never++;
+    const o = outcomeOf(e);
     const v = e.verdict.toUpperCase();
-    if (v === "DENY") s.deny++;
+    if (o) {
+      if (o === "blocked") s.deny++;
+      else if (o === "held") s.hold++;
+    } else if (v === "DENY") s.deny++;
     else if (v === "REQUIRE_APPROVE") s.hold++;
     if (e.ts > s.lastTs) s.lastTs = e.ts;
   }
@@ -411,6 +505,7 @@ export function buildReceiptModel(
     liveToken: extras?.liveToken,
     searchQuery: extras?.searchQuery,
     identity: extras?.identity,
+    planeConfigured: extras?.planeConfigured,
     sandboxes: extras?.sandboxes,
     openshell: extras?.openshell,
     wiredHosts: extras?.wiredHosts,
@@ -447,6 +542,7 @@ export function buildWindowReceiptModel(
     liveToken: extras?.liveToken,
     searchQuery: extras?.searchQuery,
     identity: extras?.identity,
+    planeConfigured: extras?.planeConfigured,
     sandboxes: extras?.sandboxes,
     openshell: extras?.openshell,
     wiredHosts: extras?.wiredHosts,
@@ -493,6 +589,7 @@ export function loadReceiptModel(input: {
     liveToken: input.liveToken,
     searchQuery: input.searchQuery,
     identity: loadIdentity(input.cwd),
+    planeConfigured: isPlaneConfigured(loadIdentity(input.cwd), env),
     sandboxes: loadSandboxes(input.cwd),
     openshell: loadOpenshellCard({ cwd: input.cwd, events: importEvents, env, certify }),
     wiredHosts: loadWiredHosts(input.cwd),
@@ -523,6 +620,7 @@ export function loadReceiptModel(input: {
 
 interface FilterFacetEvent {
   readonly verdict: string;
+  readonly outcome?: string;
   readonly neverEvent?: boolean;
   readonly reasonCode?: string;
   readonly mode: TrailEvent["mode"];
@@ -543,6 +641,7 @@ function filterDataAttrs(e: FilterFacetEvent, sessionId: string): string {
   const server = parseMcpToolId(e.toolId);
   return (
     `data-verdict="${esc(e.verdict.toUpperCase())}"` +
+    (outcomeOf(e) ? ` data-outcome="${outcomeOf(e)}"` : "") +
     (never ? ` data-never="1"` : "") +
     ` data-mode="${esc(e.mode)}"` +
     ` data-plane="${esc(e.host?.trim() || "unknown")}"` +
@@ -581,6 +680,18 @@ function noMatchHint(query: string | undefined, env: NodeJS.ProcessEnv = process
   );
 }
 
+/**
+ * "Make card" next to a stopped row (G5). Only a denied call gets it. The live report gets a button that calls the local
+ * /action/card; a static file has no server, so it shows the CLI command. Never in the deny text the agent reads.
+ */
+function cardControl(e: TrailEvent, live: boolean | undefined): string {
+  if (!isNearMiss(e)) return "";
+  const id = esc(eventIdOf(e));
+  return live
+    ? `<span class="card-ctl"><button type="button" class="stat" data-card-id="${id}">Make card</button><span class="mute small card-result" role="status" aria-live="polite"></span></span>`
+    : `<span class="card-ctl mute small">Make card: <code>kya receipt --card --id ${id}</code></span>`;
+}
+
 function renderFeed(
   events: readonly TrailEvent[],
   nowMs: number,
@@ -596,20 +707,34 @@ function renderFeed(
     return `<p class="empty">${hint}</p>`;
   }
 
-  const ordered = preserveOrder ? [...events] : [...events].sort((a, b) => b.ts.localeCompare(a.ts));
+  const ordered = preserveOrder ? [...events] : [...events].sort(compareFeed);
+  // Search ranking keeps its order and never collapses; the plain feed merges identical consecutive rows.
+  const rows: readonly FeedRow[] = preserveOrder ? ordered.map((event) => ({ event, count: 1 })) : collapseFeedRows(ordered);
   const parts: string[] = [];
   let lastDay = "";
+  let pinnedHeading = false;
 
-  for (const e of ordered) {
-    const key = localDayKey(e.ts);
-    if (key !== lastDay) {
-      lastDay = key;
-      parts.push(`<div class="day" role="presentation">${esc(dayLabel(key, nowMs))}</div>`);
+  for (const { event: e, count } of rows) {
+    // Blocked rows sit above everything else, under one heading, so they never hide below repeated rows.
+    const pinned = !preserveOrder && outcomeOf(e) === "blocked";
+    if (pinned) {
+      if (!pinnedHeading) {
+        pinnedHeading = true;
+        parts.push(`<div class="day" role="presentation">Blocked</div>`);
+      }
+    } else {
+      const key = localDayKey(e.ts);
+      if (key !== lastDay) {
+        lastDay = key;
+        parts.push(`<div class="day" role="presentation">${esc(dayLabel(key, nowMs))}</div>`);
+      }
     }
-    const t = tone(e.verdict);
+    const t = rowTone(e);
     const never = e.neverEvent || e.reasonCode === "NEVER_EVENT";
-    const summary = e.summary?.trim()
-      ? `<div class="summary">${esc(e.summary.trim())}</div>`
+    const note = ranNote(e);
+    const summaryText = count > 1 ? repeatText(e, count) : e.summary?.trim();
+    const summary = summaryText
+      ? `<div class="summary">${esc(summaryText)}</div>`
       : "";
     const preview = e.diffPreview?.trim()
       ? `<details class="diff"><summary>Change preview</summary><pre>${esc(e.diffPreview.trim())}</pre></details>`
@@ -624,9 +749,10 @@ function renderFeed(
   <div class="rail" aria-hidden="true"><span class="tick"></span></div>
   <div class="main">
     <div class="top">
-      <span class="verdict">${esc(verdictWord(e.verdict))}</span>${modeBadge(e.mode)}
+      <span class="verdict">${esc(rowWord(e))}</span>${note ? `<span class="strict-note">${esc(note)}</span>` : ""}${modeBadge(e.mode)}
       <code class="tool">${esc(e.toolId)}</code>
       <time class="when" datetime="${esc(e.ts)}" title="${esc(e.ts)}">${esc(clock(e.ts))} <span class="rel">${esc(relativeTime(e.ts, nowMs))}</span></time>
+      ${cardControl(e, live)}
     </div>
     ${summary}
     ${preview}
@@ -664,11 +790,11 @@ function changesPanel(changes: ChangesModel, nowMs: number): string {
         .map((f) => {
           const entries = f.entries
             .map((e) => {
-              const t = tone(e.verdict);
+              const t = rowTone(e);
               const dataAttrs = filterDataAttrs(e, s.sessionId);
               return `      <div class="chg-entry ${t}${e.never ? " never" : ""}" ${dataAttrs}>
         <div class="top">
-          <span class="verdict">${esc(verdictWord(e.verdict))}</span>${modeBadge(e.mode)}
+          <span class="verdict">${esc(rowWord(e))}</span>${modeBadge(e.mode)}
           <code class="tool">${esc(e.toolId)}</code>
           <time class="when" datetime="${esc(e.ts)}" title="${esc(e.ts)}">${esc(clock(e.ts))} <span class="rel">${esc(relativeTime(e.ts, nowMs))}</span></time>
         </div>
@@ -698,15 +824,45 @@ ${files}
     .join("\n");
 }
 
-function identityLine(identity: KyaFileConfig | undefined): string {
-  if (!identity) return "";
+/** Default base URL `kya init` writes. It is a placeholder, not a plane that runs. */
+const DEFAULT_PLANE_URL = "http://127.0.0.1:8090";
+
+/** A control plane counts as configured with an API key, saved hosted login, or a base URL other than the init default. */
+export function isPlaneConfigured(identity: KyaFileConfig | undefined, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.KYA_API_KEY?.trim() || env.SHIELD_API_KEY?.trim() || env.KYA_BASE_URL?.trim()) return true;
+  if (readCredentials(env)) return true;
+  const base = identity?.baseUrl?.trim().replace(/\/+$/, "");
+  return Boolean(base && base !== DEFAULT_PLANE_URL);
+}
+
+/** Who the report is for. Host and plane address show only when a plane is configured. */
+function identityBits(identity: KyaFileConfig | undefined, planeConfigured: boolean | undefined): string[] {
+  if (!identity) return [];
+  // Hidden fields are still checked: a credential in the saved base URL must stop the render, shown or not.
+  assertNoSecrets([identity.agentName, identity.agentId, identity.host, identity.baseUrl].filter(Boolean).join(" · "));
   const nameId =
     identity.agentName && identity.agentId
       ? `${identity.agentName}/${identity.agentId}`
       : (identity.agentName ?? identity.agentId);
-  const bits = [nameId, identity.host, identity.baseUrl].filter(
+  return [nameId, ...(planeConfigured ? [identity.host, identity.baseUrl] : [])].filter(
     (b): b is string => typeof b === "string" && b.trim().length > 0,
   );
+}
+
+/**
+ * Header block of the live report (F4): the "Share this report" button and the place for its result. The button
+ * calls POST /action/share (the same redacted payload as `kya receipt --share`). Static files do not get it:
+ * there is no server to answer.
+ */
+function shareHeaderBlock(): string {
+  return `<div class="share-row" id="share-report" style="margin-top:0.75rem">
+      <button type="button" class="stat" id="share-report-btn">Share this report</button>
+      <div id="share-report-result" role="status" aria-live="polite"></div>
+    </div>`;
+}
+
+function identityLine(identity: KyaFileConfig | undefined, planeConfigured?: boolean): string {
+  const bits = identityBits(identity, planeConfigured);
   if (bits.length === 0) return "";
   // baseUrl is inert text here - never an anchor.
   return `<div class="identity">${esc(clip(bits.join(" · "), 160))}</div>`;
@@ -862,7 +1018,20 @@ function dashboardPanel(db: Dashboard): string {
     fill: "ok" | "warn" | "bad",
   ): string =>
     count > 0 ? barRow(label, group, value, pct(count), `${pct(count)}%`, fill) : "";
-  const mixCard = `<div class="db-card">
+  const om = db.outcomeMix;
+  const mixCard = om.recorded > 0
+    ? `<div class="db-card">
+    <h3>Outcome mix</h3>
+    ${mixRow("Ran", "outcome", "ran", om.ran, "ok")}
+    ${mixRow("Blocked", "outcome", "blocked", om.blocked, "bad")}
+    ${mixRow("Held", "outcome", "held", om.held, "warn")}
+    ${mixRow("Error", "outcome", "error", om.error, "warn")}
+    ${mixRow("Earlier: Allow", "verdict", "ALLOW", om.legacyMix.allow, "ok")}
+    ${mixRow("Earlier: Review", "verdict", "REQUIRE_APPROVE", om.legacyMix.review, "warn")}
+    ${mixRow("Earlier: Deny", "verdict", "DENY", om.legacyMix.deny, "bad")}
+    ${mixRow("Never", "never", "1", db.verdictMix.never, "bad")}
+  </div>`
+    : `<div class="db-card">
     <h3>Verdict mix</h3>
     ${mixRow("Allow", "verdict", "ALLOW", db.verdictMix.allow, "ok")}
     ${mixRow("Review", "verdict", "REQUIRE_APPROVE", db.verdictMix.review, "warn")}
@@ -1678,6 +1847,51 @@ function kpiTile(label: string, value: string | number, cls = ""): string {
   return `<div class="kpi"><span class="kpi-num${toned}">${v}</span><span class="kpi-lab">${label}</span></div>`;
 }
 
+/** Rows the hook stopped (outcome "blocked", F3), newest first. Rows with no outcome are not counted. */
+export function blockedCalls(events: readonly TrailEvent[]): TrailEvent[] {
+  return events.filter((e) => outcomeOf(e) === "blocked").sort((a, b) => b.ts.localeCompare(a.ts));
+}
+
+const BLOCKED_ROWS_SHOWN = 5;
+
+/**
+ * First panel of the report (guard first): how many calls the guard stopped and the last five.
+ * With none blocked it shows the three built-in demo calls, labelled as a demo, never as activity.
+ */
+function heroBlockedPanel(events: readonly TrailEvent[], nowMs: number, windowLabel: string, live?: boolean): string {
+  const blocked = blockedCalls(events);
+  if (blocked.length === 0) {
+    const demo = DEMO_CALLS.map(
+      (c) => `    <li><code>${esc(c.label)}</code><span class="blk-what">${esc(c.what)}</span><span class="pill">demo</span></li>`,
+    ).join("\n");
+    return `<section class="panel hero-blocked demo" id="frag-hero-blocked" aria-label="Blocked">
+  <h2>Blocked <span class="pill">demo</span></h2>
+  <p class="blk-lead"><span class="blk-num">0</span> calls blocked ${esc(windowLabel)}. Demo: three calls your agent could make, and the guard stops all three.</p>
+  <ul class="blk-rows">
+${demo}
+  </ul>
+  <p class="mute small">These rows are samples, not your activity. Real blocked calls replace them here.</p>
+</section>`;
+  }
+  const rows = blocked
+    .slice(0, BLOCKED_ROWS_SHOWN)
+    .map((e) => {
+      const what = e.summary?.trim() ? esc(clip(e.summary.trim(), 140)) : "";
+      const rule = e.neverRule ? `<span class="mute small">rule <code>${esc(e.neverRule)}</code></span>` : "";
+      return `    <li><code>${esc(e.toolId)}</code><span class="blk-what">${what}</span>${rule}<span class="mute small">${esc(relativeTime(e.ts, nowMs))}</span>${cardControl(e, live)}</li>`;
+    })
+    .join("\n");
+  const more = blocked.length > BLOCKED_ROWS_SHOWN ? `<p class="mute small">Showing the last ${BLOCKED_ROWS_SHOWN} of ${blocked.length}. The Activity tab lists every call.</p>` : "";
+  return `<section class="panel hero-blocked" id="frag-hero-blocked" aria-label="Blocked">
+  <h2>Blocked</h2>
+  <p class="blk-lead"><span class="blk-num bad">${blocked.length}</span> ${blocked.length === 1 ? "call" : "calls"} blocked ${esc(windowLabel)}.</p>
+  <ul class="blk-rows">
+${rows}
+  </ul>
+  ${more}
+</section>`;
+}
+
 /**
  * Hero Certify panel: purpose-built rich card for the live Agent Trust
  * Baseline. The section carries the result state (`hero-certify pass|gap|
@@ -1846,15 +2060,7 @@ ${sections}
 
 /** Hero KPI cards: compact, non-interactive rollups (filters live in the
  * Activity zone's chip bar). Numbers keep tabular-nums via .mix-num/.kpi-num. */
-function verdictsHeroCard(
-  c: {
-    readonly allow: number;
-    readonly deny: number;
-    readonly require: number;
-    readonly never: number;
-  },
-  total: number,
-): string {
+function verdictsHeroCard(c: VerdictCounts, total: number): string {
   // Base 100% = total events, matching dashboard.ts's verdictMix contract:
   // verdict is a free-form string from untrusted JSONL, so an event may land
   // in no bucket (bogus verdict) while still counting in `never` - only the
@@ -1862,6 +2068,23 @@ function verdictsHeroCard(
   const pct = (n: number): number => (total > 0 ? Math.round((n / total) * 100) : 0);
   const mixRow = (label: string, n: number, fill: "ok" | "warn" | "bad"): string =>
     `<div class="mix-row"><span class="mix-lab">${label}</span><span class="mix-bar"><span class="mix-fill ${fill}" style="width:${pct(n)}%"></span></span><span class="mix-num">${n}</span></div>`;
+  const o = c.outcomes;
+  if (o.recorded > 0) {
+    const row = (label: string, n: number, fill: "ok" | "warn" | "bad"): string => (n > 0 ? mixRow(label, n, fill) : "");
+    return `<section class="panel" aria-label="Verdicts">
+  <h2>Decisions</h2>
+  <div class="mix">
+    ${mixRow("Ran", o.ran, "ok")}
+    ${mixRow("Blocked", o.blocked, "bad")}
+    ${mixRow("Held", o.held, "warn")}
+    ${row("Error", o.error, "warn")}
+    ${row("Earlier: Allow", c.allow, "ok")}
+    ${row("Earlier: Deny", c.deny, "bad")}
+    ${row("Earlier: Review", c.require, "warn")}
+    ${mixRow("Never", c.never, "bad")}
+  </div>
+</section>`;
+  }
   return `<section class="panel" aria-label="Verdicts">
   <h2>Decisions</h2>
   <div class="mix">
@@ -2280,7 +2503,7 @@ export function renderFeedPage(
     ordered = ranked.map((r) => r.event);
     total = ranked.length;
   } else {
-    const sorted = [...events].sort((a, b) => b.ts.localeCompare(a.ts));
+    const sorted = [...events].sort(compareFeed);
     ordered = applyChipFilters(sorted, filters);
     total = ordered.length;
   }
@@ -2332,7 +2555,24 @@ const zoneBody = (parts: readonly string[], empty: string): string =>
     : `<p class="mute small zone-empty">${empty}</p>`;
 
 /** Inner markup of the Activity counts bar (verdict buttons + mode/plane chips). */
-function statCountsInner(c: ReturnType<typeof countVerdicts>, chips: ReturnType<typeof statChips>): string {
+function statCountsInner(c: VerdictCounts, chips: ReturnType<typeof statChips>): string {
+  const o = c.outcomes;
+  if (o.recorded > 0) {
+    const btn = (label: string, n: number, group: string, value: string, cls: string, title: string): string =>
+      `<button type="button" class="stat${cls ? ` ${cls}` : ""}" data-fgroup="${group}" data-fvalue="${value}" aria-pressed="false" title="Filter: ${title}">${label}<b>${n}</b></button>`;
+    // Rows from before outcomes existed keep their verdict counts, labelled as earlier rows.
+    const earlier = (label: string, n: number, value: string, cls: string): string =>
+      n > 0 ? btn(`Earlier: ${label}`, n, "verdict", value, cls, `${label} (rows with no outcome recorded)`) : "";
+    const howTo = o.wouldHold > 0 ? `\n        <span class="strict-howto">${strictHowTo(o.wouldHold, (t) => `<code>${t}</code>`)}</span>` : "";
+    return `${btn("Ran", o.ran, "outcome", "ran", "ok", "Ran")}
+        ${btn("Blocked", o.blocked, "outcome", "blocked", "bad", "Blocked")}
+        ${btn("Held", o.held, "outcome", "held", "warn", "Held")}
+        ${o.error > 0 ? btn("Error", o.error, "outcome", "error", "", "Error") : ""}
+        ${earlier("Allow", c.allow, "ALLOW", "ok")}${earlier("Deny", c.deny, "DENY", "bad")}${earlier("Review", c.require, "REQUIRE_APPROVE", "warn")}
+        <button type="button" class="stat" data-fgroup="never" data-fvalue="1" aria-pressed="false" title="Filter: Never">Never<b>${c.never}</b></button>
+        ${chips.modes}${chips.planes}${howTo}
+        <button type="button" class="stat clear-filters" id="clear-filters" hidden>Clear filters ×</button>`;
+  }
   return `<button type="button" class="stat ok" data-fgroup="verdict" data-fvalue="ALLOW" aria-pressed="false" title="Filter: Allow">Allow<b>${c.allow}</b></button>
         <button type="button" class="stat bad" data-fgroup="verdict" data-fvalue="DENY" aria-pressed="false" title="Filter: Deny">Deny<b>${c.deny}</b></button>
         <button type="button" class="stat warn" data-fgroup="verdict" data-fvalue="REQUIRE_APPROVE" aria-pressed="false" title="Filter: Review">Review<b>${c.require}</b></button>
@@ -2367,7 +2607,7 @@ export function buildLiveFragments(
       chipProducts: chips.products,
       chipProjects: chips.projects,
       chipServers: chips.servers,
-      heroCertify: heroCertifyPanel(model.certify),
+      heroBlocked: heroBlockedPanel(events, nowMs, `in the ${model.rangeLabel}`, model.live),
       heroTiles: [
         verdictsHeroCard(c, events.length),
         activityHeroCard(agg, dashboard, events.length),
@@ -2375,24 +2615,33 @@ export function buildLiveFragments(
         importHeroCard(model.imports, nowMs, livePaged),
         discoveryHeroCard(model.discovery, nowMs, livePaged),
         investigateHeroCard(model.investigate, nowMs, livePaged),
-        showbackHeroCard(model.showback, events),
       ].join("\n        "),
+      showbackPanel: showbackHeroCard(model.showback, events),
+      connectedBody: zoneBody(
+        [wiredHostsPanel(model.wiredHosts)],
+        "No coding agent is connected yet. Run kya connect &lt;host&gt; to add one.",
+      ),
       overviewPanels: zoneBody(
         [incidentAlertsPanel(model.incidentAlerts, nowMs), dashboardPanel(dashboard), sessionsPanel(agg, nowMs, changes), reasonsPanel(agg)],
         "No activity in this window yet - analytics appear once events land.",
       ),
       certifyBody: zoneBody(
-        [model.certify ? certifyDetailPanel(model.certify.requirements) : ""],
+        [
+          heroCertifyPanel(model.certify),
+          model.certify
+            ? certifyDetailPanel(model.certify.requirements)
+            : `<p class="mute small zone-empty">The full rule table appears here after the first check.</p>`,
+        ],
         "No check yet - use your coding tools with kya connected, then run kya certify.",
       ),
       orrPanel: orrPanel(model.orr, nowMs, livePaged),
       changesList: changesPanel(changes, nowMs),
     },
     nav: {
-      overview: events.length,
+      overview: blockedCalls(events).length,
       activity: events.length,
       changes: changes.fileCount,
-      certify: model.certify?.gap ?? null,
+      certify: null,
       orr: model.orr ? model.orr.scorecards.fail : null,
     },
   };
@@ -2807,8 +3056,10 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       chipProducts: 'chip-products',
       chipProjects: 'chip-projects',
       chipServers: 'chip-servers',
-      heroCertify: 'frag-hero-certify',
+      heroBlocked: 'frag-hero-blocked',
       heroTiles: 'frag-hero-tiles',
+      showbackPanel: 'frag-showback',
+      connectedBody: 'frag-connected',
       overviewPanels: 'frag-overview-panels',
       certifyBody: 'frag-certify',
       orrPanel: 'frag-orr',
@@ -3030,6 +3281,26 @@ export function renderReceiptHtml(model: ReceiptModel): string {
 })();
 </script>`;
 
+  // The "More" menu: closed by default, remembered per browser, and open when the page was reached through
+  // a link to a tab inside it (a hash such as #certify). Without JS or localStorage the page still works.
+  const moreScript = `<script>
+(function(){
+  var more = document.getElementById('nav-more');
+  if (!more) return;
+  var inside = false;
+  try { inside = !!(location.hash && more.querySelector('a[href="' + location.hash + '"]')); } catch(e){}
+  var stored = null;
+  try { stored = localStorage.getItem('kya-nav-more'); } catch(e){}
+  if (inside || stored === 'open') more.open = true;
+  more.addEventListener('toggle', function(){
+    try { localStorage.setItem('kya-nav-more', more.open ? 'open' : 'closed'); } catch(e){}
+  });
+  window.addEventListener('hashchange', function(){
+    try { if (location.hash && more.querySelector('a[href="' + location.hash + '"]')) more.open = true; } catch(e){}
+  });
+})();
+</script>`;
+
   // Gateway interactive controls: playground evaluator, quick actions, and the
   // sidebar stop-report link. Only wired when the page is served by the live
   // loopback server (token present). Token is read from the query string so it
@@ -3188,6 +3459,68 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     });
   });
 
+  // The card control next to a stopped row. Delegated: the Blocked panel is replaced on every live refresh.
+  document.addEventListener('click', function(ev){
+    var b = ev.target && ev.target.closest ? ev.target.closest('[data-card-id]') : null;
+    if (!b) return;
+    var out = b.parentNode.querySelector('.card-result');
+    b.disabled = true;
+    out.textContent = 'Making the card...';
+    post('/action/card', { id: b.getAttribute('data-card-id') }).then(parseJson).then(function(d){
+      out.textContent = d && d.ok ? 'Saved ' + (d.png || d.svg) + '. Caption: ' + d.caption.replace(/\\n/g, ' ') : 'No card: ' + (d && d.error ? d.error : 'unknown error');
+      b.disabled = false;
+    }).catch(function(err){ out.textContent = 'No card: ' + err.message; b.disabled = false; });
+  });
+
+  var shareBtn = document.getElementById('share-report-btn');
+  if (shareBtn) {
+    var shareOut = document.getElementById('share-report-result');
+    var shareFail = function(msg){
+      setResult(shareOut, '<p>Could not share the report: ' + esc(msg) + '. The report still works. Try again when you are online.</p>', true);
+      shareBtn.disabled = false;
+    };
+    var copyText = function(text, field, btn){
+      var done = function(){ btn.textContent = 'Copied'; };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function(){ field.select(); btn.textContent = 'Press Ctrl+C to copy'; });
+      } else { field.select(); btn.textContent = 'Press Ctrl+C to copy'; }
+    };
+    shareBtn.addEventListener('click', function(){
+      shareBtn.disabled = true;
+      shareOut.textContent = 'Sharing...';
+      post('/action/share', {}).then(parseJson).then(function(d){
+        if (!d || !d.ok) { shareFail(d && d.error ? d.error : 'unknown error'); return; }
+        // Show and open only an http(s) link. share.ts already checked it is on the server that was asked.
+        if (!/^https?:/.test(String(d.url))) { shareFail('the server sent a link that is not a web address'); return; }
+        shareOut.textContent = '';
+        var label = document.createElement('p');
+        label.textContent = 'Public link. Send it to a colleague:';
+        var field = document.createElement('input');
+        field.type = 'text'; field.readOnly = true; field.id = 'share-url'; field.value = d.url; field.size = 44;
+        var copy = document.createElement('button');
+        copy.type = 'button'; copy.className = 'stat'; copy.id = 'share-copy'; copy.textContent = 'Copy link';
+        copy.addEventListener('click', function(){ copyText(d.url, field, copy); });
+        shareOut.appendChild(label); shareOut.appendChild(field); shareOut.appendChild(copy);
+        var claim = document.createElement('p');
+        var a = document.createElement('a');
+        a.id = 'share-claim'; a.href = d.url; a.target = '_blank'; a.rel = 'noopener';
+        a.textContent = 'Open the page to claim it, keep it and get a weekly summary';
+        claim.appendChild(a);
+        shareOut.appendChild(claim);
+        var connect = document.createElement('p');
+        connect.id = 'share-connect';
+        connect.textContent = 'To connect this computer to your account, run kya login.';
+        shareOut.appendChild(connect);
+        if (d.expiresAt) {
+          var exp = document.createElement('p');
+          exp.textContent = 'If nobody claims the report, it is deleted on ' + String(d.expiresAt).slice(0, 10) + '.';
+          shareOut.appendChild(exp);
+        }
+        shareBtn.disabled = false;
+      }).catch(function(err){ shareFail(err.message); });
+    });
+  }
+
   var importForm = document.getElementById('import-form');
   if (importForm) {
     importForm.addEventListener('submit', function(e){
@@ -3255,7 +3588,6 @@ export function renderReceiptHtml(model: ReceiptModel): string {
       postureSectionHtml(model.posture, !!model.liveToken),
       capabilitiesPanel(model),
       gatePanel(model.gate, nowMs),
-      wiredHostsPanel(model.wiredHosts),
       sandboxesPanel(model.sandboxes, nowMs),
       openshellPanel(model.openshell, nowMs),
       alertsPanel(model.alerts, nowMs, livePaged),
@@ -3270,7 +3602,7 @@ export function renderReceiptHtml(model: ReceiptModel): string {
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>${esc(model.title)} - ${esc(model.rangeLabel)}</title>
+<title>${esc(PROMISE)} - ${esc(model.rangeLabel)}</title>
 <style>${receiptCss()}${model.liveToken ? MAP_CSS + MAP_LIVE_ZONE_CSS : ""}</style>
 </head>
 <body>
@@ -3282,20 +3614,25 @@ export function renderReceiptHtml(model: ReceiptModel): string {
     </div>
   </header>
   <nav class="sidebar-nav" aria-label="Report sections">
-    ${navItem("#overview", "Overview", events.length)}
+    ${navItem("#overview", "Blocked", blockedCalls(events).length)}
     ${navItem("#activity", "Activity", events.length)}
-    ${navItem("#changes", "Changes", changes.fileCount)}
-    ${navItem("#certify", "Certify", model.certify?.gap ?? 0)}
-    ${navItem("#orr", "ORR", model.orr ? model.orr.scorecards.fail : undefined)}
-    ${model.liveToken ? navItem("#map", "Map", undefined) : ""}
-    ${navGroup("Gateway", model.gate?.state === "running")}
-    ${navSubItem("#gateway-home", "Home", model.gate?.servers.length ?? 0)}
-    ${navSubItem("#gateway-listeners", "Listeners", model.gate?.listeners?.length ?? 0)}
-    ${navSubItem("#gateway-routes", "Routes", model.gate?.routes?.length ?? 0)}
-    ${navSubItem("#gateway-backends", "Backends", model.gate?.servers.length ?? 0)}
-    ${navSubItem("#gateway-policies", "Policies", model.gate?.policySummary?.totalPolicies ?? 0)}
-    ${navSubItem("#gateway-playground", "Playground", model.gate?.playgroundSamples?.length ?? 0)}
-    ${navItem("#system", "System", undefined)}
+    ${navItem("#connected", "Connected tools", undefined)}
+    <details class="nav-more" id="nav-more">
+      <summary class="nav-more-summary">More</summary>
+      ${navItem("#changes", "Changes", changes.fileCount)}
+      ${navItem("#certify", "Certify", undefined)}
+      ${navItem("#orr", "ORR", model.orr ? model.orr.scorecards.fail : undefined)}
+      ${model.liveToken ? navItem("#map", "Map", undefined) : ""}
+      ${model.showback ? navItem("#showback", "Showback", undefined) : ""}
+      ${navGroup("Gateway", model.gate?.state === "running")}
+      ${navSubItem("#gateway-home", "Home", model.gate?.servers.length ?? 0)}
+      ${navSubItem("#gateway-listeners", "Listeners", model.gate?.listeners?.length ?? 0)}
+      ${navSubItem("#gateway-routes", "Routes", model.gate?.routes?.length ?? 0)}
+      ${navSubItem("#gateway-backends", "Backends", model.gate?.servers.length ?? 0)}
+      ${navSubItem("#gateway-policies", "Policies", model.gate?.policySummary?.totalPolicies ?? 0)}
+      ${navSubItem("#gateway-playground", "Playground", model.gate?.playgroundSamples?.length ?? 0)}
+      ${navItem("#system", "System", undefined)}
+    </details>
   </nav>
   <footer class="sidebar-footer">
     <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">Theme</button>
@@ -3307,16 +3644,17 @@ export function renderReceiptHtml(model: ReceiptModel): string {
 ${model.liveToken ? '<main data-live-token="1">' : '<main>'}
   <header class="page-header">
     <div class="title-row">
-      <h1>${esc(model.title)}</h1>
+      <h1>${esc(PROMISE)}</h1>
       <div class="range">${esc(model.rangeLabel)}${livePill}</div>
     </div>
-    ${identityLine(model.identity)}
+    ${identityLine(model.identity, model.planeConfigured)}
+    ${model.liveToken ? shareHeaderBlock() : ""}
   </header>
   ${blockedBanner}
   ${iocBanner}
   <section class="zone" id="overview" aria-labelledby="tab-overview">
     <div class="hero">
-      ${fr.fragments.heroCertify}
+      ${fr.fragments.heroBlocked}
       <div class="hero-tiles" id="frag-hero-tiles">
         ${fr.fragments.heroTiles}
       </div>
@@ -3342,6 +3680,9 @@ ${initialFeed.feedHtml}
 ${initialFeed.paginationHtml}
     </div>
   </section>
+  <section class="zone" id="connected" aria-labelledby="tab-connected">
+    <div id="frag-connected">${fr.fragments.connectedBody}</div>
+  </section>
   <section class="zone" id="changes" aria-labelledby="tab-changes">
     <section class="feed chg" id="changes-list" aria-label="Changes by session and file">
 ${fr.fragments.changesList}
@@ -3354,6 +3695,7 @@ ${fr.fragments.changesList}
     <div id="frag-orr">${fr.fragments.orrPanel}</div>
   </section>
   ${model.liveToken ? '<section class="zone" id="map" aria-labelledby="tab-map"><div id="frag-map"><p class="mute">Loading the map.</p></div></section>' : ""}
+  ${model.showback ? `<section class="zone" id="showback" aria-labelledby="tab-showback"><div id="frag-showback">${fr.fragments.showbackPanel}</div></section>` : ""}
   ${gatePagePanel(model.gate, nowMs)}
   <section class="zone" id="system" aria-labelledby="tab-system">
     ${systemBody}
@@ -3363,6 +3705,7 @@ ${filterScript}
 ${model.liveToken ? liveMapScripts() : ""}
 ${staticSearchScript}
 ${themeScript}
+${moreScript}
 ${gateScript}
 </body>
 </html>`;
@@ -3372,18 +3715,74 @@ ${gateScript}
   return html;
 }
 
+/** "## Blocked" section: the count and the last five blocked calls, or the demo when none was blocked. */
+function blockedMarkdown(events: readonly TrailEvent[], nowMs: number): string[] {
+  const blocked = blockedCalls(events);
+  if (blocked.length === 0) {
+    return [
+      "## Blocked (demo)",
+      "",
+      "0 calls blocked in this window. Demo: three calls your agent could make, and the guard stops all three. These rows are samples, not your activity.",
+      "",
+      ...DEMO_CALLS.map((c) => `- \`${mdInline(c.label)}\` - ${mdText(c.what)} (demo)`),
+      "",
+    ];
+  }
+  return [
+    "## Blocked",
+    "",
+    `${blocked.length} ${blocked.length === 1 ? "call" : "calls"} blocked in this window. Last ${Math.min(5, blocked.length)}:`,
+    "",
+    ...blocked.slice(0, 5).map((e) => {
+      const sum = e.summary?.trim() ? ` - ${mdText(clip(e.summary.trim(), 140))}` : "";
+      return `- \`${mdInline(e.toolId)}\`${sum} - ${mdText(relativeTime(e.ts, nowMs))}`;
+    }),
+    "",
+  ];
+}
+
 export function renderReceiptMarkdown(model: ReceiptModel): string {
   const c = countVerdicts(model.events);
   const agg = aggregateEvents(model.events);
   const nowMs = Date.now();
+  const o = c.outcomes;
   const lines: string[] = [
-    `# ${mdText(model.title)}`,
+    `# ${mdText(PROMISE)}`,
     "",
     mdText(model.rangeLabel),
     "",
-    `Allow ${c.allow} | Deny ${c.deny} | Review ${c.require} | Never ${c.never}`,
+    ...blockedMarkdown(model.events, nowMs),
+  ];
+  if (o.recorded > 0) {
+    // Counted by what happened to each call. Rows from before outcomes existed keep their verdict counts, on a second line.
+    lines.push(`${outcomeHeadline(o)} | Never ${c.never}`, "");
+    if (o.wouldHold > 0) lines.push(strictHowTo(o.wouldHold, (t) => `\`${t}\``), "");
+    if (o.legacy > 0) {
+      lines.push(`Earlier calls (no outcome recorded): Allow ${c.allow} | Deny ${c.deny} | Review ${c.require}`, "");
+    }
+  } else {
+    lines.push(`Allow ${c.allow} | Deny ${c.deny} | Review ${c.require} | Never ${c.never}`, "");
+  }
+  // Feed rows. With outcomes recorded the feed leads (blocked rows first); without, it stays where it was.
+  const feedLines: string[] = [
+    "## Feed",
+    ...collapseFeedRows(o.recorded > 0 ? [...model.events].sort(compareFeed) : [...model.events].sort((a, b) => b.ts.localeCompare(a.ts)))
+      .flatMap(({ event: e, count }) => {
+        const text = count > 1 ? repeatText(e, count) : e.summary?.trim();
+        const sum = text ? ` - ${mdText(text)}` : "";
+        const note = ranNote(e);
+        const head = `- **${mdText(rowWord(e))}**${note ? ` (${note})` : ""} \`${mdInline(e.toolId)}\`${sum} - ${productLabel(e.product)} - ${mdText(e.reasonCode)}`;
+        if (!e.diffPreview?.trim()) return [head];
+        // Fenced content is verbatim (stripEscapes only - backslash escapes
+        // are literal in code fences); the dynamically sized tilde fence
+        // prevents breakout and backticks cannot close a tilde fence.
+        const diff = stripEscapes(e.diffPreview.trim());
+        const fence = mdFence(diff);
+        return [head, "", fence, diff, fence, ""];
+      }),
     "",
   ];
+  if (o.recorded > 0) lines.push(...feedLines);
   if (model.ioc) {
     const k = model.ioc.findings.length;
     lines.push(
@@ -3393,14 +3792,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
   }
 
   if (model.identity) {
-    const id = model.identity;
-    const nameId =
-      id.agentName && id.agentId
-        ? `${id.agentName}/${id.agentId}`
-        : (id.agentName ?? id.agentId);
-    const bits = [nameId, id.host, id.baseUrl].filter(
-      (b): b is string => typeof b === "string" && b.trim().length > 0,
-    );
+    const bits = identityBits(model.identity, model.planeConfigured);
     if (bits.length > 0) {
       lines.push(mdText(bits.join(" · ")), "");
     }
@@ -3416,7 +3808,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     agg.planes.runtime > 0 ? `Runtime ${agg.planes.runtime}` : "",
   ].filter(Boolean);
   if (modeBits.length > 0 || planeBits.length > 0) {
-    lines.push(`Modes: ${modeBits.join(" | ") || "-"} · Planes: ${planeBits.join(" | ") || "-"}`, "");
+    lines.push(`Modes: ${modeBits.join(" | ") || "-"} · Source: ${planeBits.join(" | ") || "-"}`, "");
   }
 
   if (agg.products.length >= 2) {
@@ -3435,35 +3827,17 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     );
   }
 
-  if (model.certify) {
-    const c = model.certify;
-    lines.push(
-      "## Certify",
-      `result: ${c.result} · counts: ${c.pass} pass · ${c.gap} gap · ${c.insufficientEvidence} insufficient · ${c.attested} attested`,
-    );
-    if (c.topGaps.length > 0) {
-      lines.push("Top gaps:");
-      for (const g of c.topGaps) {
-        lines.push(`- \`${mdInline(g.id)}\` - ${mdText(g.title)} (${mdText(g.severity)})`);
-      }
-    }
-    lines.push(
-      `checked live - last ${c.windowDays} days, ${c.trailEvents} recorded events · the Certify tab lists every rule · kya certify writes the gap report and signed proof file`,
-      "",
-    );
-  }
-
   const db = computeDashboard(model.events);
   if (db.verdictMix.total > 0) {
     const pct = (n: number): number => Math.round((n / db.verdictMix.total) * 100);
     // never is a reason overlay: the Never share is computed from neverEvent
     // rows on top of the same 100% = total events base as the verdict buckets.
-    lines.push(
-      "## Analytics",
-      "",
-      `Verdict mix: Allow ${pct(db.verdictMix.allow)}% · Review ${pct(db.verdictMix.review)}% · Deny ${pct(db.verdictMix.deny)}% · Never ${pct(db.verdictMix.never)}%`,
-      "",
-    );
+    const om = db.outcomeMix;
+    const mixLine =
+      om.recorded > 0
+        ? `Outcome mix: Ran ${pct(om.ran)}% · Blocked ${pct(om.blocked)}% · Held ${pct(om.held)}%${om.error > 0 ? ` · Error ${pct(om.error)}%` : ""}${om.legacy > 0 ? ` · Earlier (no outcome): Allow ${pct(om.legacyMix.allow)}% · Review ${pct(om.legacyMix.review)}% · Deny ${pct(om.legacyMix.deny)}%` : ""} · Never ${pct(db.verdictMix.never)}%`
+        : `Verdict mix: Allow ${pct(db.verdictMix.allow)}% · Review ${pct(db.verdictMix.review)}% · Deny ${pct(db.verdictMix.deny)}% · Never ${pct(db.verdictMix.never)}%`;
+    lines.push("## Analytics", "", mixLine, "");
     if (db.activity.buckets.length > 0) {
       const max = Math.max(1, ...db.activity.buckets.map((b) => b.count));
       lines.push(`Activity (${db.activity.granularity === "hour" ? "hourly" : "daily"}):`);
@@ -3496,23 +3870,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     }
   }
 
-  lines.push(
-    "## Feed",
-    ...[...model.events]
-      .sort((a, b) => b.ts.localeCompare(a.ts))
-      .flatMap((e) => {
-        const sum = e.summary?.trim() ? ` - ${mdText(e.summary.trim())}` : "";
-        const head = `- **${mdText(verdictWord(e.verdict))}** \`${mdInline(e.toolId)}\`${sum} - ${productLabel(e.product)} - ${mdText(e.reasonCode)}`;
-        if (!e.diffPreview?.trim()) return [head];
-        // Fenced content is verbatim (stripEscapes only - backslash escapes
-        // are literal in code fences); the dynamically sized tilde fence
-        // prevents breakout and backticks cannot close a tilde fence.
-        const diff = stripEscapes(e.diffPreview.trim());
-        const fence = mdFence(diff);
-        return [head, "", fence, diff, fence, ""];
-      }),
-    "",
-  );
+  if (o.recorded === 0) lines.push(...feedLines);
 
   // Same normalization as the HTML path: targetPath flows into single-line
   // `#### ` code-span headers, so embedded newlines must be flattened first.
@@ -3535,7 +3893,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
           const diff = stripEscapes(e.preview);
           const fence = mdFence(diff);
           lines.push(
-            `- **${mdText(verdictWord(e.verdict))}** \`${mdInline(e.toolId)}\` - ${mdText(e.ts)}`,
+            `- **${mdText(rowWord(e))}** \`${mdInline(e.toolId)}\` - ${mdText(e.ts)}`,
             "",
             fence,
             diff,
@@ -3699,6 +4057,25 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     lines.push(
       "## Export to your monitoring (OTel)",
       `${ot.endpoint ? `\`${mdInline(ot.endpoint)}\` · ` : ""}${ot.spansSent} sent · ${ot.spansFailed} failed${ot.lastExportAt ? ` · last export ${relativeTime(ot.lastExportAt, nowMs)}` : ""}`,
+      "",
+    );
+  }
+
+  // Certify last: no gap count reaches the top of the report.
+  if (model.certify) {
+    const c = model.certify;
+    lines.push(
+      "## Certify",
+      `result: ${c.result} · counts: ${c.pass} pass · ${c.gap} gap · ${c.insufficientEvidence} insufficient · ${c.attested} attested`,
+    );
+    if (c.topGaps.length > 0) {
+      lines.push("Top gaps:");
+      for (const g of c.topGaps) {
+        lines.push(`- \`${mdInline(g.id)}\` - ${mdText(g.title)} (${mdText(g.severity)})`);
+      }
+    }
+    lines.push(
+      `checked live - last ${c.windowDays} days, ${c.trailEvents} recorded events · the Certify tab lists every rule · kya certify writes the gap report and signed proof file`,
       "",
     );
   }

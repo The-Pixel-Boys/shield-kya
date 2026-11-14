@@ -1,0 +1,11 @@
+id: control-gh-pr-view
+kind: control
+title: gh pr view
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    gh pr view 12
+expect: allow
+credit: ""

@@ -1,0 +1,11 @@
+id: control-ls-la
+kind: control
+title: List files
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    ls -la
+expect: allow
+credit: ""

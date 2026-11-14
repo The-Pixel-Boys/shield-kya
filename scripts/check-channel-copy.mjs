@@ -125,6 +125,12 @@ const metaDescription = {
   set: (text, _l, value) => text.replace(META_RE, (_a, head, _old, tail) => head + encodeHtml(value) + tail),
 };
 
+// A whole text file that holds only the description (plugins/kya-guard/submission/description-<n>.txt).
+const wholeFile = {
+  get: (text) => [{ label: "file", value: text.replace(/\n$/, "") }],
+  set: (_text, _label, value) => `${value}\n`,
+};
+
 // README lead: the first line that opens with bold. It must START with the long copy, rendered
 // as `**<short>** <rest of long>`; whatever follows on that line is free text.
 function readmeLead(copy) {
@@ -168,6 +174,13 @@ export function channels(root, copy) {
     { path: ".claude-plugin/marketplace.json", channel: "Claude marketplace plugin", key: "variants.plugin", field: jsonField("plugins[*].description"), many: true },
     { path: "plugins/kya/.claude-plugin/plugin.json", channel: "Claude Code plugin", key: "variants.plugin", field: jsonField("description") },
     { path: "plugins/kya/.codex-plugin/plugin.json", channel: "Codex plugin", key: "variants.plugin", field: jsonField("description") },
+    // kya-guard: the one-liner of the spec on every plugin manifest and in the submission pack (50, 150, 500 characters).
+    { path: "plugins/kya-guard/.claude-plugin/plugin.json", channel: "kya-guard Claude Code plugin", key: "variants.guard", field: jsonField("description") },
+    { path: "plugins/kya-guard/.codex-plugin/plugin.json", channel: "kya-guard Codex plugin", key: "variants.guard", field: jsonField("description") },
+    { path: "plugins/kya-guard-cursor/.cursor-plugin/plugin.json", channel: "kya-guard Cursor plugin", key: "variants.guard", field: jsonField("description") },
+    { path: "plugins/kya-guard-copilot/plugin.json", channel: "kya-guard Copilot CLI plugin", key: "variants.guard", field: jsonField("description") },
+    { path: "plugins/kya-guard-gemini/gemini-extension.json", channel: "kya-guard Gemini CLI extension", key: "variants.guard", field: jsonField("description") },
+    ...[50, 150, 500].map((n) => ({ path: `plugins/kya-guard/submission/description-${n}.txt`, channel: `kya-guard directory form (${n} characters)`, key: `guardListing.chars${n}`, field: wholeFile })),
     { path: "plugins/kya-copilot/plugin.json", channel: "Copilot CLI plugin", key: "variants.plugin", field: jsonField("description") },
     { path: ".plugin/marketplace.json", channel: "Copilot marketplace", key: "variants.plugin", field: jsonField("description") },
     { path: ".plugin/marketplace.json", channel: "Copilot marketplace plugin", key: "variants.plugin", field: jsonField("plugins[*].description"), many: true },
@@ -205,6 +218,19 @@ export function validateCopy(copy) {
       if (!text.startsWith(noPeriod(copy.short ?? ""))) problems.push(`${COPY_FILE}: ${key} must start with the tagline "${copy.short}"`);
       if (FORBIDDEN.test(text)) problems.push(`${COPY_FILE}: ${key} claims enforcement or GA ("${FORBIDDEN.exec(text)[0]}"); OSS is advisory and fails open`);
       if (/[\u2013\u2014]/.test(text)) problems.push(`${COPY_FILE}: ${key} contains a long dash`);
+    }
+  }
+  // The kya-guard listing texts for directory forms: length limit, tagline, truthful, no long dash.
+  for (const [key, text] of Object.entries(copy.guardListing ?? {}).filter(([k]) => /^chars\d+$/.test(k))) {
+    const limit = Number(key.slice(5));
+    const at = `${COPY_FILE}: guardListing.${key}`;
+    if (typeof text !== "string" || !text.trim()) problems.push(`${at} is empty`);
+    else {
+      if (text.length > limit) problems.push(`${at} is ${text.length} chars, the limit is ${limit}`);
+      if (limit >= 150 && !text.startsWith(noPeriod(copy.short ?? ""))) problems.push(`${at} must start with the tagline "${copy.short}"`);
+      if (limit >= 150 && copy.variants?.guard && !text.includes(copy.variants.guard)) problems.push(`${at} must contain variants.guard`);
+      if (FORBIDDEN.test(text)) problems.push(`${at} claims enforcement or GA ("${FORBIDDEN.exec(text)[0]}"); OSS is advisory and fails open`);
+      if (/[\u2013\u2014]/.test(text)) problems.push(`${at} contains a long dash`);
     }
   }
   for (const s of copy.screenshots ?? []) {

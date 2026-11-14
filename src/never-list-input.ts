@@ -70,6 +70,8 @@ export interface NeverListInputRule {
   readonly id: string;
   /** Group a to e are the owner's list. f to h were added 2026-10-30 (persistence, tunnels, exfiltration). */
   readonly group: "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h";
+  /** Short human phrase for what the rule stops, used in "My coding agent tried to <label>." on the near-miss card and in /kya-guard:status. Plain words, no command text. */
+  readonly label: string;
   /** Checks a shell command. Only shell-like tools reach it. */
   readonly shell?: (sh: Shell) => boolean;
   /** Checks a file path. Only tools that are not write-like reach it. */
@@ -1585,53 +1587,53 @@ const LONG_INPUT_WORDS =
  */
 export const NEVER_LIST_INPUT_RULES: readonly NeverListInputRule[] = [
   // a. Recursive delete of home, root or a top-level system dir (also find -delete / -exec rm on those).
-  { id: "rm-recursive-home-or-system", group: "a", shell: (sh) => hasCommand(sh, rmRecursiveProtected) },
-  { id: "find-delete-home-or-system", group: "a", shell: (sh) => hasCommand(sh, findDeleteProtected) },
+  { id: "rm-recursive-home-or-system", group: "a", label: "wipe your home folder or a system folder", shell: (sh) => hasCommand(sh, rmRecursiveProtected) },
+  { id: "find-delete-home-or-system", group: "a", label: "delete files in your home folder or a system folder", shell: (sh) => hasCommand(sh, findDeleteProtected) },
   // b. Force push (flag or +refspec) to main, master, release* or prod*.
-  { id: "git-force-push-protected-branch", group: "b", shell: (sh) => hasCommand(sh, (c) => gitForcePushProtected(c)) },
+  { id: "git-force-push-protected-branch", group: "b", label: "force push over a protected branch", shell: (sh) => hasCommand(sh, (c) => gitForcePushProtected(c)) },
   // c. Read or copy of a private key, cloud or package credential, or a real .env file.
-  { id: "secret-read-shell", group: "c", shell: (sh) => secretReadShell(sh) || interpreterReadsSecret(sh) },
-  { id: "secret-read-file", group: "c", file: isSecretPath },
+  { id: "secret-read-shell", group: "c", label: "read a credentials file", shell: (sh) => secretReadShell(sh) || interpreterReadsSecret(sh) },
+  { id: "secret-read-file", group: "c", label: "read a credentials file", file: isSecretPath },
   // d. Disk and system destroyers.
-  { id: "mkfs", group: "d", shell: (sh) => hasCommand(sh, (c) => c.name.startsWith("mkfs")) },
+  { id: "mkfs", group: "d", label: "format a disk", shell: (sh) => hasCommand(sh, (c) => c.name.startsWith("mkfs")) },
   {
     id: "dd-to-block-device",
-    group: "d",
+    group: "d", label: "overwrite a disk",
     shell: (sh) => hasCommand(sh, (c) => c.name === "dd" && c.args.some((a) => a.startsWith("of=") && BLOCK_DEVICE.test(a.slice(3)))),
   },
   {
     id: "redirect-to-block-device",
-    group: "d",
+    group: "d", label: "overwrite a disk",
     shell: (sh) => sh.segments.some((seg) => seg.tokens.some((t, i) => (t === ">" || t === ">>") && BLOCK_DEVICE.test(seg.tokens[i + 1] ?? ""))),
   },
-  { id: "fork-bomb", group: "d", shell: forkBomb },
-  { id: "chmod-chown-recursive-root", group: "d", shell: (sh) => hasCommand(sh, chmodChownRecursiveProtected) },
+  { id: "fork-bomb", group: "d", label: "start a fork bomb", shell: forkBomb },
+  { id: "chmod-chown-recursive-root", group: "d", label: "change the owner or mode of the whole system", shell: (sh) => hasCommand(sh, chmodChownRecursiveProtected) },
   // e. Network download piped into a shell, or run as code through a substitution (`sh -c "$(curl ...)"`).
-  { id: "pipe-network-to-shell", group: "e", shell: (sh) => pipeNetworkToShell(sh) || nestedNetExec(sh) },
+  { id: "pipe-network-to-shell", group: "e", label: "run a script piped in from the internet", shell: (sh) => pipeNetworkToShell(sh) || nestedNetExec(sh) },
   // f. Agent-driven persistence (added 2026-10-30). A write rule also runs on Write, Edit and apply_patch paths.
-  { id: "ssh-authorized-keys-write", group: "f", shell: (sh) => writesTo(sh, (p) => AUTHORIZED_KEYS.test(p)), writeFile: (p, home) => AUTHORIZED_KEYS.test(normalizePath(p, home)) },
-  { id: "ssh-copy-id", group: "f", shell: (sh) => hasCandidate(sh, (c) => c.name === "ssh-copy-id") },
-  { id: "persistence-cron", group: "f", shell: (sh) => hasCandidate(sh, cronWrites) || writesTo(sh, (p) => CRON_PATH.test(p)), writeFile: (p, home) => CRON_PATH.test(normalizePath(p, home)) },
-  { id: "persistence-at-job", group: "f", shell: (sh) => hasCandidate(sh, atSchedules) },
-  { id: "persistence-launchd", group: "f", shell: (sh) => hasCandidate(sh, launchLoads) || writesTo(sh, (p) => LAUNCH_PATH.test(p)), writeFile: (p, home) => LAUNCH_PATH.test(normalizePath(p, home)) },
-  { id: "persistence-systemd-user", group: "f", shell: (sh) => hasCandidate(sh, systemdUserEnables) || writesTo(sh, (p) => SYSTEMD_USER_PATH.test(p)), writeFile: (p, home) => SYSTEMD_USER_PATH.test(normalizePath(p, home)) },
-  { id: "persistence-schtasks-create", group: "f", shell: (sh) => hasCandidate(sh, (c) => c.name === "schtasks" && c.args.some((a) => a.toLowerCase() === "/create")) },
+  { id: "ssh-authorized-keys-write", group: "f", label: "add a key to your SSH authorized keys", shell: (sh) => writesTo(sh, (p) => AUTHORIZED_KEYS.test(p)), writeFile: (p, home) => AUTHORIZED_KEYS.test(normalizePath(p, home)) },
+  { id: "ssh-copy-id", group: "f", label: "copy an SSH key to another machine", shell: (sh) => hasCandidate(sh, (c) => c.name === "ssh-copy-id") },
+  { id: "persistence-cron", group: "f", label: "install a cron job", shell: (sh) => hasCandidate(sh, cronWrites) || writesTo(sh, (p) => CRON_PATH.test(p)), writeFile: (p, home) => CRON_PATH.test(normalizePath(p, home)) },
+  { id: "persistence-at-job", group: "f", label: "schedule a job with at", shell: (sh) => hasCandidate(sh, atSchedules) },
+  { id: "persistence-launchd", group: "f", label: "install a launchd startup job", shell: (sh) => hasCandidate(sh, launchLoads) || writesTo(sh, (p) => LAUNCH_PATH.test(p)), writeFile: (p, home) => LAUNCH_PATH.test(normalizePath(p, home)) },
+  { id: "persistence-systemd-user", group: "f", label: "install a systemd startup service", shell: (sh) => hasCandidate(sh, systemdUserEnables) || writesTo(sh, (p) => SYSTEMD_USER_PATH.test(p)), writeFile: (p, home) => SYSTEMD_USER_PATH.test(normalizePath(p, home)) },
+  { id: "persistence-schtasks-create", group: "f", label: "create a Windows scheduled task", shell: (sh) => hasCandidate(sh, (c) => c.name === "schtasks" && c.args.some((a) => a.toLowerCase() === "/create")) },
   // A download (curl, wget) in a command that writes a shell rc file: it runs at every shell start.
-  { id: "shell-rc-download-append", group: "f", shell: (sh) => NET_WORD.test(sh.raw) && writesTo(sh, (p) => SHELL_RC_PATH.test(p)) },
+  { id: "shell-rc-download-append", group: "f", label: "add a download to your shell startup file", shell: (sh) => NET_WORD.test(sh.raw) && writesTo(sh, (p) => SHELL_RC_PATH.test(p)) },
   // g. Reverse tunnels and reverse shells (added 2026-10-30).
-  { id: "ssh-reverse-forward", group: "g", shell: (sh) => hasCandidate(sh, sshReverseForward) },
-  { id: "ssh-local-forward-raw-ip", group: "g", shell: (sh) => hasCandidate(sh, sshLocalToRawIp) },
-  { id: "reverse-shell-netcat-exec", group: "g", shell: (sh) => hasCandidate(sh, netcatExec) },
-  { id: "reverse-shell-dev-tcp", group: "g", shell: devTcpRedirect },
-  { id: "autossh-tunnel", group: "g", shell: (sh) => hasCandidate(sh, (c) => c.name === "autossh") },
-  { id: "ssh-tunnel-device", group: "g", shell: (sh) => hasCandidate(sh, sshTunnelDevice) },
-  { id: "ssh-proxy-command-exec", group: "g", shell: (sh) => hasCandidate(sh, sshProxyExec) },
-  { id: "ssh-config-written", group: "g", shell: sshConfigWritten },
-  { id: "ssh-code-loading-option", group: "g", shell: (sh) => hasCandidate(sh, sshCodeLoadingDenied) },
+  { id: "ssh-reverse-forward", group: "g", label: "open a reverse SSH tunnel", shell: (sh) => hasCandidate(sh, sshReverseForward) },
+  { id: "ssh-local-forward-raw-ip", group: "g", label: "forward an SSH port to a raw IP address", shell: (sh) => hasCandidate(sh, sshLocalToRawIp) },
+  { id: "reverse-shell-netcat-exec", group: "g", label: "open a reverse shell", shell: (sh) => hasCandidate(sh, netcatExec) },
+  { id: "reverse-shell-dev-tcp", group: "g", label: "open a reverse shell", shell: devTcpRedirect },
+  { id: "autossh-tunnel", group: "g", label: "keep an SSH tunnel open", shell: (sh) => hasCandidate(sh, (c) => c.name === "autossh") },
+  { id: "ssh-tunnel-device", group: "g", label: "open an SSH tunnel device", shell: (sh) => hasCandidate(sh, sshTunnelDevice) },
+  { id: "ssh-proxy-command-exec", group: "g", label: "run a command through an SSH proxy option", shell: (sh) => hasCandidate(sh, sshProxyExec) },
+  { id: "ssh-config-written", group: "g", label: "change your SSH config", shell: sshConfigWritten },
+  { id: "ssh-code-loading-option", group: "g", label: "load code through an SSH option", shell: (sh) => hasCandidate(sh, sshCodeLoadingDenied) },
   // Long command (over MAX_SCAN_CHARS): the parsed windows skip the middle, so the whole text is searched for these words.
-  { id: "long-input-persistence-words", group: "f", fullText: (text) => LONG_INPUT_WORDS.test(text) },
+  { id: "long-input-persistence-words", group: "f", label: "run a very long command that sets up persistence", fullText: (text) => LONG_INPUT_WORDS.test(text) },
   // h. Exfiltration of environment names or values to a public raw IPv4 address (added 2026-10-30).
-  { id: "env-dump-to-raw-ip", group: "h", shell: envToPublicIp },
+  { id: "env-dump-to-raw-ip", group: "h", label: "send your environment variables to a raw IP address", shell: envToPublicIp },
 ];
 
 const WRITE_NAME = /write|edit|create|update|delete|remove|move|rename|patch|replace|save|append|mkdir|touch/;

@@ -1,0 +1,11 @@
+id: control-redis-get
+kind: control
+title: redis-cli GET
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    redis-cli GET session:1
+expect: allow
+credit: ""

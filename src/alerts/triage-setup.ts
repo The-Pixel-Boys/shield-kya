@@ -48,6 +48,8 @@ const MIN_MODEL_BYTES = 1_000_000;
 
 export interface TriageSetupIo {
   readonly error: (msg: string) => void;
+  /** `kya start` sets this: the "alerts are off" hint is not printed there, `kya doctor` prints it (see triageOffNotice). */
+  readonly quietHint?: boolean;
   /** Test seam: force interactive / non-interactive. Defaults to "stdin and stderr are TTYs". */
   readonly isTty?: boolean;
   /** Test seam: returns the raw answer line. Defaults to a readline prompt on stdin/stderr. */
@@ -292,6 +294,14 @@ async function runInstall(io: TriageSetupIo, env: NodeJS.ProcessEnv): Promise<Tr
   return modelOk ? "installed" : "partial";
 }
 
+/** The "alerts are off" line `kya doctor` prints, or undefined when alerts are on or the user chose. */
+export function triageOffNotice(env: NodeJS.ProcessEnv): string | undefined {
+  const mode = env.KYA_ALERTS?.trim().toLowerCase();
+  if (mode === "off" || mode === "0" || mode === "false") return undefined;
+  if (triageInstalled(env) || resolveAlertsConfig(env).source === "config") return undefined;
+  return `Security alerts are off. Turn them on: ${triageInstallCommand()}`;
+}
+
 export async function maybeOfferTriageAlerts(io: TriageSetupIo, env: NodeJS.ProcessEnv): Promise<TriageSetupResult> {
   const mode = env.KYA_ALERTS?.trim().toLowerCase();
   if (mode === "off" || mode === "0" || mode === "false") return "skipped";
@@ -302,7 +312,7 @@ export async function maybeOfferTriageAlerts(io: TriageSetupIo, env: NodeJS.Proc
 
   const interactive = io.isTty ?? Boolean(process.stdin.isTTY && process.stderr.isTTY);
   if (!interactive) {
-    io.error(`Security alerts are off. Turn them on: ${triageInstallCommand()}`);
+    if (!io.quietHint) io.error(`Security alerts are off. Turn them on: ${triageInstallCommand()}`);
     return "hinted";
   }
 

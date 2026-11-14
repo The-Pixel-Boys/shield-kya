@@ -1,0 +1,11 @@
+id: control-gh-pr-create
+kind: control
+title: gh pr create
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    gh pr create --fill
+expect: allow
+credit: ""

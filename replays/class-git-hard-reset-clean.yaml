@@ -1,0 +1,13 @@
+id: class-git-hard-reset-clean
+kind: class
+title: git reset --hard followed by git clean -fdx
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    git reset --hard && git clean -fdx
+expect: deny
+rule: git-hard-reset-clean
+since: 0.33.0
+credit: ""

@@ -30,6 +30,12 @@ const COPY = {
     vscode: "Tagline for agents. Editor extension, advisory.",
     webInstall: "Tagline for agents. Install & go.",
     webHowKyaWorks: "Tagline for agents. How it works.",
+    guard: "Tagline for agents. Guard surface, no network.",
+  },
+  guardListing: {
+    chars50: "Short listing text.",
+    chars150: "Tagline for agents. Guard surface, no network. For five hosts.",
+    chars500: "Tagline for agents. Guard surface, no network. A longer listing text for the directory form.",
   },
 };
 const PNG_A = Buffer.from("png-a");
@@ -67,6 +73,11 @@ function fixture(): void {
   put("plugins/kya/.claude-plugin/plugin.json", JSON.stringify({ description: COPY.variants.plugin }));
   put("plugins/kya/.codex-plugin/plugin.json", JSON.stringify({ description: COPY.variants.plugin }));
   put("plugins/kya-copilot/plugin.json", JSON.stringify({ description: COPY.variants.plugin }));
+  for (const f of [
+    "plugins/kya-guard/.claude-plugin/plugin.json", "plugins/kya-guard/.codex-plugin/plugin.json", "plugins/kya-guard-cursor/.cursor-plugin/plugin.json",
+    "plugins/kya-guard-copilot/plugin.json", "plugins/kya-guard-gemini/gemini-extension.json",
+  ]) put(f, JSON.stringify({ description: COPY.variants.guard }));
+  for (const [n, k] of [[50, "chars50"], [150, "chars150"], [500, "chars500"]] as const) put(`plugins/kya-guard/submission/description-${n}.txt`, `${COPY.guardListing[k]}\n`);
   put(".plugin/marketplace.json", JSON.stringify({ description: COPY.variants.plugin, plugins: [{ description: COPY.variants.plugin }] }));
   put("gemini-extension.json", JSON.stringify({ name: "x", description: COPY.variants.plugin }));
   put(".cursor-plugin/plugin.json", JSON.stringify({ description: COPY.long }));

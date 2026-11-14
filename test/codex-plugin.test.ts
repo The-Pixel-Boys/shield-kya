@@ -9,7 +9,10 @@ import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// These tests spawn CLIs or git, or wait on timers: 0.8 to 1.6 s each on an idle Mac, so the 5 s default is too tight on a loaded CI host. Hang guard only; budget assertions stay.
+vi.setConfig({ testTimeout: 30_000 });
 // @ts-expect-error plain .mjs script, no type declarations
 import { findVersionDrift } from "../scripts/check-version-pins.mjs";
 // @ts-expect-error plain .mjs script, no type declarations
@@ -57,8 +60,10 @@ describe("Codex marketplace and plugin manifest", () => {
   it("marketplace lists kya by ./ path with the fields Codex requires", () => {
     const m = json(".agents/plugins/marketplace.json");
     expect(m.name).toBe("shield-kya"); // same name as the Claude marketplace: kya@shield-kya everywhere
-    expect(m.plugins).toHaveLength(1);
-    const [p] = m.plugins;
+    expect(m.plugins.map((x: { name: string }) => x.name)).toEqual(["kya", "kya-guard"]); // kya-guard: spec G6, its own folder
+    const [p, g] = m.plugins;
+    expect(g).toMatchObject({ name: "kya-guard", source: { source: "local", path: "./plugins/kya-guard" }, policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" } });
+    expect(g).not.toHaveProperty("version");
     expect(p).toMatchObject({ name: "kya", source: { source: "local", path: "./plugins/kya" }, policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" } });
     expect(typeof p.category).toBe("string");
     expect(p).not.toHaveProperty("version");
@@ -107,7 +112,7 @@ describe("Codex marketplace and plugin manifest", () => {
     };
     const docs = {
       "docs/hosts/codex.md (intro + plugin section)": section(read("docs/hosts/codex.md"), "# Codex (OpenAI)", /\n## MCP server/),
-      "README.md (Codex plugin section)": section(read("README.md"), "## Codex plugin", /\n## /),
+      "docs/plugins.md (Codex plugin section, moved out of the README in F5)": section(read("docs/plugins.md"), "## Codex plugin", /\n## /),
       "plugins/kya/README.md": read("plugins/kya/README.md"),
     };
     const claim = /\benforc(es|ed by kya|ing)\b|\bfails?[- ]closed\b|\bsole PEP\b|\bgenerally available\b|\bgeneral availability\b|\bGA\b|\bproduction[- ]ready\b|\bguarantee[sd]?\b|\bblocks (every|all)\b/i;

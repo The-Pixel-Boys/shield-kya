@@ -235,12 +235,9 @@ Channels CI cannot edit. Paste this text by hand when it drifts:
 | npm, MCP registry | update on the next kya release (from `package.json` / `server.json`) | `long` / `variants.mcp` |
 | Homebrew tap, Scoop bucket | updated by the release pipeline at the next stable release (templates `homebrew/` and `scoop/`) | `short` without the period / `long` |
 
-`long` today: "Audit trail and traceability for AI agents. See what every coding agent did, with opt-in
-human approval and signed certify."
-`variants.python` today: "Audit trail and traceability for AI agents. In-process kya shim for Python
-agent frameworks (offline evaluate via the kya CLI)."
-`variants.plugin` today: "Audit trail and traceability for AI agents. See what every coding agent did. Advisory:
-records every tool call, blocks the never-list and the guard pack, fails open."
+`long` today: "Stops your coding agent from deleting, leaking or dropping things. Records everything else."
+`variants.python` today: "Stops your coding agent from deleting, leaking or dropping things. In-process kya shim for Python agent frameworks (offline evaluate via the kya CLI)."
+`variants.plugin` today: "Stops your coding agent from deleting, leaking or dropping things. Records everything else. Advisory: blocks the never-list and the guard pack, fails open."
 
 ## VS Code Marketplace and Open VSX
 

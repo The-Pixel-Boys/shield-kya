@@ -278,7 +278,7 @@ describe("renderReceiptMarkdown certify section", () => {
     expect(mdGap).toContain("- `DP-01` - Agent tool calls are intercepted and recorded (high)");
   });
 
-  it("puts ## Certify before ## Analytics and ## Feed (dashboard hierarchy)", () => {
+  it("puts ## Certify after ## Analytics and ## Feed (no gap count above the fold)", () => {
     const events = [
       {
         ts: "2026-09-21T00:00:00.000Z",
@@ -292,8 +292,9 @@ describe("renderReceiptMarkdown certify section", () => {
     const md = renderReceiptMarkdown(buildWindowReceiptModel(events, 3, { certify: GAP_CARD }));
     const iCertify = md.indexOf("## Certify");
     expect(iCertify).toBeGreaterThan(-1);
-    expect(iCertify).toBeLessThan(md.indexOf("## Analytics"));
-    expect(iCertify).toBeLessThan(md.indexOf("## Feed"));
+    expect(iCertify).toBeGreaterThan(md.indexOf("## Analytics"));
+    expect(iCertify).toBeGreaterThan(md.indexOf("## Feed"));
+    expect(iCertify).toBeGreaterThan(md.indexOf("## Blocked"));
   });
 
   it("omits ## Certify when the card is absent", () => {

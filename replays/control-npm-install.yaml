@@ -1,0 +1,11 @@
+id: control-npm-install
+kind: control
+title: Install dependencies
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    npm install
+expect: allow
+credit: ""

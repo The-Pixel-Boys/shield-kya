@@ -232,7 +232,7 @@ describe("report daemon exits by itself", () => {
         });
 
       try {
-        const first = await runCli(["start"]);
+        const first = await runCli(["start", "--yes"]);
         expect(first.code).toBe(0);
         const oldPid = (JSON.parse(readFileSync(statePath, "utf8")) as { pid: number }).pid;
 
@@ -244,7 +244,7 @@ describe("report daemon exits by itself", () => {
         expect(gone).toBe(true);
         expect(existsSync(statePath)).toBe(false);
 
-        const second = await runCli(["start"]);
+        const second = await runCli(["start", "--yes"]);
         expect(second.code).toBe(0);
         expect(second.stdout).not.toContain("already running");
         const fresh = JSON.parse(readFileSync(statePath, "utf8")) as { pid: number; url: string };

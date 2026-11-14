@@ -5,7 +5,7 @@
  * file. The worst-verdict fold reuses the dashboard's ranking
  * (allow < review < deny < never).
  */
-import type { TrailEvent, TrailProduct } from "../trail.js";
+import { outcomeOf, type TrailEvent, type TrailOutcome, type TrailProduct } from "../trail.js";
 import { worstOf, type ToolWorst } from "./dashboard.js";
 
 /** Group key for events recorded before targetPath existed. */
@@ -15,6 +15,7 @@ export interface ChangeEntry {
   readonly ts: string;
   readonly toolId: string;
   readonly verdict: string;
+  readonly outcome?: TrailOutcome;
   readonly mode: TrailEvent["mode"];
   readonly host?: string;
   readonly product?: TrailProduct;
@@ -65,6 +66,7 @@ export function buildChangesModel(events: readonly TrailEvent[]): ChangesModel {
       toolId: e.toolId,
       verdict: e.verdict,
       mode: e.mode,
+      ...(outcomeOf(e) ? { outcome: outcomeOf(e)! } : {}),
       never: Boolean(e.neverEvent) || e.reasonCode === "NEVER_EVENT",
       preview,
       ...(e.host?.trim() ? { host: e.host.trim() } : {}),

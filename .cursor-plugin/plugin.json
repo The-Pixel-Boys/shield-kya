@@ -1,7 +1,7 @@
 {
   "name": "shield-kya",
-  "version": "0.34.0",
-  "description": "Audit trail and traceability for AI agents. See what every coding agent did and check each tool call against policy.",
+  "version": "0.35.1",
+  "description": "Stops your coding agent from deleting, leaking or dropping things. Records everything else.",
   "author": {
     "name": "Shield Agent",
     "email": "it@shield-agent.com"

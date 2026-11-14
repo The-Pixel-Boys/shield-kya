@@ -313,6 +313,46 @@ export async function runReportDiscoverAction(
   return { status: 200, body: { ok: true, total: snapshot.inventory.length } };
 }
 
+/**
+ * POST /action/share: share the redacted summary of this report window (the same payload and call as
+ * `kya receipt --share`) and return the public URL. A failure (no network, rate limit, server error) comes
+ * back as `{ ok: false, error }` with status 200: the page shows it and keeps working.
+ */
+export async function runReportShareAction(
+  input: { readonly cwd: string; readonly sessionId?: string; readonly days: number },
+  env: NodeJS.ProcessEnv,
+  fetchImpl?: typeof fetch,
+): Promise<ReportActionResult> {
+  const { buildSharePayload, shareBaseUrl, shareReceiptWithRetry } = await import("./share.js");
+  const model = loadReceiptModel({ cwd: input.cwd, sessionId: input.sessionId, days: input.days, live: false });
+  const result = await shareReceiptWithRetry(buildSharePayload(model), {
+    baseUrl: shareBaseUrl(undefined, env),
+    ...(fetchImpl ? { fetchImpl } : {}),
+  });
+  if (!result.ok) return { status: 200, body: { ok: false, error: result.error } };
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      url: result.url,
+      expiresAt: result.expiresAt ?? null,
+    },
+  };
+}
+
+/**
+ * POST /action/card: make the near-miss card for one denied call (the id on the "Make card" control). Local files only,
+ * nothing is sent. A call that is not a deny, or an unknown id, comes back as `{ ok: false, error }` with status 200.
+ */
+export async function runReportCardAction(id: string, env: NodeJS.ProcessEnv): Promise<ReportActionResult> {
+  if (!/^[0-9a-f]{8}$/.test(id)) return { status: 400, body: { ok: false, error: "invalid card id" } };
+  const { runReceiptCard } = await import("../commands/receipt.js");
+  const { cardCaption } = await import("../card.js");
+  const r = runReceiptCard(env, { id });
+  if (!r.ok) return { status: 200, body: { ok: false, error: r.message } };
+  return { status: 200, body: { ok: true, id: r.id, svg: r.svgPath, png: r.pngPath ?? null, caption: cardCaption(r.input) } };
+}
+
 /** POST /action/notify-test: fire a synthetic DENY event at the configured webhooks. */
 export async function runReportNotifyTestAction(
   cwd: string,
@@ -580,6 +620,8 @@ export function startLiveReceiptServer(
           url.pathname === "/action/otel-test" ||
           url.pathname === "/action/orr-run" ||
           url.pathname === "/action/posture" ||
+          url.pathname === "/action/share" ||
+          url.pathname === "/action/card" ||
           url.pathname === "/fragments");
       if (isPostAction && !isLoopbackClient(req)) {
         return forbidden(res, { ok: false, error: "loopback only" });
@@ -757,6 +799,35 @@ export function startLiveReceiptServer(
             const message = err instanceof Error ? err.message : String(err);
             res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
             res.end(`${JSON.stringify({ ok: false, error: message })}\n`);
+          }
+        })();
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/action/share") {
+        void (async () => {
+          try {
+            req.resume();
+            const result = await runReportShareAction({ cwd, sessionId: options.sessionId, days: options.days }, process.env);
+            return jsonOk(res, result.body);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(`${JSON.stringify({ ok: false, error: message })}\n`);
+          }
+        })();
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/action/card") {
+        void (async () => {
+          try {
+            const body = (await readJsonBody(req)) as Record<string, unknown> | undefined;
+            const id = typeof body?.id === "string" ? body.id : "";
+            const result = await runReportCardAction(id, process.env);
+            return result.status === 200 ? jsonOk(res, result.body) : badRequest(res, result.body);
+          } catch {
+            return badRequest(res, { ok: false, error: "invalid JSON body" });
           }
         })();
         return;
@@ -1019,6 +1090,8 @@ export function startLiveReceiptServer(
       // blocking; the SSE broadcast makes the panel pick the result up live.
       const refreshOrr = (): void => {
         if (closed || !orrReportStale(cwd)) return;
+        // KYA_ORR_AUTO=off (set by kya start): refresh an existing board, never create orr-report/.
+        if (process.env.KYA_ORR_AUTO === "off" && !existsSync(orrReportPath(cwd))) return;
         const ran = runOrrBoard(cwd);
         if (ran.ok) scheduleBroadcast("orr");
       };

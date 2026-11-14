@@ -11,6 +11,8 @@ export interface ServeMcpOptions {
   readonly mode: ServeMcpMode;
   readonly port?: number;
   readonly listenHost?: string;
+  /** MCP client's `initialize` name (opt-in telemetry host detection). */
+  readonly onClientInfo?: (name: string) => void;
 }
 
 export interface ServeMcpResult {
@@ -53,6 +55,7 @@ export async function runServeMcp(
       kyaHost: config.host,
       agentId: config.agentId,
       offline: config.offline,
+      onClientInfo: options.onClientInfo,
       trail: {
         cwd: config.cwd,
         offline: config.offline,
@@ -70,6 +73,7 @@ export async function runServeMcp(
     kyaHost: config.host,
     agentId: config.agentId,
     offline: config.offline,
+    onClientInfo: options.onClientInfo,
     trail: {
       cwd: config.cwd,
       offline: config.offline,

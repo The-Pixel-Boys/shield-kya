@@ -1,0 +1,11 @@
+id: control-git-diff
+kind: control
+title: Show the diff
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    git diff
+expect: allow
+credit: ""

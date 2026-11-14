@@ -47,6 +47,7 @@ async function run(opts: {
   tool: string;
   args: unknown;
   mode?: "hosted" | "shadow";
+  strict?: boolean;
   reply?: Reply;
   home?: string;
   cwd?: string;
@@ -68,7 +69,7 @@ async function run(opts: {
   };
   const r = await runHook({
     host: "claude",
-    strict: false,
+    strict: opts.strict ?? false,
     failClosed: false,
     stdinText: JSON.stringify({ hook_event_name: "PreToolUse", session_id: "0190f2a4-7c1e-7d3a-9b2c-aaaaaaaaaaaa", cwd: opts.cwd ?? "/p", tool_name: opts.tool, tool_input: opts.args, tool_use_id: "toolu_1" }),
     env: { HOME: home, ...(opts.env ?? {}) },
@@ -321,5 +322,55 @@ describe("guard pack in hosted mode", () => {
     hostedDecision.neverList = "unknown";
     hostedDecision.code = undefined;
     hostedDecision.rule = undefined;
+  });
+});
+
+describe("hosted guard pack: ask rules (G2)", () => {
+  const args = { command: "npx prisma migrate reset --force" };
+  const planeDeny = () => new Response(JSON.stringify({ verdict: "DENY", reasonCode: "POLICY_DENY", toolId: "x", argsHash: "h" }), { status: 200, headers: { "content-type": "application/json" } });
+
+  it("plane ALLOW: Claude gets an ask (exit 0, permissionDecision ask) and the trail row is held", async () => {
+    const r = await run({ tool: "Bash", args });
+    expect(r.exitCode).toBe(0);
+    const body = JSON.parse(r.stdout).hookSpecificOutput;
+    expect(body.permissionDecision).toBe("ask");
+    expect(body.permissionDecisionReason).toContain("GUARD_ASK (prisma-migrate-reset)");
+    expect(r.trail[0]).toMatchObject({ verdict: "REQUIRE_APPROVE", outcome: "held", reasonCode: "GUARD_ASK", neverRule: "prisma-migrate-reset" });
+    expect(r.trailText).not.toContain("--force");
+  });
+
+  it("strict mode: the ask becomes a deny with the rule id and the row is blocked, with a plane ALLOW or REQUIRE_APPROVE", async () => {
+    const approve = new Response(JSON.stringify({ verdict: "REQUIRE_APPROVE", reasonCode: "UNKNOWN_TOOL", toolId: "x", argsHash: "h" }), { status: 200, headers: { "content-type": "application/json" } });
+    for (const reply of [undefined, approve]) {
+      const r = await run({ tool: "Bash", args, strict: true, ...(reply ? { reply } : {}) });
+      expect(r.exitCode).toBe(2);
+      expect(r.stdout).toContain('"permissionDecision":"deny"');
+      expect(r.stdout).toContain("GUARD_ASK (prisma-migrate-reset)");
+      expect(r.trail[0]).toMatchObject({ verdict: "REQUIRE_APPROVE", outcome: "blocked", reasonCode: "GUARD_ASK", neverRule: "prisma-migrate-reset" });
+    }
+  });
+
+  it("shadow mode does not lift an ask (it is a local rule, like the never-list)", async () => {
+    const r = await run({ tool: "Bash", args, mode: "shadow" });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain('"permissionDecision":"ask"');
+  });
+
+  it("a plane failure still fails closed: deny, not ask", async () => {
+    const r = await run({ tool: "Bash", args, reply: netErr() });
+    expect(r.exitCode).toBe(2);
+    expect(r.stdout).toContain('"permissionDecision":"deny"');
+  });
+
+  it("a plane DENY wins over the ask", async () => {
+    const r = await run({ tool: "Bash", args, reply: planeDeny() });
+    expect(r.exitCode).toBe(2);
+    expect(r.stdout).toContain('"permissionDecision":"deny"');
+  });
+
+  it("a deny rule in hosted mode is unchanged (supabase-reset-linked: DENY, blocked)", async () => {
+    const r = await run({ tool: "Bash", args: { command: "supabase db reset --linked" } });
+    expect(r.exitCode).toBe(2);
+    expect(r.trail[0]).toMatchObject({ verdict: "DENY", outcome: "blocked", reasonCode: "NEVER_SHELL", neverRule: "supabase-reset-linked" });
   });
 });

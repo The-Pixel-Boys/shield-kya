@@ -1,0 +1,1 @@
+Stops your coding agent from deleting, leaking or dropping things. No network, one file, fails open. For Claude Code, Codex, Cursor, Copilot, Gemini.

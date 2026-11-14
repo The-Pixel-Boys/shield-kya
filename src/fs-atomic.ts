@@ -18,6 +18,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { KyaError } from "./errors.js";
+import { activeJournal, journalMkdir } from "./write-journal.js";
 
 /**
  * Crash-safe write: tmp file in the same directory, then rename onto the
@@ -49,6 +50,11 @@ function writeAtomic(
   content: string | Uint8Array,
   opts: { readonly beforeRename?: () => void; readonly forceMode?: number },
 ): void {
+  const journal = activeJournal();
+  if (journal) {
+    journal.record(target, content);
+    if (journal.dry) return;
+  }
   const tmp = `${target}.kya-tmp-${randomBytes(16).toString("hex")}`;
   let mode: number | undefined = opts.forceMode;
   try {
@@ -172,7 +178,7 @@ export function projectWritePath(target: string, root: string, dir = false): str
 
 /** mkdir -p for a project directory (for example .kya) after projectWritePath accepts it. */
 export function ensureProjectDir(dir: string, root: string, mode?: number): void {
-  mkdirSync(projectWritePath(dir, root, true), { recursive: true, mode });
+  journalMkdir(projectWritePath(dir, root, true), mode);
 }
 
 /**
@@ -184,7 +190,7 @@ export function ensureProjectDir(dir: string, root: string, mode?: number): void
  */
 export function writeProjectFile(target: string, content: string, root: string, forceMode?: number): string {
   const out = projectWritePath(target, root);
-  mkdirSync(dirname(out), { recursive: true });
+  journalMkdir(dirname(out));
   writeAtomic(out, content, {
     forceMode,
     beforeRename: () => {

@@ -5,10 +5,11 @@
  * ownership for the kya-managed grok hook file, all writes symlink-safe and
  * crash-safe via atomicWriteSync/writeTarget/createTarget.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { UsageError } from "../errors.js";
 import { atomicWriteSync, projectWritePath, writeProjectFile } from "../fs-atomic.js";
+import { journalIsDry, journalMkdir } from "../write-journal.js";
 // imports from connect.ts are call-time only (shared fs/registry helpers) - safe cycle
 import {
   cliJsPath,
@@ -57,11 +58,64 @@ const HOOK_TIMEOUT_SECONDS = 5;
 export const PROJECT_HOOK_CLAUDE_ONLY = (host: string): string =>
   `--project hook wiring is claude only; ${host} hooks live in the user config (drop --project)`;
 
-/** Shell command a host's PreToolUse hook runs. JSON-quoted paths are safe to embed. */
-export function hookCommand(hostId: string, hosted?: HostedHookWiring): string {
-  const base = [process.execPath, cliJsPath()]
-    .map((s) => JSON.stringify(s))
-    .join(" ") + ` hook --host ${hostId}`;
+/** The stable launcher the OSS hook runs: <home>/.kya/bin/kya-hook (POSIX shell). */
+export function launcherPath(home: string): string {
+  return join(home, ".kya", "bin", "kya-hook");
+}
+
+function shSingleQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Launcher text. It prefers the node and cli.js recorded at start, falls back
+ * to node on PATH and to `kya` on PATH (after a Node version switch), and
+ * fails open with one stderr line when neither works: it never blocks a tool call.
+ */
+export function launcherScript(node: string, cli: string): string {
+  return [
+    "#!/bin/sh",
+    "# Written by kya start. Runs `kya hook`. Fails open: never blocks a tool call when node or kya is missing.",
+    "# Check it with: kya doctor. Remove it with: kya uninstall.",
+    `KYA_NODE=${shSingleQuote(node)}`,
+    `KYA_CLI=${shSingleQuote(cli)}`,
+    "# First executable under an absolute PATH entry (a relative entry such as . or an empty one is skipped).",
+    "kya_find() { kya_ifs=$IFS; IFS=:; for kya_d in $PATH; do case \"$kya_d\" in /*) if [ -x \"$kya_d/$1\" ] && [ ! -d \"$kya_d/$1\" ]; then IFS=$kya_ifs; printf '%s' \"$kya_d/$1\"; return 0; fi;; esac; done; IFS=$kya_ifs; return 1; }",
+    'if [ ! -x "$KYA_NODE" ]; then KYA_NODE=$(kya_find node) || KYA_NODE=""; fi',
+    'if [ -n "$KYA_NODE" ] && [ -f "$KYA_CLI" ]; then exec "$KYA_NODE" "$KYA_CLI" "$@"; fi',
+    'KYA_BIN=$(kya_find kya) && exec "$KYA_BIN" "$@"',
+    'echo "kya: hook skipped because node or kya was not found (run: kya doctor)" >&2',
+    "exit 0",
+    "",
+  ].join("\n");
+}
+
+/** Write the launcher when missing or stale. Skipped on win32 (the hook keeps absolute paths there). */
+export function ensureLauncher(home: string): string | undefined {
+  if (process.platform === "win32") return undefined;
+  const path = launcherPath(home);
+  const content = launcherScript(process.execPath, cliJsPath());
+  if (existsSync(path) && readFileSync(path, "utf8") === content) return path;
+  journalMkdir(dirname(path));
+  atomicWriteSync(createTarget(path), content);
+  if (!journalIsDry()) chmodSync(path, 0o755);
+  return path;
+}
+
+/**
+ * Shell command a host's PreToolUse hook runs. JSON-quoted paths are safe to
+ * embed. The OSS hook (no `hosted`) goes through the launcher when `home` is
+ * given; the hosted hook keeps direct paths so it stays fail-closed.
+ */
+export function hookCommand(hostId: string, hosted?: HostedHookWiring, home?: string): string {
+  const useLauncher = !hosted && home !== undefined && process.platform !== "win32";
+  const paths = useLauncher ? [launcherPath(home!)] : [process.execPath, cliJsPath()];
+  // Inside double quotes the shell still expands $ and backticks: a path that holds one cannot be embedded.
+  const hostile = paths.find((x) => /[$`"\n\r]/.test(x));
+  if (hostile !== undefined) {
+    throw new UsageError(`the hook command cannot embed ${hostile}: the path holds $, a backtick, a quote or a newline. Move kya or KYA_HOME to a plain path and re-run.`);
+  }
+  const base = `${paths.map((x) => JSON.stringify(x)).join(" ")} hook --host ${hostId}`;
   if (!hosted) return base;
   // Inside double quotes the shell still expands $ and backticks: refuse them.
   if (/[$`"\\\n\r]/.test(hosted.configPath)) {
@@ -81,13 +135,13 @@ function hookIdentity(hostId: string): string {
  * also sets onFailure "block" (Claude Code 2.1.295+), so a crash or host
  * timeout blocks the call instead of letting it through.
  */
-function preToolUseEntry(hostId: string, hosted?: HostedHookWiring): Record<string, unknown> {
+function preToolUseEntry(hostId: string, hosted?: HostedHookWiring, home?: string): Record<string, unknown> {
   return {
     matcher: "",
     hooks: [
       {
         type: "command",
-        command: hookCommand(hostId, hosted),
+        command: hookCommand(hostId, hosted, home),
         timeout: HOOK_TIMEOUT_SECONDS,
         ...(hosted ? { onFailure: "block" } : {}),
       },
@@ -105,8 +159,8 @@ interface ClaudeSettingsHookEntry {
  * instead of rewritten. An existing kya entry (matched by command identity)
  * means skipped; --force replaces that one entry, preserving all others.
  */
-function wireClaudeSettings(path: string, force: boolean, hosted?: HostedHookWiring, root?: string): ConnectStatus {
-  const entry = preToolUseEntry("claude", hosted);
+function wireClaudeSettings(path: string, force: boolean, hosted: HostedHookWiring | undefined, root: string | undefined, home: string): ConnectStatus {
+  const entry = preToolUseEntry("claude", hosted, home);
   // Project scope (root set): never follow a link out of the project; home scope keeps the dotfiles behaviour.
   const write = (t: string, content: string) =>
     root ? writeProjectFile(path, content, root) : atomicWriteSync(t, content);
@@ -179,8 +233,8 @@ function wireClaudeSettings(path: string, force: boolean, hosted?: HostedHookWir
  * ~/.grok/hooks/shield-kya.json is wholly kya-managed: deterministic content,
  * so an identical file means skipped and anything else is overwritten.
  */
-function wireGrokHooks(path: string): ConnectStatus {
-  const content = `${JSON.stringify({ hooks: { PreToolUse: [preToolUseEntry("grok")] } }, null, 2)}\n`;
+function wireGrokHooks(path: string, home: string): ConnectStatus {
+  const content = `${JSON.stringify({ hooks: { PreToolUse: [preToolUseEntry("grok", undefined, home)] } }, null, 2)}\n`;
   if (!existsSync(path)) {
     atomicWriteSync(createTarget(path), content);
     return "created";
@@ -221,8 +275,8 @@ export function kimiHooksBlockText(command: string): string {
   ].join("\n");
 }
 
-function kimiHooksBlock(hostId: string): string {
-  return kimiHooksBlockText(hookCommand(hostId));
+function kimiHooksBlock(hostId: string, home: string): string {
+  return kimiHooksBlockText(hookCommand(hostId, undefined, home));
 }
 
 function assertKimiAppendable(path: string, text: string): void {
@@ -240,8 +294,8 @@ function assertKimiAppendable(path: string, text: string): void {
  * replaces the containing block (header line through the next table header or
  * EOF). Writes exactly the fields Kimi's config loader accepts.
  */
-function wireKimiToml(path: string, force: boolean): ConnectStatus {
-  const block = kimiHooksBlock("kimi");
+function wireKimiToml(path: string, force: boolean, home: string): ConnectStatus {
+  const block = kimiHooksBlock("kimi", home);
   if (!existsSync(path)) {
     atomicWriteSync(createTarget(path), block);
     return "created";
@@ -276,6 +330,15 @@ function wireKimiToml(path: string, force: boolean): ConnectStatus {
   return "wired";
 }
 
+/** True when the (already wired) host config runs the hook through the launcher, so a missing launcher must be rewritten. */
+function existingUsesLauncher(path: string, home: string): boolean {
+  try {
+    return readFileSync(path, "utf8").includes(launcherPath(home));
+  } catch {
+    return false;
+  }
+}
+
 /** Wire `kya hook` into one host's user config. Unknown host → UsageError. */
 export function wireHook(input: WireHookInput): WireHookResult {
   const key = input.host.trim().toLowerCase();
@@ -298,27 +361,29 @@ export function wireHook(input: WireHookInput): WireHookResult {
       if (project) {
         if (!input.cwd) throw new UsageError("--project hook wiring needs a project directory");
         path = join(input.cwd, ".claude", "settings.json");
-        status = wireClaudeSettings(path, force, input.hosted, input.cwd);
+        status = wireClaudeSettings(path, force, input.hosted, input.cwd, input.home);
       } else {
         path = join(input.home, ".claude", "settings.json");
-        status = wireClaudeSettings(path, force, input.hosted);
+        status = wireClaudeSettings(path, force, input.hosted, undefined, input.home);
       }
       break;
     case "grok":
       label = CONNECT_REGISTRY["grok"]!.label;
       path = join(input.home, ".grok", "hooks", "shield-kya.json");
-      status = wireGrokHooks(path);
+      status = wireGrokHooks(path, input.home);
       break;
     case "kimi":
       label = CONNECT_REGISTRY["kimi"]!.label;
       path = join(input.home, ".kimi-code", "config.toml");
-      status = wireKimiToml(path, force);
+      status = wireKimiToml(path, force, input.home);
       break;
     default:
       throw new UsageError(
         `unknown hook host "${input.host}" - supported: ${HOOK_HOSTS.join(", ")}`,
       );
   }
+  // The hook now points at the launcher: make sure it exists (never for a skipped, already-wired host).
+  if (!input.hosted && (status !== "skipped" || existingUsesLauncher(path, input.home))) ensureLauncher(input.home);
   return { host: key, label, path, status };
 }
 

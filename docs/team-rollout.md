@@ -2,14 +2,15 @@
 
 This page covers the Claude Code plugin, the repository policy file, and the rollout steps.
 
-Audit trail and traceability for AI agents. See what every coding agent did, for everyone on the team.
+Stops your coding agent from deleting, leaking or dropping things. Records everything else. Same guard for everyone on the team.
 
 Two ways to spread the `kya` plugin (see [hosts/claude-plugin.md](hosts/claude-plugin.md) for what the plugin does):
 
 - **Per repository:** `kya team init` writes the project's `.claude/settings.json`. A teammate who opens the repository in Claude Code, accepts the folder trust prompt, and has Node.js 22+ and `npm` gets the plugin, provided the pinned release tag exists on the public repository (see below).
+- **Per repository, guard only:** `kya team init --guard` enables the lean kya-guard plugin instead. See [for-maintainers.md](for-maintainers.md).
 - **Per organization:** `kya team managed-settings` prints the managed-settings JSON an admin deploys to every machine.
 
-Requires the first kya release that includes `kya team`. To check yours, run `kya --help`: versions that have it list `team init`; older ones answer `Unknown command: team`.
+Requires the first kya release that includes `kya team`. To check yours, run `kya help --all`: versions that have it list `team init`; older ones answer `Unknown command: team`.
 
 This is OSS advisory mode. The plugin records every tool call on the local record (trail), blocks only the small never-list, and fails open (if kya is missing or broken, the tool call proceeds unrecorded). Rolling it out does not change that. Hosted enforcement is a separate product and is not configured by these commands.
 

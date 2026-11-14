@@ -269,6 +269,7 @@ function richModel(): ReceiptModel {
     ],
     3,
     {
+      planeConfigured: true,
       identity: {
         agentId: "agt-1",
         agentName: "refund-bot",

@@ -1,14 +1,21 @@
 {
   "$comment": "Single source of truth for how every distribution channel describes kya, and for the screenshots they show. Edit here, then run `pnpm sync:channel-copy`; `pnpm check:channel-copy` (CI) fails on any drift. Every variant starts with the tagline. Keep it truthful: local OSS is advisory and fails open except the never-list and the guard pack; never claim OSS enforcement or call the hosted console GA.",
-  "short": "Audit trail and traceability for AI agents.",
-  "long": "Audit trail and traceability for AI agents. See what every coding agent did and check each tool call against policy.",
+  "short": "Stops your coding agent from deleting, leaking or dropping things.",
+  "long": "Stops your coding agent from deleting, leaking or dropping things. Records everything else.",
   "variants": {
-    "mcp": "Audit trail and traceability for AI agents. MCP gate: evaluate, ingest, request approval.",
-    "plugin": "Audit trail and traceability for AI agents. See what every coding agent did. Advisory: records every tool call, blocks the never-list and the guard pack, fails open.",
-    "vscode": "Audit trail and traceability for AI agents. See kya verdicts for every coding agent tool call in your editor. Advisory: kya records every call, blocks the never-list and the guard pack, fails open.",
-    "python": "Audit trail and traceability for AI agents. In-process kya shim for Python agent frameworks (offline evaluate via the kya CLI).",
-    "webInstall": "Audit trail and traceability for AI agents. Install in minutes: offline demo, MCP gate, local free console, or hosted. No private protocol.",
-    "webHowKyaWorks": "Audit trail and traceability for AI agents. Register an agent, wrap a tool, get Allow, Hold, or Deny. What to do after a local or company install."
+    "mcp": "Stops your coding agent from deleting, leaking or dropping things. MCP gate: evaluate and ingest.",
+    "plugin": "Stops your coding agent from deleting, leaking or dropping things. Records everything else. Advisory: blocks the never-list and the guard pack, fails open.",
+    "vscode": "Stops your coding agent from deleting, leaking or dropping things. Records everything else. See kya verdicts for every coding agent tool call in your editor. Advisory: blocks the never-list and the guard pack, fails open.",
+    "python": "Stops your coding agent from deleting, leaking or dropping things. In-process kya shim for Python agent frameworks (offline evaluate via the kya CLI).",
+    "webInstall": "Stops your coding agent from deleting, leaking or dropping things. Install in minutes: offline demo, MCP gate, local free console, or hosted.",
+    "webHowKyaWorks": "Stops your coding agent from deleting, leaking or dropping things. Register an agent, wrap a tool, get Allow, Hold, or Deny. After a local or company install.",
+    "guard": "Stops your coding agent from deleting, leaking or dropping things. No network, one file, fails open."
+  },
+  "guardListing": {
+    "$comment": "Listing text of the kya-guard plugin for directory forms: at most 50, 150 and 500 characters. plugins/kya-guard/submission/description-<n>.txt must equal these (check-channel-copy.mjs). chars150 and chars500 start with the tagline and contain variants.guard.",
+    "chars50": "Stops coding agents deleting, leaking or dropping.",
+    "chars150": "Stops your coding agent from deleting, leaking or dropping things. No network, one file, fails open. For Claude Code, Codex, Cursor, Copilot, Gemini.",
+    "chars500": "Stops your coding agent from deleting, leaking or dropping things. No network, one file, fails open. KYA Guard checks every tool call before it runs. It stops destructive commands (terraform destroy, DROP TABLE, git push --force, rm -rf ~), reads of credential files, secrets written into files and secrets sent over the network. A few risky commands ask you first. The check is local and offline. If the guard fails, the call goes ahead and one error line is written. Needs Node.js 22 or later."
   },
   "screenshots": [
     {
@@ -27,9 +34,14 @@
       "alt": "Activity tab - filterable agent tool-call feed with verdicts"
     },
     {
+      "file": "assets/report-blocked.png",
+      "sha256": "fff589119dcaf584922d74b3423bef6367a6e6e6063c583e8d5faedf40277068",
+      "alt": "Blocked panel - the first thing the KYA report shows: calls the guard stopped, or a labelled demo before the first one"
+    },
+    {
       "file": "assets/report-certify.png",
-      "sha256": "c234847a3aa9b27fb979727f5d58cdbe30a25d545c1381182fd5d13838444cec",
-      "alt": "Certify tab - full Agent Trust Baseline requirement table with evidence"
+      "sha256": "02417f890809738ee3d335ed8af171f64693dcb937b1511bed5e756865d05102",
+      "alt": "Certify tab - Agent Trust Baseline result and full requirement table with evidence"
     },
     {
       "file": "assets/report-changes.png",
@@ -68,8 +80,8 @@
     },
     {
       "file": "assets/report-overview.png",
-      "sha256": "c897e2971df839af58f199ecd892b758923917828ec36d03c069779ed2809a7a",
-      "alt": "KYA report - live dashboard: Certify trust baseline, verdicts, analytics"
+      "sha256": "e49b84823b10f5f1c07d67994d225cfca006c58aa04e47373269a475059e4373",
+      "alt": "KYA report - live dashboard: the Blocked panel first, then verdicts and analytics"
     }
   ]
 }

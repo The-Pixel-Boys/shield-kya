@@ -3,7 +3,7 @@
     "shield-kya": {
       "command": "node",
       "args": [
-        "${CLAUDE_PLUGIN_DATA}/node_modules/@shield-agent/kya/dist/cli.js",
+        "${CLAUDE_PLUGIN_ROOT}/scripts/kya.mjs",
         "serve-mcp",
         "--stdio"
       ],
@@ -11,7 +11,7 @@
         "KYA_OFFLINE": "1",
         "KYA_HOST": "ide",
         "KYA_BASE_URL": "http://127.0.0.1:1",
-        "KYA_API_KEY": ""
+        "CLAUDE_PLUGIN_DATA": "${CLAUDE_PLUGIN_DATA}"
       }
     }
   }

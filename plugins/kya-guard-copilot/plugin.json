@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "kya-guard",
+  "version": "1.0.0",
+  "description": "Stops your coding agent from deleting, leaking or dropping things. No network, one file, fails open.",
+  "author": {
+    "name": "MFR Limited (Shield KYA)",
+    "email": "it@shield-agent.com",
+    "url": "https://shield-agent.com"
+  },
+  "homepage": "https://shield-agent.com/install",
+  "repository": "https://github.com/The-Pixel-Boys/shield-kya",
+  "license": "MIT",
+  "keywords": ["guard", "safety", "hooks", "destructive-commands", "secrets"]
+}

@@ -12,11 +12,13 @@ or, for project scope (with `--hooks`, the hook goes to the project's `.claude/s
 
 ```bash
 cd your-project
-kya start              # wires ./.mcp.json (plus user-level configs for every installed host)
+kya start              # shows a plan and asks once; wires ./.mcp.json (plus user-level configs for every installed host)
+kya start --dry-run    # print the plan, write nothing
+kya uninstall          # undo it (see ../uninstall.md)
 # or: kya connect claude --project
 ```
 
-`kya start` also inits `.kya/` and opens the live activity report. It runs in the background, so your terminal returns immediately (`kya stop` stops it). It exits by itself when the project folder is removed. It also exits after 30 minutes with no request and no open report page. To change the 30 minutes, set `KYA_RECEIPT_IDLE_MINUTES` (`0` keeps it running). It also exits when its memory (RSS) is above 512 MB (2048 MB when plain-language search is installed); set `KYA_RECEIPT_MAX_RSS_MB` to change this (`0` turns it off). The next `kya start` starts a new one. Claude Code loads MCP servers at process start; if a session is open, relaunch with `claude --resume`; it keeps the conversation. `kya start --no-open` wires without the report; `--force` rewrites the existing shield-kya entry.
+`kya start` prints a plan of every file it will create or merge, then asks `Apply? [Y/n]` (`--yes` or `KYA_YES=1` skips the question; off a terminal it applies only with `--yes`). It also inits `.kya/` (and adds `.kya/*` and `!.kya/policy.json` to `.gitignore` in a git repo) and opens the live activity report. It runs in the background, so your terminal returns immediately (`kya stop` stops it). It exits by itself when the project folder is removed. It also exits after 30 minutes with no request and no open report page. To change the 30 minutes, set `KYA_RECEIPT_IDLE_MINUTES` (`0` keeps it running). It also exits when its memory (RSS) is above 512 MB (2048 MB when plain-language search is installed); set `KYA_RECEIPT_MAX_RSS_MB` to change this (`0` turns it off). The next `kya start` starts a new one. Claude Code loads MCP servers at process start; if a session is open, relaunch with `claude --resume`; it keeps the conversation. `kya start --no-open` wires without the report; `--force` rewrites the existing shield-kya entry.
 
 ## Setup - Claude Desktop
 

@@ -1,6 +1,6 @@
 # Guard pack: default local denies (Shield KYA OSS)
 
-Status: ships in 0.33.1. The guard pack is a separate, default-on layer that runs after the never-list in [never-list](never-list.md). The never-list is unchanged: its rules and rule ids stay, no setting lifts it, and it still runs first. The guard pack adds more destructive shell commands, more credential files, secret-shaped writes and secret exfiltration, and it has the config switches below.
+Status: ships in 0.33.1. The eleven rules marked 0.35.0 in the shell table, and the ask outcome, ship in 0.35.0. The guard pack is a separate, default-on layer that runs after the never-list in [never-list](never-list.md). The never-list is unchanged: its rules and rule ids stay, no setting lifts it, and it still runs first. The guard pack adds more destructive shell commands, more credential files, secret-shaped writes and secret exfiltration, and it has the config switches below.
 
 The deny is local, offline and sub-second. Every other call is recorded, not blocked. Local hooks fail open: if kya breaks or times out, the call goes ahead. The hosted hook (`--plane-config`, preview) runs the same guard pack too, with the same rules and reason codes, and keeps its own fail-closed stance; see [Hosted mode](#hosted-mode) below.
 
@@ -22,7 +22,7 @@ Checked on shell tools (`Bash` and the equivalents). Compound commands are split
 |---|---|
 | `rm-root-home` | `rm` with recursive and force flags (`-rf`, `-fr`, `-r -f`, `-Rf`, `--recursive --force`) on `/`, `/*`, your home directory, any parent of it, or any parent of the project folder. Relative paths are resolved against the working directory, so `rm -rf ../../*` from `~/work/app` is caught. A recursive `rm` of a parent folder of the project, with a relative path, is denied first by the never-list rule `rm-recursive-home-or-system`, even without `-f`. `guardAllow` cannot allow that case. A variable that is unset or empty in the hook's environment counts too: `rm -rf "$X/"` runs `rm -rf /`. |
 | `terraform-destroy` | `terraform destroy` with any flags, `terraform apply -destroy`, `tofu destroy`. |
-| `sql-drop` | `DROP TABLE`, `DROP DATABASE`, `DROP SCHEMA` and `TRUNCATE` (any case) inside a `psql`, `mysql`, `mariadb`, `sqlite3`, `mongosh` or `clickhouse-client` command, including `-c`, `-e` and a heredoc. Files are not read. |
+| `sql-drop` | `DROP TABLE`, `DROP DATABASE`, `DROP SCHEMA` and `TRUNCATE` (any case) inside a `psql`, `mysql`, `mariadb`, `sqlite3`, `mongosh` or `clickhouse-client` command, including `-c`, `-e` and a heredoc. Files are not read. The rule reads SQL words only. A MongoDB `db.dropDatabase()` is not SQL: `mongo-drop-database` below stops it. |
 | `git-force-push` | `git push` with `--force`, `-f` (also inside `-fu`) or a `+refspec`, to any branch. Not `--force-with-lease` and not `--force-if-includes`, except on `main`, `master`, `release*` and `prod*`, where the never-list (`git-force-push-protected-branch`) denies those too. |
 | `git-delete-default-branch` | `git push <remote> --delete main` or `master`, `git push <remote> :main`, `git branch -D main` or `master`. |
 | `git-hard-reset-clean` | `git reset --hard` together with `git clean -fdx` (or `-ffdx`) in the same command. |
@@ -30,6 +30,30 @@ Checked on shell tools (`Bash` and the equivalents). Compound commands are split
 | `k8s-delete-ns` | `kubectl delete namespace` (or `ns`), and `kubectl delete --all` with `-A` or `--all-namespaces`. |
 | `cloud-delete` | `aws ec2 terminate-instances`, `aws s3 rb ... --force`, `aws s3 rm ... --recursive`, `aws rds delete-db-instance` and `delete-db-cluster`, `gcloud projects delete`, `gcloud sql instances delete`, `az group delete`. |
 | `railway-volume-delete` | `railway volume delete`, and the text `volumeDelete` in a `curl`, `wget`, `http` or `xh` call. |
+| `sql-delete-all` | **Ask** (0.35.0). `DELETE FROM <table>` with no `WHERE` in the same statement, in the same database clients as `sql-drop`. `DELETE ... WHERE ...` passes. A `WHERE` that is always true (`WHERE 1=1`) also passes: the rule reads words, not meaning. |
+| `prisma-migrate-reset` | **Ask** (0.35.0). `prisma migrate reset` with any flags, also through `npx`, `pnpm exec`, `pnpm dlx` or `bunx`. `prisma migrate dev`, `deploy` and `status` pass. |
+| `prisma-accept-data-loss` | **Ask** (0.35.0). `prisma db push --accept-data-loss`. `prisma db push` without the flag passes. |
+| `supabase-reset-linked` | 0.35.0. `supabase db reset --linked`, or with `--db-url`. `supabase db reset` against the local stack passes. |
+| `rm-project-wipe` | **Ask** (0.35.0). `rm -rf` (recursive and force) on `.`, `./`, `./*`, `*` or the absolute path of the working directory. The working directory is taken as the project folder. `rm -rf dist`, `build`, `node_modules`, `.next`, `coverage` and `tmp` pass, and so does `rm -rf src/*`. A `cd` to another folder earlier in the same command skips the relative targets, because the folder is then not the project folder. |
+| `rm-git-dir` | 0.35.0. `rm -r` (with or without `-f`) on the `.git` folder at the project root: `.git`, `./.git/`, or its absolute path. A `.git` folder under `node_modules` or `vendor` passes. |
+| `mongo-drop-database` | 0.35.0. `dropDatabase(` in a `mongosh` or `mongo` command (`--eval` or a heredoc). `find`, `insert` and `createIndex` pass. |
+| `redis-flush` | 0.35.0. `FLUSHALL` or `FLUSHDB` in a `redis-cli` or `valkey-cli` command that names a server with `-u` or `-h`, unless every host it names is `localhost`, `127.0.0.1`, `::1` or `0.0.0.0` (a `unix://` URL counts as local). All `-h` and `-u` options are read, so `-h localhost -h prod.example` is remote. A variable (`-u $REDIS_URL`) counts as a remote server. The same commands with no host, or with a loopback host, pass. |
+| `fly-destroy` | 0.35.0. `fly` or `flyctl` `volumes destroy`, `apps destroy` and `destroy <app>`. `fly volumes list` and `fly deploy` pass. |
+| `vercel-remove` | 0.35.0. `vercel remove` or `vercel rm`, and `vercel project rm`, also through `npx`. `vercel env ls` and `vercel deploy` pass. |
+| `gh-repo-delete` | 0.35.0. `gh repo delete`, and `gh api -X DELETE` (also `--method DELETE`) on a path that starts with `repos/`. The endpoint is normalized first: a scheme and host (`https://api.github.com`), a GitHub Enterprise `/api/v3` prefix, a leading slash and a query are removed. `--method DELETE`, `-X DELETE`, `-XDELETE` and `-X=DELETE` all count. `gh repo view`, `gh pr ...` and `gh api` with GET or POST pass. |
+
+### The ask outcome (`GUARD_ASK`)
+
+Some commands are routine on a local database or a scratch folder and catastrophic on a remote one, and the hook often cannot tell which. A deny would push developers to uninstall the hook. Four rules (`sql-delete-all`, `prisma-migrate-reset`, `prisma-accept-data-loss`, `rm-project-wipe`) therefore ask the person instead of denying. They are marked **Ask** in the table above.
+
+- **Claude Code.** The hook exits `0` and prints `hookSpecificOutput.permissionDecision: "ask"` with a `permissionDecisionReason` on stdout. Claude Code shows the reason in its permission prompt. The Claude Code hooks reference ([PreToolUse decision control](https://code.claude.com/docs/en/hooks#pretooluse-decision-control)) says `"ask"` prompts the user to confirm, and that in auto mode a hook's ask goes to the permission prompt and the classifier does not decide it. The reference does not say what `ask` does under `bypassPermissions`: do not rely on it there.
+- **Other hosts** (Codex, Grok, Kimi Code, Gemini CLI, Copilot CLI). KYA has no ask contract for them, so an ask rule is a deny with the same rule id: `KYA denied Bash: GUARD_ASK (<rule id>). ...`.
+- **Text.** `KYA asks before Bash: GUARD_ASK (<rule id>). <what to do instead> See docs/guard-pack.md.` Like every guard line, it never carries the command or a path.
+- **Trail.** One row with verdict `REQUIRE_APPROVE`, reason code `GUARD_ASK`, `neverRule` set to the rule id, and outcome `held` (the call waits for the person). On a host without ask the outcome is `blocked`. An ask is not a never-list block: `neverEvent` is `false`, so the receipt does not count it as one.
+- **Order.** A deny anywhere in the same call wins over an ask.
+- **Strict.** With `--strict` an ask rule is a deny, locally and hosted (strict is stricter than an ask): exit `2`, the same rule id, trail outcome `blocked`.
+- **Allowlist.** `guardAllow` and `shellNeverList: false` work for these rules by rule id, as for every other rule. The hook error fallback turns an ask rule into a deny, because it does not read the config.
+- **Hosted.** The hosted hook asks the same way on Claude Code and denies elsewhere. A plane DENY or a plane failure still denies, and `--plane-shadow` does not lift an ask.
 
 ### Credential reads (`NEVER_SECRET_READ`)
 
@@ -104,6 +128,17 @@ An agent cannot change this file through its tools: a write to `~/.kya/config.js
 
 When a call is denied, the agent is told to ask you. Allowing an exact case is your decision, made in your own file.
 
+## Near-miss card
+
+When the guard denies a call, you can make one image about it, with nothing private in it, and post it yourself. The card is made on your machine. Nothing is uploaded.
+
+- **Command.** `kya receipt --card` makes a card for the newest denied call. `kya receipt --card --id <id>` picks another one. In the Claude Code plugin the command is `/kya-guard:share`. The id is the 8 hex digits shown next to a stopped call in the report (and in the output of the command).
+- **Output.** A 1200 by 630 SVG in `~/.kya/cards/`. `kya receipt --card` also writes a PNG when `rsvg-convert` or a headless Chrome is on the machine. It adds no dependency. Without a renderer you get the SVG only. The plugin makes the SVG only: it starts no process. The command prints the file path and a two-line caption to paste.
+- **Four lines only.** "My coding agent tried to delete a cloud volume." "KYA Guard stopped it." The rule id, the host name and the date. The install one-liner (`npx @shield-agent/kya@latest start`). The SVG has a title and a description with the same text.
+- **Nothing private, by construction.** The card builder takes four short strings: the rule id, the label, the host and the date. It cannot see the command, a path, the project name or the session id. The label is a short phrase from the rule table (each rule has a `label` field, for example "delete a cloud volume", "wipe the project folder", "read a credentials file"). `/kya-guard:status` shows the same label in its list of the last stopped calls.
+- **Deny only.** A card exists only for a call the guard denied. An ask is not a near miss, so there is no card for it, and the command says so.
+- **Where it is offered.** In `/kya-guard:status`, when a deny is less than 7 days old. In the full report, next to each stopped call: a Make card button in the live report, and the command to run in a saved report. It is never in the deny text, because the agent reads that text.
+
 ## Hosted mode
 
 The fail-closed hosted hook (`kya hook --plane-config <file>`, preview; see [hosted-hook](hosted-hook.md)) evaluates the guard pack locally, before it calls the plane. The rules, rule ids, reason codes, deny text and `guardAllow` semantics are the same as above. What differs:
@@ -134,5 +169,6 @@ KYA supports 23 coding tools. Six have native hooks and get the guard on their o
 - Writing the AWS documentation example key id (`AKIA...EXAMPLE`) into a doc or test fixture. Use `guardAllow` with a `path`.
 - `psql -c "SELECT 'drop table'"`: the SQL words are matched as text inside a database client command.
 - `docker compose down -v` in a throwaway development stack. Run it yourself, or allow the exact command.
+- `prisma migrate reset` and `DELETE FROM` on a local development database ask each time. Approve the prompt, or allow the exact command with `guardAllow`.
 
 The guard is a seatbelt, not a sandbox. It reads words and separators, it does not run a full shell parser, and a determined agent can get around it. The audit trail records what happened either way. For enforcement with human approval, use the hosted workspace.

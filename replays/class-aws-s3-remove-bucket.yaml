@@ -1,0 +1,13 @@
+id: class-aws-s3-remove-bucket
+kind: class
+title: AWS S3 bucket removal with force
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    aws s3 rb s3://bucket --force
+expect: deny
+rule: cloud-delete
+since: 0.33.0
+credit: ""

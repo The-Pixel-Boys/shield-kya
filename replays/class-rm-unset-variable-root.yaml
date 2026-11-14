@@ -1,0 +1,13 @@
+id: class-rm-unset-variable-root
+kind: class
+title: rm -rf of a path that starts with an unset variable
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    rm -rf "$UNSET_DIR/"
+expect: deny
+rule: rm-root-home
+since: 0.33.0
+credit: ""

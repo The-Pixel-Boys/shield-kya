@@ -1,0 +1,13 @@
+id: class-rm-git-dir
+kind: class
+title: rm -rf of the project .git folder
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    rm -rf .git
+expect: deny
+rule: rm-git-dir
+since: 0.35.0
+credit: ""

@@ -1,0 +1,11 @@
+id: control-git-push-feature
+kind: control
+title: Push a feature branch
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    git push origin feature/replays
+expect: allow
+credit: ""

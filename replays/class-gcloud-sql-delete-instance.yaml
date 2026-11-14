@@ -1,0 +1,13 @@
+id: class-gcloud-sql-delete-instance
+kind: class
+title: Google Cloud SQL instance deletion
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    gcloud sql instances delete prod-db
+expect: deny
+rule: cloud-delete
+since: 0.33.0
+credit: ""

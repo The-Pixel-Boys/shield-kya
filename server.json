@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
   "name": "io.github.The-Pixel-Boys/shield-kya",
-  "description": "Audit trail and traceability for AI agents. MCP gate: evaluate, ingest, request approval.",
+  "description": "Stops your coding agent from deleting, leaking or dropping things. MCP gate: evaluate and ingest.",
   "status": "active",
   "repository": {
     "url": "https://github.com/The-Pixel-Boys/shield-kya",
     "source": "github"
   },
-  "version": "0.34.0",
+  "version": "0.35.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@shield-agent/kya",
-      "version": "0.34.0",
+      "version": "0.35.1",
       "transport": {
         "type": "stdio"
       },

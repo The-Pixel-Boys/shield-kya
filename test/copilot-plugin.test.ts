@@ -13,7 +13,10 @@ import { readdirSync } from "node:fs";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+
+// These tests spawn CLIs or git, or wait on timers: 0.8 to 1.6 s each on an idle Mac, so the 5 s default is too tight on a loaded CI host. Hang guard only; budget assertions stay.
+vi.setConfig({ testTimeout: 30_000 });
 
 const root = join(import.meta.dirname, "..");
 const pluginRoot = join(root, "plugins/kya-copilot");
@@ -116,7 +119,9 @@ describe("Copilot CLI plugin manifest (Agent Plugins v1)", () => {
     expect(Object.keys(s).sort()).toEqual(["args", "command", "env", "type"]);
     expect(s).toMatchObject({ type: "stdio", command: "node" });
     expect(s.args).toEqual(["${PLUGIN_DATA}/node_modules/@shield-agent/kya/dist/cli.js", "serve-mcp", "--stdio"]);
-    expect(s.env).toEqual(json("plugins/kya/.mcp.json").mcpServers["shield-kya"].env);
+    // The Claude plugin names no key variable (plugin directory rule); Copilot keeps the empty one.
+    const { CLAUDE_PLUGIN_DATA: _claudeOnly, ...shared } = json("plugins/kya/.mcp.json").mcpServers["shield-kya"].env;
+    expect(s.env).toEqual({ ...shared, KYA_API_KEY: "" });
     expect(s.env).toMatchObject({ KYA_OFFLINE: "1", KYA_BASE_URL: "http://127.0.0.1:1", KYA_API_KEY: "" });
   });
 
@@ -172,7 +177,11 @@ describe("Copilot plugin stays out of Claude Code and Codex (PR #426 review H1)"
     const claude = json(".claude-plugin/marketplace.json");
     expect(m.name).toBe(claude.name); // same id for users: kya@shield-kya
     expect(m.owner).toEqual(claude.owner);
-    expect(m.plugins).toEqual([{ name: "kya", source: "./plugins/kya-copilot", description: claude.plugins[0].description }]);
+    expect(m.plugins).toEqual([
+      { name: "kya", source: "./plugins/kya-copilot", description: claude.plugins[0].description },
+      // kya-guard has its own Copilot folder (spec G6): Copilot must not read the Claude hook file of plugins/kya-guard.
+      { name: "kya-guard", source: "./plugins/kya-guard-copilot", description: claude.plugins[0].description },
+    ]);
     expect(readdirSync(pluginRoot).sort()).toEqual(["com.github.copilot", "mcp.json", "plugin.json", "scripts"]);
     expect(readdirSync(join(pluginRoot, "scripts")).sort()).toEqual(["bootstrap.mjs", "copilot-hook.mjs"]);
   });

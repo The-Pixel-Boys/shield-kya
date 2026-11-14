@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kya",
-  "version": "0.34.0",
-  "description": "Audit trail and traceability for AI agents. See what every coding agent did. Advisory: records every tool call, blocks the never-list and the guard pack, fails open.",
+  "version": "0.35.1",
+  "description": "Stops your coding agent from deleting, leaking or dropping things. Records everything else. Advisory: blocks the never-list and the guard pack, fails open.",
   "author": {
     "name": "MFR Limited (Shield KYA)",
     "email": "it@shield-agent.com",
