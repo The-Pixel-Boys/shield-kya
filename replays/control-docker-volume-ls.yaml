@@ -1,0 +1,11 @@
+id: control-docker-volume-ls
+kind: control
+title: docker volume ls
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    docker volume ls
+expect: allow
+credit: ""

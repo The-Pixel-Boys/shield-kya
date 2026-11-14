@@ -21,6 +21,8 @@ export interface InitOptions {
   readonly baseUrl?: string;
   readonly host?: Host;
   readonly force?: boolean;
+  /** Write only .kya/config.json (kya start). The sample tools and .env.example belong to `kya init`. */
+  readonly configOnly?: boolean;
 }
 
 export function runInit(options: InitOptions = {}): InitResult {
@@ -44,6 +46,8 @@ export function runInit(options: InitOptions = {}): InitResult {
   } else {
     skipped.push(configPath);
   }
+
+  if (options.configOnly) return { cwd, configPath, toolsPath, envExamplePath, created, skipped };
 
   if (!existsSync(toolsPath) || options.force) {
     writeProjectFile(

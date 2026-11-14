@@ -16,6 +16,7 @@ import {
   claimHookPingSlot,
   hookPingStampPath,
   isTelemetryEnabled,
+  mapClientName,
   maybePromptConsent,
   maybeSpawnHookPing,
   sendHookPing,
@@ -216,6 +217,102 @@ describe("payload (the only fields that ever leave the machine)", () => {
     expect(json).not.toContain("secret-client-project");
     expect(json).not.toContain("someone");
     expect(json).not.toContain(home);
+  });
+});
+
+describe("host detection from the MCP client", () => {
+  const base = () => ({
+    installId: "3f2b8c1e-6a4d-4e0b-9c7a-1d2e3f4a5b6c",
+    sessionId: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+    event: "heartbeat" as const,
+    surface: "mcp-stdio" as const,
+    cwd: home,
+  });
+  it("maps known client names to the fixed allow-list and everything else to other", () => {
+    expect(mapClientName("claude-code")).toBe("claude");
+    expect(mapClientName("Claude-AI")).toBe("claude");
+    expect(mapClientName("cursor-vscode")).toBe("cursor");
+    expect(mapClientName("codex-mcp-client")).toBe("codex");
+    expect(mapClientName("Visual Studio Code")).toBe("vscode");
+    expect(mapClientName("acme-corp-internal-agent-for-jane")).toBe("other");
+    expect(mapClientName("")).toBe("other");
+  });
+
+  it("never lets a raw client name into the payload", () => {
+    const env = envOf();
+    const input = { ...base(), env, clientName: "ACME Corp jane.doe@example.com" };
+    const json = JSON.stringify(buildPayload(input));
+
+    expect(buildPayload(input).hostId).toBe("other");
+    expect(json).not.toMatch(/acme|jane|example/i);
+    expect(buildPayload({ ...input, clientName: "x".repeat(5000) }).hostId).toBe("other");
+  });
+
+  it("prefers the connect session id, then a known client, then CLAUDECODE, then other/unknown", () => {
+    expect(telemetryHostId({ KYA_SESSION_ID: "mcp:grok", CLAUDECODE: "1" }, "cursor")).toBe("grok");
+    expect(telemetryHostId({ CLAUDECODE: "1" }, "cursor-vscode")).toBe("cursor");
+    expect(telemetryHostId({ CLAUDECODE: "1" })).toBe("claude");
+    expect(telemetryHostId({ CLAUDECODE: "1" }, "something-else")).toBe("claude");
+    expect(telemetryHostId({}, "something-else")).toBe("other");
+    expect(telemetryHostId({})).toBe("unknown");
+    expect(telemetryHostId({ CLAUDECODE: "" })).toBe("unknown");
+  });
+
+  it("the beacon carries the host once the client has said who it is, with one extra heartbeat", async () => {
+    vi.useFakeTimers();
+    const fetchMock = okFetch();
+    const beacon = startSessionBeacon("mcp-stdio", { env: optIn(), cwd: home, fetchImpl: fetchMock, intervalMs: 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    beacon.setClient("codex-mcp-client");
+    beacon.setClient("cursor"); // first name wins
+    await beacon.stop();
+
+    const events = bodies(fetchMock);
+    expect(events.map((b) => [b.event, b.hostId])).toEqual([
+      ["start", "unknown"],
+      ["heartbeat", "codex"],
+      ["end", "codex"],
+    ]);
+  });
+
+  it("sends no extra heartbeat when the host was already known", async () => {
+    vi.useFakeTimers();
+    const fetchMock = okFetch();
+    const beacon = startSessionBeacon("mcp-stdio", {
+      env: optIn({ KYA_SESSION_ID: "mcp:cursor" }), cwd: home, fetchImpl: fetchMock, intervalMs: 1000,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    beacon.setClient("claude-code");
+    await beacon.stop();
+
+    expect(bodies(fetchMock).map((b) => [b.event, b.hostId])).toEqual([["start", "cursor"], ["end", "cursor"]]);
+  });
+});
+
+describe("hostedLinked flag and internal marker", () => {
+  const base = () => ({
+    installId: "3f2b8c1e-6a4d-4e0b-9c7a-1d2e3f4a5b6c",
+    sessionId: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+    event: "heartbeat" as const,
+    surface: "mcp-stdio" as const,
+    cwd: home,
+  });
+  it("counts the KYA_HOSTED_LINKED presence flag as linked, with or without a key", () => {
+    expect(buildPayload({ ...base(), env: envOf({ KYA_HOSTED_LINKED: "1" }) }).hostedLinked).toBe(true);
+    expect(buildPayload({ ...base(), env: envOf({ KYA_HOSTED_LINKED: "0" }) }).hostedLinked).toBe(false);
+    expect(buildPayload({ ...base(), env: envOf({ KYA_HOSTED_LINKED: "" }) }).hostedLinked).toBe(false);
+    expect(buildPayload({ ...base(), env: envOf({ SHIELD_API_KEY: "sk_x" }) }).hostedLinked).toBe(true);
+    expect(buildPayload({ ...base(), env: envOf({ KYA_API_KEY: "sk_x", KYA_HOSTED_LINKED: "1" }) }).hostedLinked).toBe(true);
+  });
+
+  it("adds internal:true only when KYA_TELEMETRY_INTERNAL is on, and the key set is otherwise unchanged", () => {
+    const off = buildPayload({ ...base(), env: envOf() });
+    const on = buildPayload({ ...base(), env: envOf({ KYA_TELEMETRY_INTERNAL: "1" }) });
+
+    expect("internal" in off).toBe(false);
+    expect("internal" in buildPayload({ ...base(), env: envOf({ KYA_TELEMETRY_INTERNAL: "0" }) })).toBe(false);
+    expect(on.internal).toBe(true);
+    expect(Object.keys(on).filter((k) => !(k in off))).toEqual(["internal"]);
   });
 });
 
@@ -823,7 +920,7 @@ describe("kya CLI integration (injected io)", () => {
   it("the help text lists the command and says it is off by default", async () => {
     const c = capture();
 
-    await runCli(["help"], c.io, cliEnv(), freshTestHome());
+    await runCli(["help", "--all"], c.io, cliEnv(), freshTestHome());
 
     expect(c.out.join("\n")).toMatch(/telemetry\s+Opt-in anonymous usage stats, OFF by default/);
   });

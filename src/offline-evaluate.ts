@@ -113,7 +113,8 @@ function baseTier(
   // Guard pack (second layer; config from the user-level file only, see guard-pack.ts).
   const guardHit = guardPackMatch(toolId, toolInput, guard, readGuardConfig(guard.home).config);
   if (guardHit) {
-    return { verdict: "DENY", reasonCode: guardHit.code, ruleId: guardHit.rule };
+    // An ask rule hands the call to the human (the hook turns it into the host's ask, or a deny where there is none).
+    return { verdict: guardHit.code === "GUARD_ASK" ? "REQUIRE_APPROVE" : "DENY", reasonCode: guardHit.code, ruleId: guardHit.rule };
   }
 
   const known = findSampleTool(toolId);

@@ -1,0 +1,11 @@
+id: control-rm-git-in-vendor
+kind: control
+title: Remove a .git folder inside vendor
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    rm -rf vendor/some-lib/.git
+expect: allow
+credit: ""

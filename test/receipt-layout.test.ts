@@ -57,7 +57,7 @@ const EVENTS: TrailEvent[] = [
 ];
 
 describe("receipt dashboard layout (hero grid + sidebar)", () => {
-  it("places the Certify section BEFORE the activity feed", () => {
+  it("keeps the Certify section out of the overview: it sits in its own tab after the activity feed", () => {
     const html = renderReceiptHtml(
       buildWindowReceiptModel(EVENTS, 3, { certify: PASS_CARD }),
     );
@@ -65,7 +65,8 @@ describe("receipt dashboard layout (hero grid + sidebar)", () => {
     const iFeed = html.indexOf('id="feed"');
     expect(iCertify).toBeGreaterThan(-1);
     expect(iFeed).toBeGreaterThan(-1);
-    expect(iCertify).toBeLessThan(iFeed);
+    expect(iCertify).toBeGreaterThan(iFeed);
+    expect(iCertify).toBeGreaterThan(html.indexOf('<section class="zone" id="certify"'));
   });
 
   it("keeps aria-label=\"Certify\" on the hero card", () => {
@@ -73,10 +74,11 @@ describe("receipt dashboard layout (hero grid + sidebar)", () => {
       buildWindowReceiptModel(EVENTS, 3, { certify: PASS_CARD }),
     );
     expect(html).toContain('aria-label="Certify"');
-    // Hero grid wrapper exists and contains the Certify card.
+    // The hero grid holds the Blocked panel first; the Certify card lives in its own tab.
     const iHero = html.indexOf('class="hero"');
     expect(iHero).toBeGreaterThan(-1);
-    expect(html.indexOf('aria-label="Certify"')).toBeGreaterThan(iHero);
+    expect(html.indexOf('aria-label="Blocked"')).toBeGreaterThan(iHero);
+    expect(html.indexOf('aria-label="Blocked"')).toBeLessThan(html.indexOf('aria-label="Certify"'));
   });
 
   it("ships sidebar nav links to main zones plus Gateway sub-pages", () => {
@@ -202,8 +204,9 @@ describe("receipt dashboard layout (hero grid + sidebar)", () => {
     // Zones without any panels get a hint instead of an empty frame (incl. the
     // Certify tab); the System zone now always carries the Alerts/OTel empty
     // states, so it no longer needs the hint.
-    expect(html.match(/class="mute small zone-empty"/g)).toHaveLength(3);
+    expect(html.match(/class="mute small zone-empty"/g)).toHaveLength(4);
     expect(html).toContain("No activity in this window yet");
+    expect(html).toContain("No coding agent is connected yet");
     expect(html).toContain("No check yet");
     expect(html).toContain('aria-label="Alerts"');
     expect(html).toContain('aria-label="OTel export"');

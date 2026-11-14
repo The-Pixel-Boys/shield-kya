@@ -125,6 +125,8 @@ export interface McpHandlerContext {
   readonly offline?: boolean;
   /** Trail recording target; absent in contexts that must not record. */
   readonly trail?: McpTrailContext;
+  /** Called with the MCP client's `initialize` clientInfo.name (opt-in telemetry maps it to a host). */
+  readonly onClientInfo?: (name: string) => void;
 }
 
 export interface McpTrailContext {
@@ -446,7 +448,9 @@ export async function handleJsonRpc(
   // notifications (no id) - process but no response for some
   try {
     switch (msg.method) {
-      case "initialize":
+      case "initialize": {
+        const info = (msg.params as { clientInfo?: { name?: unknown } } | undefined)?.clientInfo;
+        if (typeof info?.name === "string") ctx.onClientInfo?.(info.name);
         return {
           jsonrpc: "2.0",
           id,
@@ -459,6 +463,7 @@ export async function handleJsonRpc(
             },
           },
         };
+      }
       case "notifications/initialized":
       case "initialized":
         return null;

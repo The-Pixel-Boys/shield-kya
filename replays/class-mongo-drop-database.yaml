@@ -1,0 +1,13 @@
+id: class-mongo-drop-database
+kind: class
+title: mongosh dropDatabase
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    mongosh --eval "db.dropDatabase()"
+expect: deny
+rule: mongo-drop-database
+since: 0.35.0
+credit: ""

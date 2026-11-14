@@ -1,0 +1,11 @@
+id: control-docker-compose-up
+kind: control
+title: docker compose up
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    docker compose up -d
+expect: allow
+credit: ""

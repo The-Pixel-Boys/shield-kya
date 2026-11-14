@@ -135,7 +135,7 @@ describe("kya start - detached report server", () => {
     async () => {
       const cwd = workDir("kya-detach-");
       try {
-        const first = await runCli(["start"], cwd);
+        const first = await runCli(["start", "--yes"], cwd);
         expect(first.code).toBe(0);
         expect(first.stdout).toContain("report: http://127.0.0.1:");
 
@@ -160,7 +160,7 @@ describe("kya start - detached report server", () => {
         }
 
         // Second start reuses the running daemon instead of spawning another.
-        const second = await runCli(["start"], cwd);
+        const second = await runCli(["start", "--yes"], cwd);
         expect(second.code).toBe(0);
         const state2 = JSON.parse(readFileSync(statePath, "utf8")) as { pid: number };
         expect(state2.pid).toBe(state.pid);
@@ -191,7 +191,7 @@ describe("kya start - detached report server", () => {
     async () => {
       const cwd = workDir("kya-detach-kill-");
       try {
-        const first = await runCli(["start"], cwd);
+        const first = await runCli(["start", "--yes"], cwd);
         expect(first.code).toBe(0);
         const statePath = join(cwd, ".kya", "receipt-server.json");
         const old = JSON.parse(readFileSync(statePath, "utf8")) as { pid: number };
@@ -206,7 +206,7 @@ describe("kya start - detached report server", () => {
           await new Promise((r) => setTimeout(r, 100));
         }
 
-        const second = await runCli(["start"], cwd);
+        const second = await runCli(["start", "--yes"], cwd);
         expect(second.code).toBe(0);
         expect(second.stdout).not.toContain("already running");
         const fresh = JSON.parse(readFileSync(statePath, "utf8")) as { pid: number };
@@ -232,8 +232,8 @@ describe("kya start - detached report server", () => {
       // Stands in for a run that was SIGKILLed: its finally never ran, and its dir is two hours old.
       const stale = workDir("kya-detach-stale-");
       const fresh = workDir("kya-detach-fresh-");
-      expect((await runCli(["start"], stale)).code).toBe(0);
-      expect((await runCli(["start"], fresh)).code).toBe(0);
+      expect((await runCli(["start", "--yes"], stale)).code).toBe(0);
+      expect((await runCli(["start", "--yes"], fresh)).code).toBe(0);
       const pidOf = (dir: string) => (JSON.parse(readFileSync(join(dir, ".kya", "receipt-server.json"), "utf8")) as { pid: number }).pid;
       const stalePid = pidOf(stale);
       const freshPid = pidOf(fresh);

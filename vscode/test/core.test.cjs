@@ -164,6 +164,9 @@ test("gate mode comes from hook commands, not trail rows", () => {
   const fc = cmd(" --fail-closed");
   assert.deepEqual(core.gateModeFromTexts([]), { mode: "none", hooks: 0 });
   assert.equal(core.gateModeFromTexts([adv]).mode, "advisory");
+  // kya start 0.35+: the hook runs through the launcher in ~/.kya/bin.
+  const launcher = JSON.stringify({ hooks: { PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: '"/home/u/.kya/bin/kya-hook" hook --host claude' }] }] } });
+  assert.deepEqual(core.gateModeFromTexts([launcher]), { mode: "advisory", hooks: 1 });
   assert.equal(core.gateModeFromTexts([strict]).mode, "strict");
   assert.equal(core.gateModeFromTexts([hosted]).mode, "strict");
   assert.equal(core.gateModeFromTexts([fc]).mode, "strict");

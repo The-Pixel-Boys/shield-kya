@@ -21,6 +21,8 @@ export const SEMANTIC_PACKAGE = "@shield-agent/fastembed@3.0.0";
 
 export interface SemanticSetupIo {
   readonly error: (msg: string) => void;
+  /** `kya start` sets this: the "is off" hint is not printed there, `kya doctor` prints it (see semanticOffNotice). */
+  readonly quietHint?: boolean;
   /** Test seam: force interactive / non-interactive. Defaults to "stdin and stderr are TTYs". */
   readonly isTty?: boolean;
   /** Test seam: returns the raw answer line. Defaults to a readline prompt on stdin/stderr. */
@@ -103,6 +105,15 @@ async function runInstall(io: SemanticSetupIo, env: NodeJS.ProcessEnv): Promise<
   return "failed";
 }
 
+const OFF_NOTICE = "Plain-language search is off (exact words only). Turn it on: KYA_SEMANTIC=on kya start";
+
+/** The "search is off" line `kya doctor` prints, or undefined when search is on or switched off on purpose. */
+export function semanticOffNotice(env: NodeJS.ProcessEnv): string | undefined {
+  const mode = env.KYA_SEMANTIC?.trim().toLowerCase();
+  if (mode === "off" || env.KYA_SEARCH_SEMANTIC === "off") return undefined;
+  return semanticRuntimeInstalled(env) ? undefined : OFF_NOTICE;
+}
+
 export async function maybeOfferSemanticSearch(io: SemanticSetupIo, env: NodeJS.ProcessEnv): Promise<SemanticSetupResult> {
   const mode = env.KYA_SEMANTIC?.trim().toLowerCase();
   if (mode === "off" || env.KYA_SEARCH_SEMANTIC === "off") return "skipped";
@@ -112,7 +123,7 @@ export async function maybeOfferSemanticSearch(io: SemanticSetupIo, env: NodeJS.
 
   const interactive = io.isTty ?? Boolean(process.stdin.isTTY && process.stderr.isTTY);
   if (!interactive) {
-    io.error(`Plain-language search is off (exact words only). Turn it on: KYA_SEMANTIC=on kya start`);
+    if (!io.quietHint) io.error(OFF_NOTICE);
     return "hinted";
   }
 

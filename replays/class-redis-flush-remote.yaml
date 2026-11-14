@@ -1,0 +1,13 @@
+id: class-redis-flush-remote
+kind: class
+title: redis-cli FLUSHALL against a URL
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    redis-cli -u $REDIS_URL FLUSHALL
+expect: deny
+rule: redis-flush
+since: 0.35.0
+credit: ""

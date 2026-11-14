@@ -1,0 +1,11 @@
+id: control-git-log
+kind: control
+title: Show recent commits
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    git log --oneline -5
+expect: allow
+credit: ""

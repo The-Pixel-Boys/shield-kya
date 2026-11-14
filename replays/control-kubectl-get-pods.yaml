@@ -1,0 +1,11 @@
+id: control-kubectl-get-pods
+kind: control
+title: kubectl get pods
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    kubectl get pods
+expect: allow
+credit: ""

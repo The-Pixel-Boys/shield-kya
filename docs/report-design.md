@@ -50,6 +50,10 @@ Rules that follow for anyone changing this report:
   when the live report starts and refreshes on a fixed cadence while it runs,
   so the menu item is populated on first open. The underlying CLI command
   stays the escape hatch, and a "run now" action covers the impatient case.
+  Exception: the report server that `kya start` spawns runs with `KYA_ORR_AUTO=off`.
+  It refreshes an `orr-report/` that exists, but it does not create one in your
+  project (`kya start` writes only config; `kya orr run` or the "Run ORR now"
+  action creates the board).
 - A "run now" action must report what changed, not repeat the screen. The ORR
   re-run confirmation compares the new board against the previous one and says
   what moved ("red → green · 2 findings resolved") or states plainly "no
@@ -90,8 +94,9 @@ Rules that follow for anyone changing this report:
   link without CSS wiring clicks to a no-op. `test/receipt-nav-css.test.ts`
   enforces this for every rendered nav link and zone, so the suite fails
   loudly when wiring is missed.
-- Overview zone: Certify hero + KPI tiles + analytics. System zone:
-  Capabilities first, then gateway, wired hosts, sandboxes, OpenShell, ORR,
+- Tabs: the left menu shows Blocked, Activity and Connected tools. A native `<details>` element named More holds Changes, Certify, ORR, Map, Showback, the Gateway pages and System. Its open or closed state is kept in `localStorage` (key `kya-nav-more`, every access in try/catch, so the page works without it), and a link to a tab inside it (for example `#certify`) opens it. The Connected tools zone (`#connected`) holds the wired-hosts panel; the Showback zone (`#showback`, only with a showback report) holds the token and cost card.
+- Blocked tab (zone id `overview`, nav count is the number of blocked calls): the Blocked panel first (count and the last five blocked calls by outcome; the three demo calls, labelled demo, when none was blocked), then KPI tiles and analytics. Certify is its own zone and tab: it never appears on the first screen and its nav item shows no count. The control-plane address line shows only when a plane is configured (API key, saved login, or a base URL other than the `kya init` default). System zone:
+  Capabilities first, then gateway, sandboxes, OpenShell, ORR,
   alerts, OTel export, tools.
 - Zones never render as bare whitespace: with no panels a zone shows a hint
   that names the activation path (the Capabilities panel normally guarantees
@@ -117,3 +122,15 @@ Rules that follow for anyone changing this report:
 - Updates are throttled (one `/fragments` per 2s), debounced (300ms), and
   deferred while the tab is hidden. A 401 stops auto-refresh and shows a
   restart banner: a dead token must never turn into a reload loop.
+
+## Counts and labels follow the outcome
+
+The report says what happened to each call, not only what policy thought. The trail field `outcome` (`ran`, `blocked`, `held`, `error`; see the README, "Outcome of each call") drives the counts, the row labels and the sort:
+
+- The headline counts rows by outcome: `Ran 11, Blocked 5, Held 0`. Error shows only when it is above 0. `Never` stays a separate policy overlay.
+- A row with `outcome: ran` and `verdict: REQUIRE_APPROVE` is labelled RAN with the note "would hold in strict mode". One line under the headline explains how to turn strict mode on. It shows only when such a row exists.
+- Blocked rows sort above all other rows. Identical consecutive rows (same tool, outcome, verdict, reason, summary, target and arguments hash) collapse into one row with a count. Blocked rows, rows with a change preview and rows without an outcome never collapse. A search keeps its ranking and never collapses.
+- Rows without `outcome` (written before the field existed) render as before: ALLOW, DENY, REVIEW labels and the old verdict counts. In a mixed record the old rows are counted on a second line ("Earlier calls (no outcome recorded)").
+- The share summary (`stats.ran`, `stats.blocked`, `stats.held`, `stats.error` next to the old keys) and the `kya certify` trail line read the same counts. The signed evidence bundle keeps its `verdictMix`; it is a policy count and its schema does not change.
+
+Tests: `test/honest-verdicts.test.ts` and `test/honest-verdicts-e2e.test.ts`.

@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// These tests spawn CLIs or git, or wait on timers: 0.8 to 1.6 s each on an idle Mac, so the 5 s default is too tight on a loaded CI host. Hang guard only; budget assertions stay.
+vi.setConfig({ testTimeout: 30_000 });
 import { existsSync, lstatSync, lutimesSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";

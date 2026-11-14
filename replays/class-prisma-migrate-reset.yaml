@@ -1,0 +1,13 @@
+id: class-prisma-migrate-reset
+kind: class
+title: Prisma migrate reset with force
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    npx prisma migrate reset --force
+expect: ask
+rule: prisma-migrate-reset
+since: 0.35.0
+credit: ""

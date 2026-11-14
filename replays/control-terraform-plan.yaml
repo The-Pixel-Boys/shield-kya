@@ -1,0 +1,11 @@
+id: control-terraform-plan
+kind: control
+title: terraform plan
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    terraform plan
+expect: allow
+credit: ""

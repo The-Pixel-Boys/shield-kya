@@ -108,6 +108,18 @@ export function receiptCss(): string {
     outline-offset: 2px;
     color: var(--fg);
   }
+  /* "More": a native details element, so it opens and closes without JS. */
+  .nav-more { display: flex; flex-direction: column; gap: 0.15rem; }
+  .nav-more-summary {
+    cursor: pointer; list-style: none;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.82rem; font-weight: 600; color: var(--mute);
+    border-radius: 8px;
+  }
+  .nav-more-summary::-webkit-details-marker { display: none; }
+  .nav-more-summary::after { content: " +"; }
+  .nav-more[open] > .nav-more-summary::after { content: " -"; }
+  .nav-more-summary:hover { color: var(--fg); }
   .nav-label { display: inline-flex; align-items: center; gap: 0.4rem; }
   .nav-group { display: flex; flex-direction: column; gap: 0.05rem; margin-top: 0.35rem; }
   .nav-group-label {
@@ -239,6 +251,27 @@ export function receiptCss(): string {
   @media (max-width: 480px) {
     .hero-tiles { grid-template-columns: 1fr; }
   }
+  /* Blocked panel: the first thing the report shows. */
+  .hero-blocked {
+    border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
+    box-shadow: inset 3px 0 0 var(--ok);
+  }
+  .hero-blocked h2 .pill { font-size: 0.7rem; margin-left: 0.4rem; vertical-align: middle; }
+  .hero-blocked .blk-lead { margin: 0.4rem 0 0.7rem; font-size: 0.95rem; }
+  .hero-blocked .blk-num { font-size: 1.9rem; font-weight: 700; margin-right: 0.35rem; }
+  .hero-blocked .blk-num.bad { color: var(--bad); }
+  .blk-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+  .blk-rows li {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem;
+    padding: 0.5rem 0.7rem; border: 1px solid var(--line); border-radius: 6px;
+    background: color-mix(in srgb, var(--bg) 55%, var(--card)); font-size: 0.86rem;
+  }
+  .blk-rows code {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8rem; font-weight: 600;
+  }
+  .blk-rows .blk-what { flex: 1 1 12rem; color: var(--mute); overflow-wrap: anywhere; }
+  .card-ctl { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; }
   /* Result-tone accent: inset bar so the border box never shifts. */
   .hero-certify.pass {
     border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
@@ -368,6 +401,16 @@ export function receiptCss(): string {
   }
   .frag-flash { animation: kya-frag-flash 0.8s ease-out 1; }
   @supports selector(body:has(*)) {
+    #connected, #showback { display: none; }
+    #connected:target, #showback:target { display: block; }
+    body:has(#connected:target) #overview,
+    body:has(#showback:target) #overview { display: none; }
+    body:has(#connected:target) .nav-link[href="#connected"],
+    body:has(#showback:target) .nav-link[href="#showback"] {
+      color: var(--fg);
+      background: var(--bg);
+      border-color: var(--line);
+    }
     #activity, #changes, #certify, #orr,
     #gateway-home, #gateway-listeners, #gateway-routes, #gateway-backends, #gateway-policies, #gateway-playground,
     #system { display: none; }
@@ -708,6 +751,8 @@ export function receiptCss(): string {
   .ev.ok .verdict { color: var(--ok); }
   .ev.bad .verdict { color: var(--bad); }
   .ev.warn .verdict { color: var(--warn); }
+  .strict-note { font-size: 0.68rem; color: var(--mute); margin-left: 0.4rem; }
+  .strict-howto { flex-basis: 100%; font-size: 0.78rem; color: var(--mute); }
   .tool {
     font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 0.84rem; word-break: break-word; flex: 1 1 auto;

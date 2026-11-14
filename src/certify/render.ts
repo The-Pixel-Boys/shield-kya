@@ -39,6 +39,16 @@ function mdText(s: string): string {
     .replace(/([[\]<>])/g, "\\$1");
 }
 
+/** Counts by outcome when the trail records them (a call that ran is not a review), else by verdict as before. */
+function trailMix(t: CertifyReport["trail"]): string {
+  if (t.outcomes) {
+    const o = t.outcomes;
+    const earlier = t.eventCount - (o.ran + o.blocked + o.held + o.error);
+    return `ran ${o.ran} · blocked ${o.blocked} · held ${o.held}${o.error > 0 ? ` · error ${o.error}` : ""}${earlier > 0 ? ` · ${earlier} earlier with no outcome` : ""}`;
+  }
+  return `allow ${t.verdictMix.ALLOW} · deny ${t.verdictMix.DENY} · review ${t.verdictMix.REQUIRE_APPROVE}`;
+}
+
 export function formatCertifyMarkdown(report: CertifyReport): string {
   const o = report.overall;
   const lines: string[] = [
@@ -47,7 +57,7 @@ export function formatCertifyMarkdown(report: CertifyReport): string {
     `- **Result:** ${o.result === "gap" ? "GAP" : "PASS"}`,
     `- **Generated:** ${mdText(report.generatedAt)}`,
     `- **Window:** last ${report.window.days} days (${mdText(report.window.since)} → ${mdText(report.window.until)})`,
-    `- **Trail:** ${report.trail.eventCount} events in window - allow ${report.trail.verdictMix.ALLOW} · deny ${report.trail.verdictMix.DENY} · review ${report.trail.verdictMix.REQUIRE_APPROVE}`,
+    `- **Trail:** ${report.trail.eventCount} events in window - ${trailMix(report.trail)}`,
     `- **Tally:** ${o.pass} pass · ${o.gap} gap · ${o.insufficientEvidence} insufficient evidence · ${o.attested} attested`,
     "",
     "## Gaps (work plan)",

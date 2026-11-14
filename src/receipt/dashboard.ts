@@ -2,7 +2,7 @@
  * Pure analytics rollup for the receipt report's dashboard section.
  * Everything is computed from the same events array the feed renders.
  */
-import { productLabel, type TrailEvent } from "../trail.js";
+import { countOutcomes, outcomeOf, productLabel, type OutcomeCounts, type TrailEvent } from "../trail.js";
 import { mcpServerLabel, parseMcpToolId } from "../mcp-servers.js";
 
 export type ToolWorst = "never" | "deny" | "review" | "allow";
@@ -13,6 +13,14 @@ export interface VerdictMix {
   readonly deny: number;
   readonly never: number;
   readonly total: number;
+}
+
+/**
+ * Counts by outcome (what happened to each call), next to the verdict mix (what policy thought).
+ * `legacy` counts rows written before outcomes existed, by their stored verdict.
+ */
+export interface OutcomeMix extends OutcomeCounts {
+  readonly legacyMix: { readonly allow: number; readonly review: number; readonly deny: number };
 }
 
 export interface DashboardBucket {
@@ -43,6 +51,8 @@ export interface DashboardRow {
 
 export interface Dashboard {
   readonly verdictMix: VerdictMix;
+  /** What happened to the calls. `recorded` is 0 for a trail from before outcomes existed. */
+  readonly outcomeMix: OutcomeMix;
   readonly activity: DashboardActivity;
   readonly topTools: readonly DashboardTool[];
   /** deny+never counts per product (raw id in value), desc, top 8. */
@@ -171,8 +181,13 @@ export function worstOf(current: ToolWorst | undefined, e: TrailEvent): ToolWors
   let next: ToolWorst = "allow";
   if (isNever(e)) next = "never";
   else {
+    const o = outcomeOf(e);
     const v = e.verdict.toUpperCase();
-    if (v === "DENY") next = "deny";
+    // An outcome says what happened: a call that ran is not a review, whatever policy thought.
+    if (o) {
+      if (o === "blocked") next = "deny";
+      else if (o === "held") next = "review";
+    } else if (v === "DENY") next = "deny";
     else if (v === "REQUIRE_APPROVE") next = "review";
   }
   return current === undefined || rank[next] > rank[current] ? next : current;
@@ -189,8 +204,14 @@ export function computeDashboard(events: readonly TrailEvent[]): Dashboard {
   const projectHits = new Map<string, number>();
   const serverHits = new Map<string, number>();
 
+  const legacyMix = { allow: 0, review: 0, deny: 0 };
   for (const e of events) {
     const v = e.verdict.toUpperCase();
+    if (!outcomeOf(e)) {
+      if (v === "ALLOW") legacyMix.allow++;
+      else if (v === "DENY") legacyMix.deny++;
+      else if (v === "REQUIRE_APPROVE") legacyMix.review++;
+    }
     if (v === "ALLOW") mix.allow++;
     else if (v === "DENY") mix.deny++;
     else if (v === "REQUIRE_APPROVE") mix.review++;
@@ -244,6 +265,7 @@ export function computeDashboard(events: readonly TrailEvent[]): Dashboard {
 
   return {
     verdictMix: mix,
+    outcomeMix: { ...countOutcomes(events), legacyMix },
     activity: computeActivity(events),
     topTools,
     productHotspots,

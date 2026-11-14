@@ -30,6 +30,18 @@ export type TrailProduct =
 /** Foreign trace formats the importer accepts (host "import" events). */
 export type TrailImportFormat = "langsmith" | "langfuse" | "phoenix" | "otel" | "adr-sensor" | "openshell";
 
+/**
+ * What happened to the call, as the hook saw it:
+ * - ran: the hook exited 0 and let the call go on, whatever the verdict (the host can still decline it).
+ * - blocked: the hook denied it (exit 2: a DENY verdict, or a fail-closed deny).
+ * - held: the hook stopped it for approval (strict mode, or the hosted plane's approval hold).
+ * - error: the hook itself failed or ran degraded, and let the call go on (fail-open path, shadow-mode failure, bad guard config).
+ * Rows written before this field existed have none; readers treat them as before (by verdict).
+ */
+export type TrailOutcome = "ran" | "blocked" | "held" | "error";
+
+export const TRAIL_OUTCOMES: readonly TrailOutcome[] = ["ran", "blocked", "held", "error"];
+
 export interface TrailEvent {
   readonly ts: string;
   readonly sessionId: string;
@@ -39,7 +51,10 @@ export interface TrailEvent {
   /** Project folder basename the event was written from. */
   readonly project?: string;
   readonly toolId: string;
+  /** The policy opinion (ALLOW, DENY, REQUIRE_APPROVE). It says what policy thinks, not what happened: see `outcome`. */
   readonly verdict: string;
+  /** What happened to the call. Absent on rows written before it existed. */
+  readonly outcome?: TrailOutcome;
   readonly reasonCode: string;
   readonly mode: "observe" | "hold" | "offline";
   readonly neverEvent?: boolean;
@@ -75,6 +90,43 @@ export interface TrailEvent {
   readonly deviceId?: string;
   /** Privacy-safe class of the tool target (map/target-class.ts). A class, never a path, URL path, argument or command. */
   readonly targetClass?: string;
+}
+
+/** The recorded outcome, or undefined for a row that has none (an old row, or a bad value). */
+export function outcomeOf(e: { readonly outcome?: string }): TrailOutcome | undefined {
+  return (TRAIL_OUTCOMES as readonly (string | undefined)[]).includes(e.outcome) ? (e.outcome as TrailOutcome) : undefined;
+}
+
+/** The call ran, but policy said REQUIRE_APPROVE: strict mode would have held it. */
+export function wouldHoldInStrict(e: { readonly verdict: string; readonly outcome?: string }): boolean {
+  return outcomeOf(e) === "ran" && e.verdict.toUpperCase() === "REQUIRE_APPROVE";
+}
+
+export interface OutcomeCounts {
+  readonly ran: number;
+  readonly blocked: number;
+  readonly held: number;
+  readonly error: number;
+  /** Rows that carry an outcome. */
+  readonly recorded: number;
+  /** Rows without one (written before the field existed). */
+  readonly legacy: number;
+  /** Ran rows that policy marked REQUIRE_APPROVE. */
+  readonly wouldHold: number;
+}
+
+/** The one place counts by outcome are made: the report, the share summary and certify all read this. */
+export function countOutcomes(events: readonly { readonly verdict: string; readonly outcome?: string }[]): OutcomeCounts {
+  const c = { ran: 0, blocked: 0, held: 0, error: 0, wouldHold: 0 };
+  let recorded = 0;
+  for (const e of events) {
+    const o = outcomeOf(e);
+    if (!o) continue;
+    recorded++;
+    c[o]++;
+    if (wouldHoldInStrict(e)) c.wouldHold++;
+  }
+  return { ...c, recorded, legacy: events.length - recorded };
 }
 
 export function globalTrailPath(env: NodeJS.ProcessEnv = process.env): string {
@@ -272,6 +324,9 @@ function parseTrailEvent(raw: unknown): TrailEvent | undefined {
     verdict: e.verdict,
     reasonCode: e.reasonCode,
     mode: e.mode as TrailEvent["mode"],
+    ...(typeof e.outcome === "string" && (TRAIL_OUTCOMES as readonly string[]).includes(e.outcome)
+      ? { outcome: e.outcome as TrailOutcome }
+      : {}),
     ...(typeof e.host === "string" ? { host: e.host } : {}),
     ...(typeof e.product === "string" && TRAIL_PRODUCTS.has(e.product)
       ? { product: e.product as TrailProduct }

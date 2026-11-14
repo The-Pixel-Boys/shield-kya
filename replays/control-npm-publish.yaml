@@ -1,0 +1,11 @@
+id: control-npm-publish
+kind: control
+title: Publish a package
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    npm publish
+expect: allow
+credit: ""

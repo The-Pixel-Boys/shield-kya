@@ -1,0 +1,5 @@
+{
+  "name": "kya-guard",
+  "version": "1.0.0",
+  "description": "Stops your coding agent from deleting, leaking or dropping things. No network, one file, fails open."
+}

@@ -1,0 +1,11 @@
+id: control-npm-run-build
+kind: control
+title: Run the build script
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    npm run build
+expect: allow
+credit: ""

@@ -1,7 +1,7 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.34.0",
-  "description": "Audit trail and traceability for AI agents. See what every coding agent did and check each tool call against policy.",
+  "version": "0.35.0",
+  "description": "Stops your coding agent from deleting, leaking or dropping things. Records everything else.",
   "license": "MIT",
   "type": "module",
   "mcpName": "io.github.The-Pixel-Boys/shield-kya",
@@ -75,13 +75,19 @@
     "check:version": "node scripts/check-version-pins.mjs",
     "sync:channel-copy": "node scripts/check-channel-copy.mjs --write",
     "check:channel-copy": "node scripts/check-channel-copy.mjs",
+    "sync:replays": "node scripts/replays-scoreboard.mjs",
+    "check:replays": "node scripts/replays-scoreboard.mjs --check",
+    "new-rule": "node scripts/new-rule.mjs",
     "sync:features": "node scripts/sync-features.mjs",
     "check:features": "node scripts/sync-features.mjs --check",
-    "prepublishOnly": "pnpm run check:version && pnpm run build && pnpm test"
+    "prepublishOnly": "pnpm run check:version && pnpm run build && pnpm test",
+    "build:guard": "node scripts/build-guard.mjs",
+    "check:guard": "node scripts/build-guard.mjs --check"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@vitest/coverage-v8": "^4.1.11",
+    "esbuild": "0.25.12",
     "typescript": "^5.7.2",
     "vitest": "^4.1.11"
   },

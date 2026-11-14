@@ -1,0 +1,13 @@
+id: class-docker-volume-prune
+kind: class
+title: docker volume prune with all and force
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    docker volume prune -af
+expect: deny
+rule: docker-volumes
+since: 0.33.0
+credit: ""

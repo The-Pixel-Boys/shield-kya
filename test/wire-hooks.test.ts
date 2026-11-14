@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { UsageError } from "../src/errors.js";
-import { wireHook, wireHooks, kimiHooksBlockText } from "../src/commands/wire-hooks.js";
+import { hookCommand, wireHook, wireHooks, kimiHooksBlockText } from "../src/commands/wire-hooks.js";
 
 function tmp(): string {
   return mkdtempSync(join(tmpdir(), "kya-wire-hooks-"));
@@ -444,6 +444,28 @@ describe("wireClaudeSettings non-object root guard", () => {
       }
     } finally {
       rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("hook command with a hostile home path", () => {
+  it.skipIf(process.platform === "win32")("refuses a home with $ or a backtick: the shell would expand it inside the double quotes", () => {
+    for (const home of ["/tmp/a$b", "/tmp/a`id`", '/tmp/a"b']) {
+      expect(() => hookCommand("claude", undefined, home), home).toThrow(/cannot embed/);
+    }
+    expect(hookCommand("claude", undefined, "/tmp/plain")).toBe('"/tmp/plain/.kya/bin/kya-hook" hook --host claude');
+  });
+
+  it.skipIf(process.platform === "win32")("wireHook writes nothing for such a home", () => {
+    const base = mkdtempSync(join(tmpdir(), "kya-hostile-"));
+    const home = join(base, "h$x");
+    try {
+      mkdirSync(join(home, ".claude"), { recursive: true });
+      expect(() => wireHook({ host: "claude", home })).toThrow(/cannot embed/);
+      expect(existsSync(join(home, ".claude", "settings.json"))).toBe(false);
+      expect(existsSync(join(home, ".kya"))).toBe(false);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
     }
   });
 });

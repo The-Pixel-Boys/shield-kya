@@ -1,0 +1,11 @@
+id: control-node-script
+kind: control
+title: Run a node script
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    node scripts/build.js
+expect: allow
+credit: ""
