@@ -105,7 +105,7 @@ jobs:
         run: |
           T="$RUNNER_TEMP/smoke"
           mkdir -p "$T/start-work"
-          node dist/cli.js --help | tee "$T/kya-help.txt"
+          node dist/cli.js help --all | tee "$T/kya-help.txt"
           for w in start wrap receipt invoke dash; do grep -q "$w" "$T/kya-help.txt"; done
           set +e
           node dist/cli.js eval-tool --offline --tool-id org.sample.never.event --irreversible | tee "$T/deny.txt"
