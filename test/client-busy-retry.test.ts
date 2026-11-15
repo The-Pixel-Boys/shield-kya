@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+// These tests spawn CLIs or git, or wait on timers: 0.8 to 1.6 s each on an idle Mac, so the 5 s default is too tight on a loaded CI host. Hang guard only; budget assertions stay.
+vi.setConfig({ testTimeout: 30_000 });
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { busyWaitMs, KyaHttpClient } from "../src/client.js";

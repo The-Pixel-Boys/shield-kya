@@ -1,0 +1,4 @@
+agent tool call   Bash: terraform destroy -auto-approve
+KYA Guard         denied before it ran (exit code 2)
+message to agent:
+KYA denied Bash: NEVER_SHELL (terraform-destroy). Run terraform plan -destroy and ask the user to run the destroy themselves. Ask the user; see docs/guard-pack.md.

@@ -28,9 +28,9 @@ function captureIo() {
 }
 
 describe("runCli", () => {
-  it("shows help with no command", async () => {
+  it("shows the full command list with help --all (the default help is the short form, see help-surface-e2e)", async () => {
     const { io, logs } = captureIo();
-    const code = await runCli([], io);
+    const code = await runCli(["help", "--all"], io);
     expect(code).toBe(0);
     expect(logs.join("\n")).toContain("init");
     expect(logs.join("\n")).toContain("serve-mcp");

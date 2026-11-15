@@ -1,0 +1,11 @@
+id: control-supabase-start
+kind: control
+title: Start the local Supabase stack
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    supabase start
+expect: allow
+credit: ""

@@ -1,0 +1,13 @@
+id: class-vercel-remove-project
+kind: class
+title: Vercel project removal
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    vercel remove my-prod-app --yes
+expect: deny
+rule: vercel-remove
+since: 0.35.0
+credit: ""

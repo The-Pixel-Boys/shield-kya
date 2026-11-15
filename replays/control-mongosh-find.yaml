@@ -1,0 +1,11 @@
+id: control-mongosh-find
+kind: control
+title: mongosh find
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    mongosh --eval "db.users.find()"
+expect: allow
+credit: ""

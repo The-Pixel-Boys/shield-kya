@@ -47,9 +47,10 @@ Exactly these fields, nothing else:
 | `cliVersion` | `0.22.0` | KYA version |
 | `os`, `arch` | `darwin`, `arm64` | Node platform and CPU architecture |
 | `nodeMajor` | `24` | Node.js major version |
-| `hostId` | `claude` | the host integration, taken from the session id `kya connect` writes (`mcp:<host>`), else `unknown` |
+| `hostId` | `claude` | the host integration: the session id `kya connect` writes (`mcp:<host>`), else the MCP client name from `initialize` mapped to a fixed list (`claude`, `cursor`, `codex`, ...; any other name is sent as `other`, never as typed), else `claude` when Claude Code's `CLAUDECODE` marker is set, else `unknown` |
 | `gateMode` | `observe` / `hold` / `offline` | the gate mode |
-| `hostedLinked` | `true` / `false` | whether a hosted API key is configured (the key itself is never sent) |
+| `hostedLinked` | `true` / `false` | whether a hosted API key is configured (the key itself is never sent). The Claude plugin removes the key from its environment first, so it leaves `KYA_HOSTED_LINKED=1` (a presence flag) behind, and that counts too |
+| `internal` | `true` | only when `KYA_TELEMETRY_INTERNAL=1` is set; absent otherwise (see below) |
 
 **Never sent:** file paths, repository or project names, host or user names, environment variables,
 command arguments, tool names, prompts, code, audit-trail contents, API keys, or email addresses.
@@ -73,6 +74,10 @@ Overrides that always win, whatever you answered:
 - `DO_NOT_TRACK=1`
 - `KYA_TELEMETRY=0` (or `off`, `false`, `no`)
 - running in CI (`CI` set, or `GITHUB_ACTIONS=true`)
+
+`KYA_TELEMETRY_INTERNAL=1` is for maintainers: it adds `"internal": true` to every message, which
+excludes your machine from the public KPIs. It does not turn anything on; opt-in and the switches
+above still apply, and nobody else needs it.
 
 `KYA_OFFLINE=1` does **not** switch telemetry off: it selects sample evaluation, and `kya connect`
 writes it into every MCP host config it generates. If you opted in, your answer is honoured; use

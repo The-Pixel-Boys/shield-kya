@@ -10,7 +10,7 @@
 
 import { realpathSync, writeSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { resolveConfig } from "./config.js";
+import { globalConfigDir, resolveConfig } from "./config.js";
 import { AuthRequiredError, KyaError } from "./errors.js";
 import { flagBool, flagString, parseArgs } from "./parse-args.js";
 import { ensureSupportedNode } from "./node-upgrade.js";
@@ -23,11 +23,19 @@ Usage:
   kya <command> [options]
 
 Commands:
+Guard:
   version           Print the package version (same as --version)
-  start             ONE LINER: init + wire local MCP + open live report
-                    (report runs in the background - returns your terminal)
-                    Auto-bootstraps the gateway for third-party MCP servers
-                    found in host configs (--no-gate or KYA_GATE=off skips)
+  start             ONE LINER: wire local MCP + open live report. Prints a plan first
+                    (each file, created or merged, exact keys) and asks "Apply? [Y/n]".
+                    --yes or KYA_YES=1 skips the question; off a terminal or in CI it
+                    applies only with --yes. --dry-run prints the plan, writes nothing.
+                    Wires only hosts found on this machine. Report runs in the
+                    background - returns your terminal. Auto-bootstraps the gateway for
+                    third-party MCP servers found in host configs (--no-gate or
+                    KYA_GATE=off skips)
+  uninstall         Undo kya start / kya connect from ~/.kya/manifest.json: removes only
+                    the keys KYA added, deletes files KYA created if unchanged, prints
+                    what it left alone (--project: this directory only, --dry-run)
   stop              Stop the background report server started by kya start
                     (--all also stops orphaned report daemons from other
                     directories or older installs)
@@ -39,21 +47,8 @@ Commands:
   gate              Local MCP gateway: govern + audit tool calls to any MCP server
                     (init | setup | doctor | status | run | stop)
   init              Scaffold .kya/ config + sample tools + .env.example
-  team init         Enable the Claude Code plugin for everyone who opens this repo:
-                    merges a tag-pinned marketplace + enabledPlugins into the project's
-                    .claude/settings.json (--dry-run shows the change, writes nothing)
-  team managed-settings  Print the managed-settings JSON an admin deploys
-  login             Link this machine to the hosted console (device code). Saves a 0600
-                    key in ~/.kya/hosted-credentials.json. --base-url <url> or KYA_BASE_URL
-  logout            Delete the saved hosted key (the key stays active until you revoke it)
   update            Self-update to the latest npm version (kya start warns when
                     a newer release exists; --no-update-check / KYA_UPDATE_CHECK=0 opts out)
-  register-agent    POST /api/v1/kya/agents (human mint; server applies allow/break-glass/approve)
-  eval-tool         Policy evaluate (HTTP plane or --offline sample)
-  wrap              Evaluate + record trail. With --tool-id it never executes.
-                    wrap [--offline] -- <cmd...>: gate the command as a shell call, run it
-                    only if allowed (exit = the command's; 1 denied, 4 Hold pending).
-                    Default observe: no Hold ticket (no second approve). --hold / KYA_HOLD=1 for org Hold.
   hook              PreToolUse interception for native-hook hosts (claude|grok|kimi|…)
                     Reads the hook payload from stdin; exit 2 blocks. --strict denies advisory.
                     --fail-closed (hosted): internal error, malformed payload or async
@@ -75,12 +70,49 @@ Commands:
                     fail closed; key/URL/agent come only from that 0600 file.
                     --plane-shadow records hosted verdicts without blocking;
                     --plane-budget-ms <n> total plane budget (default 3000, max 4000).
+  wrap              Evaluate + record trail. With --tool-id it never executes.
+                    wrap [--offline] -- <cmd...>: gate the command as a shell call, run it
+                    only if allowed (exit = the command's; 1 denied, 4 Hold pending).
+                    Default observe: no Hold ticket (no second approve). --hold / KYA_HOLD=1 for org Hold.
+  doctor            Local checks. doctor --iocs scans this machine now for known supply-chain
+                    indicators (advisory; read-only, offline). --json for scripts. Last result: kya dash/receipt
+                    Background daily scan (from kya hook) is off with KYA_IOC=0 or ioc.enabled=false in ~/.kya/config.json
+  serve-mcp         Local MCP gate (HTTP default; --stdio for hosts)
+  sandbox           Opt-in Firecracker wrap (spawn|exec|kill|status). Not MCP.
+                    Requires KYA_SANDBOX=mock|firecracker. MCP still never execs.
+  telemetry         Opt-in anonymous usage stats, OFF by default
+                    (status | on | off [--purge] | show | reset) - see docs/telemetry.md
+  posture           Developer posture report, OFF by default. status | on [--yes] | off |
+                    send [--dry-run --json] | label NAME. "on" prints the exact report first.
+                    Sent once a day only when the local toggle AND the workspace allow it.
+
+Report:
   receipt           Activity report HTML/JSON/MD (default: last 3 days, all tools; --open)
                     --q pre-fills feed search · --share publishes a redacted summary (see --share-url)
   map               Map of agent actions: device, agent, tool and target graph with KYA verdicts (local only)
                     --days <n> window (default 3) · --json · --html <file> · --session <id>
   export            Local trail as an agent-flow JSONL event log (classes only, no args; local only)
                     --format agent-flow · --days <n> (default 3) · --session <id> · --out <file>
+  dash              Terminal desk (FREE panes; actions on a TTY, --once for CI)
+  investigate       Deterministic trail analysis: detectors, grouped incidents,
+                    markdown fix briefs for coding agents (--json)
+  alerts            Security alerts for detected incidents, optional local triage model, off by default, advisory
+                    (status [--json] | test | on | off) - see docs/alerts.md
+  discover          Scan this endpoint for AI agents, IDEs, runtimes, and MCP servers
+                    (--json, --diff <snapshot>, --push)
+
+Team and hosted:
+  team init         Enable the Claude Code plugin for everyone who opens this repo:
+                    merges a tag-pinned marketplace + enabledPlugins into the project's
+                    .claude/settings.json (--dry-run shows the change, writes nothing).
+                    --guard enables the kya-guard plugin instead: prints the diff and a README badge,
+                    kya uninstall --project reverses it
+  team managed-settings  Print the managed-settings JSON an admin deploys
+  login             Link this machine to the hosted console (device code). Saves a 0600
+                    key in ~/.kya/hosted-credentials.json. --base-url <url> or KYA_BASE_URL
+  logout            Delete the saved hosted key (the key stays active until you revoke it)
+  register-agent    POST /api/v1/kya/agents (human mint; server applies allow/break-glass/approve)
+  eval-tool         Policy evaluate (HTTP plane or --offline sample)
   invoke            Authorize on the plane after Allow or APPROVED. Never runs the write here.
   approve           Human APPROVE an approval id (kya.approve scope)
   reject            Human REJECT an approval id (kya.approve scope)
@@ -91,34 +123,18 @@ Commands:
   approvals         List the human queue
   sessions          List observed sessions
   shrink            Drop session clearance (--id --to BUILD|READ|DEPLOY)
-  serve-mcp         Local MCP gate (HTTP default; --stdio for hosts)
-  telemetry         Opt-in anonymous usage stats, OFF by default
-                    (status | on | off [--purge] | show | reset) - see docs/telemetry.md
-  orr run           Read-only ORR board (reporting only - not a second PEP)
-                    Optional: --producer harness.agentshield [--agentshield-json <file>]
-  dash              Terminal desk (FREE panes; actions on a TTY, --once for CI)
-  doctor            Local checks. doctor --iocs scans this machine now for known supply-chain
-                    indicators (advisory; read-only, offline). --json for scripts. Last result: kya dash/receipt
-                    Background daily scan (from kya hook) is off with KYA_IOC=0 or ioc.enabled=false in ~/.kya/config.json
-  posture           Developer posture report, OFF by default. status | on [--yes] | off |
-                    send [--dry-run --json] | label NAME. "on" prints the exact report first.
-                    Sent once a day only when the local toggle AND the workspace allow it.
-  sandbox           Opt-in Firecracker wrap (spawn|exec|kill|status). Not MCP.
-                    Requires KYA_SANDBOX=mock|firecracker. MCP still never execs.
+
+Compliance and evidence:
   certify           Agent Trust Baseline gap report from local evidence
                     (JSON/MD/HTML to .kya/certify/; exit 1 on gaps, exit 2 usage)
                     --attest REQ-ID --text "…" records a local attestation
                     --sign also writes an ed25519-signed evidence-bundle.json
                     (self-signed: integrity + key continuity, NOT identity)
+  orr run           Read-only ORR board (reporting only - not a second PEP)
+                    Optional: --producer harness.agentshield [--agentshield-json <file>]
   import            Import foreign traces into the local trail so the receipt
                     and certify see them (--from langsmith|langfuse|phoenix|otel|adr-sensor|openshell
                     <file>, or --from agt [--file <path>] for the AGT audit log)
-  investigate       Deterministic trail analysis: detectors, grouped incidents,
-                    markdown fix briefs for coding agents (--json)
-  alerts            Security alerts for detected incidents, optional local triage model, off by default, advisory
-                    (status [--json] | test | on | off) - see docs/alerts.md
-  discover          Scan this endpoint for AI agents, IDEs, runtimes, and MCP servers
-                    (--json, --diff <snapshot>, --push)
 
 Options (shared):
   --base-url <url>  Control plane origin (or KYA_BASE_URL)
@@ -130,6 +146,7 @@ Options (shared):
   --days <n>        receipt: history window (default 3)
   --session <id>    receipt: single session only (optional)
   --q <query>       receipt: pre-fill the activity-feed search
+  --card            receipt: make a near-miss card (image, no private data) for the last denied call; --id <id> picks another
   --share           receipt: publish a redacted summary, print the public URL
   --share-url <url> receipt: share endpoint base (or KYA_SHARE_URL; default https://shield-agent.com)
   --share-retries <n> receipt: retry --share on 429/5xx/network with backoff (max 3; default 0 = single attempt)
@@ -145,6 +162,9 @@ Options (shared):
 
 Examples:
   kya start
+  kya start --dry-run
+  kya start --yes
+  kya uninstall
   kya connect qwen
   kya connect opencode --project
   npx @shield-agent/kya init --base-url http://127.0.0.1:8090 --host ide
@@ -180,10 +200,59 @@ Docs: https://shield-agent.com/install · docs/guides/kya-light-install.md
 Doctrine: sole PEP is Shield; DENY is hard; missing APPROVED ⇒ no irreversible side effect.
 `;
 
-/** Help text. The host list comes from the connect registry, loaded on demand so `kya hook` stays light. */
+/** Default help: the six commands a new user needs. `kya help --all` prints the full text above. */
+const SHORT_HELP = `Shield KYA - stops your coding agent from deleting, leaking or dropping things.
+
+Usage:
+  kya <command>
+
+  kya start            Guard this machine and open the report
+  kya receipt          Open or share the report
+  kya connect <host>   Add another coding agent
+  kya doctor           Check that the guard is live
+  kya stop             Stop the report server
+  kya uninstall        Remove everything KYA added
+
+More commands: kya help --all
+One command:   kya help <command>
+Docs: https://shield-agent.com/install
+`;
+
+/** Full help text. The host list comes from the connect registry, loaded on demand so `kya hook` stays light. */
 async function helpText(): Promise<string> {
   const { connectableHosts } = await import("./commands/connect.js");
   return helpFor(connectableHosts().join("|"));
+}
+
+/** The Commands entries whose first word is `name` (`orr` finds "orr run"), cut from the full help text. */
+export function helpSection(full: string, name: string): string | undefined {
+  const start = full.indexOf("\nCommands:\n") + "\nCommands:\n".length;
+  const entries: string[][] = [];
+  for (const line of full.slice(start, full.indexOf("\nOptions (shared):")).split("\n")) {
+    if (/^ {2}\S/.test(line)) entries.push([line]);
+    else if (/^\s+\S/.test(line) && entries.length > 0) entries[entries.length - 1]!.push(line);
+  }
+  const hits = entries.filter((e) => e[0]!.trim().split(/\s+/)[0] === name);
+  return hits.length > 0 ? hits.map((e) => e.join("\n")).join("\n") : undefined;
+}
+
+/** What `kya help`, `kya --help` and `kya <command> --help` print. Returns the exit code. */
+async function printHelp(io: CliIo, command: string | undefined, all: boolean): Promise<number> {
+  if (all) {
+    io.log(await helpText());
+    return 0;
+  }
+  if (command === undefined) {
+    io.log(SHORT_HELP);
+    return 0;
+  }
+  const section = helpSection(await helpText(), command);
+  if (section === undefined) {
+    io.error(`No help for "${command}". Run kya help --all to list every command.`);
+    return 2;
+  }
+  io.log(`${section}\n\nEvery command and option: kya help --all`);
+  return 0;
 }
 
 export interface CliIo {
@@ -241,8 +310,10 @@ export async function runCli(
     parsed.flags["help"] === true ||
     parsed.flags["h"] === true
   ) {
-    io.log(await helpText());
-    return 0;
+    const all = parsed.flags["all"] !== undefined && parsed.flags["all"] !== false;
+    // `kya help <command>` names it in the first positional; `kya <command> --help` is the command itself.
+    const target = parsed.command === "help" ? parsed.positionals[0] : parsed.command;
+    return printHelp(io, target, all);
   }
 
   try {
@@ -251,7 +322,8 @@ export async function runCli(
 
     switch (parsed.command) {
       case "start": {
-        const { formatStartHuman, runStart } = await import("./commands/start.js");
+        const { askApply, envYes, formatPlanHuman, formatStartHuman, planStart, runStart } = await import("./commands/start.js");
+        const { homedir } = await import("node:os");
         const { maybePrintStarCta } = await import("./star-cta.js");
         const { checkForUpdate, formatUpdateBanner, shouldSkipUpdateCheck } = await import("./update-check.js");
         const { maybePromptConsent } = await import("./telemetry.js");
@@ -269,27 +341,71 @@ export async function runCli(
           parsed.flags["no-open"] === true || parsed.flags["no-open"] === "true";
         const noGate =
           parsed.flags["no-gate"] === true || parsed.flags["no-gate"] === "true";
+        const switchOn = (v: string | boolean | undefined): boolean => v !== undefined && v !== false && !/^(false|0)$/i.test(String(v));
+        const dryRun = switchOn(parsed.flags["dry-run"]);
+        const yes = switchOn(parsed.flags["yes"]) || envYes(env);
+        const home = env.KYA_HOME?.trim() || undefined;
+        const plan = await planStart(config, { force, open: !noOpen, gate: !noGate, ...(home ? { home } : {}) });
+        const planHome = home ?? homedir();
+        if (!config.json) io.log(formatPlanHuman(plan, cwd, planHome));
+        if (dryRun) {
+          if (config.json) io.log(JSON.stringify({ applied: false, dryRun: true, plan }, null, 2));
+          else io.log("Dry run: nothing was written.");
+          return 0;
+        }
+        if (plan.needsConsent && !yes) {
+          // A terminal gets one question; a pipe, CI or --json never applies without --yes / KYA_YES=1.
+          const interactive = (io.isTty ?? Boolean(process.stdin.isTTY && process.stdout.isTTY)) && !config.json && !env.CI;
+          const apply = interactive && /^(|y|yes)$/i.test((await (io.ask ?? askApply)("Apply? [Y/n]")).trim());
+          if (!apply) {
+            if (config.json) io.log(JSON.stringify({ applied: false, dryRun: false, plan }, null, 2));
+            if (interactive) {
+              io.log("Nothing was changed.");
+            } else {
+              // On stderr (and on stdout in text mode), so a wrapper that only shows stderr still says why nothing happened.
+              const line = "Nothing was written (not a terminal). Run again with --yes (or KYA_YES=1) to apply, or --dry-run to preview.";
+              if (!config.json) io.log(line);
+              io.error(line);
+            }
+            return 0;
+          }
+        }
         if (!config.json) await maybePromptConsent(io, env);
         // Before the report server starts, so the first search already sees the runtime. Never fails start.
         if (!config.json) {
           const { maybeOfferSemanticSearch } = await import("./receipt/semantic-setup.js");
-          await maybeOfferSemanticSearch(io, env).catch(() => undefined);
+          // The "is off" hints are not printed here: `kya doctor` shows them (quietHint).
+          await maybeOfferSemanticSearch({ ...io, quietHint: true }, env).catch(() => undefined);
           // Security alerts with optional local triage: asked once, after the search offer, same rules. Never fails start.
           const { maybeOfferTriageAlerts } = await import("./alerts/triage-setup.js");
-          await maybeOfferTriageAlerts(io, env).catch(() => undefined);
+          await maybeOfferTriageAlerts({ ...io, quietHint: true }, env).catch(() => undefined);
         }
-        const result = await runStart(config, { force, open: !noOpen, gate: !noGate });
+        const result = await runStart(config, { force, open: !noOpen, gate: !noGate, ...(home ? { home } : {}) });
         if (config.json) {
-          io.log(JSON.stringify(result, null, 2));
+          io.log(JSON.stringify({ ...result, applied: true, plan }, null, 2));
         } else {
           io.log(formatStartHuman(result));
           if (result.liveUrl) maybePrintStarCta(cwd, 3, io.log);
+          // F4: once there is something worth sharing. Same once-a-day, terminal-only rules as every CTA.
+          const { maybeCta, START_SHARE_MIN_EVENTS } = await import("./cta.js");
+          const { readTrail } = await import("./trail.js");
+          if (readTrail(cwd, env).length >= START_SHARE_MIN_EVENTS) {
+            maybeCta("start-share", { env, cwd, isTty: io.isTty ?? Boolean(process.stdout.isTTY) }, io.log);
+          }
           // Cached 24h; silent on any failure. Skipped in CI / --json / opt-out.
           if (!shouldSkipUpdateCheck(parsed.command, parsed.flags, env)) {
             const update = await checkForUpdate({ env });
             if (update) io.log(formatUpdateBanner(update));
           }
         }
+        return 0;
+      }
+
+      case "uninstall": {
+        const { formatUninstallHuman, runUninstall } = await import("./commands/uninstall.js");
+        const sw = (v: string | boolean | undefined): boolean => v !== undefined && v !== false && !/^(false|0)$/i.test(String(v));
+        const result = runUninstall({ env, cwd, project: sw(parsed.flags["project"]), dryRun: sw(parsed.flags["dry-run"]) });
+        io.log(flagBool(parsed.flags, "json") ? JSON.stringify(result, null, 2) : formatUninstallHuman(result, cwd));
         return 0;
       }
 
@@ -396,11 +512,22 @@ export async function runCli(
               shadow: flagBool(parsed.flags, "plane-shadow"),
             }
           : undefined;
-        const result = await runConnect(
-          config,
-          { host, scope, force, hooks, hosted, ...(gate ? { gateUrl: gateMcpUrl(env) } : {}) },
-          env,
-        );
+        // Every write lands in ~/.kya/manifest.json so `kya uninstall` can undo it.
+        const { liveJournal } = await import("./manifest.js");
+        const { withJournal } = await import("./write-journal.js");
+        const { journal, finish } = liveJournal({ globalDir: globalConfigDir(env), cwd });
+        let result;
+        try {
+          result = await withJournal(journal, () =>
+            runConnect(
+              config,
+              { host, scope, force, hooks, hosted, ...(gate ? { gateUrl: gateMcpUrl(env) } : {}) },
+              env,
+            ),
+          );
+        } finally {
+          finish();
+        }
         if (config.json) {
           io.log(JSON.stringify(result, null, 2));
         } else {
@@ -518,13 +645,27 @@ export async function runCli(
           return 0;
         }
         if (sub !== "init") {
-          io.error("Usage: kya team init [--dry-run] [--json] | kya team managed-settings");
+          io.error("Usage: kya team init [--guard] [--dry-run] [--json] | kya team managed-settings");
           return 2;
         }
         // Present means on (like --fail-closed): parseArgs would let `--dry-run x` swallow x.
         const dr = parsed.flags["dry-run"];
         const dryRun = dr !== undefined && dr !== false && !/^(false|0)$/i.test(String(dr));
-        const result = runTeamInit({ cwd, env, dryRun });
+        const guard = parsed.flags["guard"] !== undefined && parsed.flags["guard"] !== false && !/^(false|0)$/i.test(String(parsed.flags["guard"]));
+        let result;
+        if (guard && !dryRun) {
+          // Every write lands in ~/.kya/manifest.json so `kya uninstall --project` can undo it.
+          const { liveJournal } = await import("./manifest.js");
+          const { withJournal } = await import("./write-journal.js");
+          const { journal, finish } = liveJournal({ globalDir: globalConfigDir(env), cwd });
+          try {
+            result = await withJournal(journal, () => runTeamInit({ cwd, env, dryRun, guard }));
+          } finally {
+            finish();
+          }
+        } else {
+          result = runTeamInit({ cwd, env, dryRun, guard });
+        }
         io.log(flagBool(parsed.flags, "json") ? JSON.stringify(result, null, 2) : formatTeamInitHuman(result));
         return 0;
       }
@@ -594,7 +735,7 @@ export async function runCli(
 
       case "receipt": {
         const { formatReceiptHuman, receiptInputFromArgs, runReceipt, runReceiptShare } = await import("./commands/receipt.js");
-        const { SHARE_HOSTED_HINT, formatShareLine } = await import("./receipt/share.js");
+        const { SHARE_CONNECT_HINT, SHARE_HOSTED_HINT, formatShareLine } = await import("./receipt/share.js");
         const { maybePrintStarCta } = await import("./star-cta.js");
         const config = resolveConfig({
           cwd,
@@ -605,6 +746,17 @@ export async function runCli(
           offline: true,
         });
         const input = receiptInputFromArgs(parsed);
+        if (flagBool(parsed.flags, "card")) {
+          const { runReceiptCard } = await import("./commands/receipt.js");
+          const { cardCaption } = await import("./card.js");
+          const made = runReceiptCard(env, { id: flagString(parsed.flags, "id") });
+          if (!made.ok) {
+            io.error(made.message);
+            return 1;
+          }
+          io.log(config.json ? JSON.stringify({ id: made.id, svg: made.svgPath, png: made.pngPath ?? null, caption: cardCaption(made.input) }) : made.text.trimEnd());
+          return 0;
+        }
         if (flagBool(parsed.flags, "share")) {
           const shared = await runReceiptShare(
             config,
@@ -625,6 +777,7 @@ export async function runCli(
           } else {
             io.log(formatShareLine(shared.url, shared.expiresAt));
             io.log(SHARE_HOSTED_HINT);
+            io.log(SHARE_CONNECT_HINT);
           }
           return 0;
         }
@@ -769,11 +922,22 @@ export async function runCli(
           flags: parsed.flags,
           requireApiKey: true,
         });
-        const opts = serveMcpOptionsFromArgs(parsed);
+        // The client may say who it is before the beacon exists (it starts after the server): keep the name.
+        let client: string | undefined;
+        let setClient: ((name: string) => void) | undefined;
+        const opts = {
+          ...serveMcpOptionsFromArgs(parsed),
+          onClientInfo: (name: string) => {
+            client ??= name;
+            setClient?.(name);
+          },
+        };
         const result = await runServeMcp(config, opts);
         // Opt-in anonymous session beacon. Silent by construction: no stdout/stderr, because an MCP
         // stdio process owns stdout as its protocol channel.
         const beacon = startSessionBeacon(result.mode === "http" ? "mcp-http" : "mcp-stdio", { env, cwd });
+        setClient = (name) => beacon.setClient(name);
+        if (client !== undefined) beacon.setClient(client);
         try {
           if (result.mode === "http" && result.http) {
             io.log(
@@ -1171,7 +1335,8 @@ export async function runCli(
 
       default:
         io.error(`Unknown command: ${parsed.command}`);
-        io.log(await helpText());
+        io.error("Run kya help --all to list every command.");
+        io.log(SHORT_HELP);
         return 2;
     }
   } catch (err) {

@@ -18,12 +18,14 @@ const FRAGMENT_KEYS = [
   "chipProducts",
   "chipProjects",
   "chipServers",
-  "heroCertify",
+  "heroBlocked",
   "heroTiles",
   "overviewPanels",
   "certifyBody",
   "orrPanel",
   "changesList",
+  "showbackPanel",
+  "connectedBody",
 ] as const;
 
 describe("live fragments e2e (real server)", () => {
@@ -85,7 +87,7 @@ describe("live fragments e2e (real server)", () => {
     for (const key of FRAGMENT_KEYS) {
       expect(typeof body.fragments[key], `fragment ${key}`).toBe("string");
     }
-    expect(body.nav.overview).toBe(1);
+    expect(body.nav.overview).toBe(0); // the Blocked tab counts blocked calls, and this event is an ALLOW
     expect(body.nav.activity).toBe(1);
     // The initial page renders the same containers the refresh swaps.
     const page = await (await fetch(`http://127.0.0.1:${s.port}/?t=${s.token}`)).text();
@@ -96,6 +98,7 @@ describe("live fragments e2e (real server)", () => {
       "frag-overview-panels",
       "frag-certify",
       "frag-orr",
+      "frag-connected",
       "changes-list",
     ]) {
       expect(page, `page missing #${id}`).toContain(`id="${id}"`);
@@ -132,6 +135,7 @@ describe("live fragments e2e (real server)", () => {
       verdict: "DENY",
       reasonCode: "NEVER_EVENT",
       neverEvent: true,
+      outcome: "blocked",
       mode: "hold",
     });
     const after = (await (

@@ -1,7 +1,7 @@
 /**
- * One-line calls to action (CTAs) for the hosted console: after `kya certify` finds gaps,
- * when the local receipt shows only the newest part of the trail, and after a plain
- * `kya receipt` (the --share hint).
+ * One-line calls to action (CTAs): after `kya certify` finds gaps, when the local receipt shows only
+ * the newest part of the trail, after a plain `kya receipt`, and after `kya start` once the trail has
+ * START_SHARE_MIN_EVENTS events. Every line asks for the same thing: `kya receipt --share`.
  *
  * Silent (no output, no state written) when: --json, CI (CI or GITHUB_ACTIONS set), stdout is not a
  * terminal, KYA_QUIET is set (or certify --quiet), KYA_CTA is off, the config opt-out is set
@@ -13,13 +13,20 @@ import { join } from "node:path";
 import { globalConfigDir, readFileConfig } from "./config.js";
 import { atomicWriteSync } from "./fs-atomic.js";
 
-export type CtaKind = "certify-gaps" | "receipt-truncated" | "receipt-share";
+export type CtaKind = "certify-gaps" | "receipt-truncated" | "receipt-share" | "start-share";
+
+/** The one thing every CTA asks for (F4): a link to send a colleague. Nothing to sign up for first. */
+const SHARE_ASK = "Run kya receipt --share for a link to send a colleague.";
 
 export const CTA_LINES: Readonly<Record<CtaKind, string>> = {
-  "certify-gaps": "Gaps found. Run kya login to see them tracked over time in the hosted console.",
-  "receipt-truncated": "This report shows only the newest part of the trail. Run kya login for the full history.",
-  "receipt-share": "Run kya receipt --share for a redacted link to send to a colleague.",
+  "certify-gaps": `Gaps found. ${SHARE_ASK}`,
+  "receipt-truncated": `This report shows only the newest part of the trail. ${SHARE_ASK}`,
+  "receipt-share": SHARE_ASK,
+  "start-share": SHARE_ASK,
 };
+
+/** `kya start` prints the share line only for a trail with at least this many events (F4). */
+export const START_SHARE_MIN_EVENTS = 10;
 
 export const CTA_INTERVAL_MS = 24 * 60 * 60 * 1000;
 

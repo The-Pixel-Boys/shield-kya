@@ -1,0 +1,13 @@
+id: class-terraform-destroy
+kind: class
+title: Terraform destroy with auto approve
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    terraform destroy -auto-approve
+expect: deny
+rule: terraform-destroy
+since: 0.33.0
+credit: ""

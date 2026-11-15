@@ -8,7 +8,7 @@ Two commands do the same job. Pick one:
 
 ```bash
 kya connect cursor   # writes ~/.cursor/mcp.json directly
-kya start            # wires .cursor/mcp.json as part of project init
+kya start            # shows a plan, asks once, then wires .cursor/mcp.json (only when Cursor is installed)
 ```
 
 For a per-project setup instead of global:

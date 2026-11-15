@@ -1,0 +1,11 @@
+id: control-prisma-db-push
+kind: control
+title: Prisma db push without the data loss flag
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    npx prisma db push
+expect: allow
+credit: ""

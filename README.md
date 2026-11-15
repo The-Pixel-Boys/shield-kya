@@ -1,157 +1,38 @@
 # `@shield-agent/kya`
 
-[![npm](https://img.shields.io/npm/v/@shield-agent/kya.svg?logo=npm&label=npm)](https://www.npmjs.com/package/@shield-agent/kya)
-[![npm downloads/week](https://img.shields.io/npm/dw/@shield-agent/kya.svg?logo=npm&label=downloads%2Fweek)](https://www.npmjs.com/package/@shield-agent/kya)
-[![npm downloads, 18 months](https://img.shields.io/npm/d18m/@shield-agent/kya.svg?logo=npm&label=downloads%2C%2018%20months)](https://www.npmjs.com/package/@shield-agent/kya)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
-[![Install](https://img.shields.io/badge/install-shield--agent.com%2Finstall-0A0A0A)](https://shield-agent.com/install)
-[![X](https://img.shields.io/badge/X-%40coscosmico-000000?logo=x&logoColor=white)](https://x.com/coscosmico)
-
-
-**Audit trail and traceability for AI agents.** See what every coding agent did and check each tool call against policy. KYA records every tool call your coding agents make, on a local dashboard, and by default denies a short list of destructive commands, secret reads and exfiltration ([list below](#what-it-blocks-by-default)). Everything else is recorded, not blocked. Local hooks fail open. Real blocking and human approval run on the MCP policy path against a hosted workspace (the Shield Agent cloud service). One command. Free forever under MIT.
+**Stops your coding agent from deleting, leaking or dropping things.** Records everything else.
 
 ```bash
 npm i -g @shield-agent/kya@latest && kya start
+```
+
+![Blocked panel: the first thing the kya report shows. The guard stops rm -rf ~, read .env and curl | sh (demo calls)](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-blocked.png)
+
+## What you get
+
+KYA blocks a short list of destructive commands, secret reads and exfiltration by default ([list below](#what-it-blocks-by-default)), and records every other tool call on a local dashboard. One command. Free forever under MIT. The limits are in [LIMITATIONS.md](LIMITATIONS.md).
+
+```bash
 # Permission denied (EACCES) on Linux? No sudo and no install needed:
 npx @shield-agent/kya@latest start
 ```
 
 Requires **Node.js 22+** (24 recommended). Restart Cursor / Claude Code / Codex once so MCP loads. Hosted desk: [shield-agent.com](https://shield-agent.com/install).
 
-
-CLI and local MCP gate for Shield’s Know Your Agent path.
-
-An agent that asks Shield first gets Allow, Review, or Deny: you register the agent, wrap the tool (or route it through the MCP gate or the hosted plane), and Review waits for a person. Local hooks only record and block the never-list and the guard pack (see [Hook interception](#hook-interception)). Hosted is where enforcement lives. This package does not scan your network. Agents that never call evaluate stay invisible on purpose.
-
-Walkthrough: [how you use it](https://shield-agent.com/how-kya-works#using).
-
-```bash
-npx @shield-agent/kya@latest --help
-npx @shield-agent/kya@latest --version
-```
-
-`--version`, `-v`, `-V` and `kya version` print the installed package version on one line and exit `0`. They read the local package only: no network, no banner, no config.
-
-Requires **Node.js 22+** (`engines.node: >=22`); 24 is the recommended line. Node 20 and 21 are unsupported but work: the CLI prints a one-line warning. Node 18 and older are unsupported and some features break there (HTTP `serve-mcp`, the gateway OTLP receiver). Below 22 the CLI offers to install Node 24 for you (via volta / fnm / nvm / brew), reinstall itself, and finish the command. If you decline, it just prints the warning and continues. `kya hook` never warns or prompts.
-
-It works with any host that speaks MCP or OpenAPI. Vertical packs are optional. Shield is the only policy decision point (the one place that decides Allow or Deny). This gate never auto-approves an irreversible side effect (a change you cannot undo).
-
-If `KYA_API_KEY` is empty against an authenticated plane, network commands exit non-zero. `eval-tool`, `wrap`, and `invoke` exit `0` on ALLOW, `4` on REQUIRE_APPROVE, and `1` on DENY or unknown, so a line like `eval-tool && write` cannot skip the gate. `wrap` runs in observe mode by default, so it exits `0` on REQUIRE_APPROVE too. Set `KYA_HOLD=1` or pass `--hold` to get the `4`.
-
-`--offline` runs sample evaluate without a paid cloud (useful for DENY and REQUIRE_APPROVE demos). Creating an agent is itself a tool: offline, `kya.agent.register` comes back REQUIRE_APPROVE. Allow, break-glass, and approve mint modes (the modes that create approvals) live on the control plane.
-
-## One liner
-
-```bash
-npm i -g @shield-agent/kya@latest && kya start
-# Permission denied (EACCES) on Linux? No sudo and no install needed:
-npx @shield-agent/kya@latest start
-```
-
-Run it in your project directory. (From a clone of this repo, `./scripts/install-local.sh` replaces the npm install.)
-
-If the install fails with `EACCES` (the global npm folder belongs to root, common on Linux), do not use `sudo`. Run without a global install: `npx @shield-agent/kya@latest start`. Or give npm a folder you own: `npm config set prefix ~/.npm-global`, add `~/.npm-global/bin` to your `PATH`, then run the install again.
-
-More ways to install (same package; npm stays the reference path):
-
-```bash
-# Homebrew. Homebrew 7 may ask you to trust a third-party tap: run `brew tap The-Pixel-Boys/tap` first.
-# The formula does not install the semantic-search runtime. Search stays lexical until you opt in (see Natural-language search).
-brew install The-Pixel-Boys/tap/shield-kya
-
-# Scoop (not yet verified on Windows)
-scoop bucket add The-Pixel-Boys https://github.com/The-Pixel-Boys/scoop-bucket.git
-scoop install shield-kya
-```
-
-Where each channel is counted. The table has no counts on purpose. Downloads are not installs and not people.
-
-| Channel | Command or listing | Counted in |
-|---|---|---|
-| npm (reference) | `npm install -g @shield-agent/kya@latest` | npm downloads |
-| Homebrew tap | `brew install The-Pixel-Boys/tap/shield-kya` | npm (the formula downloads the npm tarball) |
-| Scoop | `scoop install shield-kya` | npm (the manifest downloads the npm tarball) |
-| Python shim | `pip install shield-kya` (also needs the npm CLI on PATH) | PyPI downloads |
-| VS Code extension | Marketplace: `shield-agent.shield-kya` (also needs the npm CLI) | VS Code Marketplace downloads |
-| Plugins (Claude Code, Codex, Gemini CLI, Cursor) | see the sections below | npm (the plugin bootstrap runs `npm install`) |
-| GitHub Action `kya-certify` | Marketplace listing | npm (each run installs the CLI from npm) |
-| Dev Container Feature | not published yet | not counted |
-
-Homebrew, Scoop, plugins and the GitHub Action fetch the npm package, so they are inside the npm count and are not added again.
-
-<!-- adoption:start -->
-Adoption, measured. The badge reads a public file that a daily job writes. A count under 50 is not shown. The badge reads "unavailable" when the last measurement failed. The website also hides any figure older than 48 hours.
-
-[![repos using kya-action](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/downloads-data/badge-action-repos.json)](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/downloads-data/badge-action-repos.json)
-
-Repos using kya-action: public repos outside The-Pixel-Boys, counted by GitHub code search. This count is approximate. Private repos are not counted, and the search covers default branches only.
-
-Hosted channel counts (Slack, Teams, webhook, helpdesk) and the date of each count are on https://shield-agent.com.
-<!-- adoption:end -->
-
-Claude Code users can also install the [plugin](#claude-code-plugin); GitHub Copilot CLI users the [Copilot CLI plugin](#github-copilot-cli-plugin) (read its first paragraph before installing); Codex CLI users the [Codex plugin](#codex-plugin); Gemini CLI users the [Gemini CLI extension](#gemini-cli-extension). Cline users: `npm install -g @shield-agent/kya@latest`, then follow [`llms-install.md`](llms-install.md). It is written so Cline can follow it; a Cline run from that file alone has not been tested yet.
-
-That **inits** `.kya/`, **wires** local MCP (`.mcp.json`, `mcp.json`, `.cursor/mcp.json` → `kya serve-mcp --stdio`), also **wires user-level configs for every installed host it detects** (`~/.claude.json`, `~/.kimi-code/`, `~/.grok/`, `~/.cursor/`, …), and **opens** the live activity report. The report runs in the background, so you get your terminal back. `kya stop` stops it. `kya receipt --open` reopens it. Cursor, Kiro, Qwen, Amp, Droid, Cline, and Grok pick the server up live with no restart (Kimi: just a new session). Claude Code, Codex, OpenCode, Gemini, Copilot CLI, and Kilo CLI load it on next launch. `claude --resume` keeps your conversation.
-
-![KYA report live dashboard: Certify trust baseline, decisions, analytics](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-overview.png)
-
-![Certify tab: full Agent Trust Baseline requirement table with evidence](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-certify.png)
-
-![Activity tab: filterable agent tool-call feed with decisions](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-activity.png)
-
-![Changes tab: what actually changed per session, files touched with redacted diff previews](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-changes.png)
-
-![Gateway section: local MCP gate with listeners, routes, backends, policies, and a dry-run playground](https://raw.githubusercontent.com/The-Pixel-Boys/shield-kya/main/assets/report-gateway.png)
-
-<!-- Local paths kept in package for offline viewers: assets/report-overview.png, assets/report-certify.png, assets/report-activity.png, assets/report-changes.png, assets/report-gateway.png (legacy: assets/activity-receipt.png) -->
-
-```bash
-kya start --no-open   # wire only
-kya start --force     # rewrite MCP blocks
-# Receipt change previews (clipped + redacted): on by default for writes
-# KYA_DIFF_PREVIEW=0 to disable
-```
-
-## One command per host
-
-`kya start` covers Claude Code, Cursor, and any host that reads `.mcp.json`. It also auto-wires the user-level config of every installed host it detects. For the rest, `kya connect` writes the host's own config dialect directly:
-
-```bash
-kya connect claude              # ~/.claude.json (merges mcpServers only)
-kya connect grok                # ~/.grok/config.toml (appends [mcp_servers.shield-kya])
-kya connect opencode            # ~/.config/opencode/opencode.json
-kya connect qwen                # ~/.qwen/settings.json
-kya connect amp                 # ~/.config/amp/settings.json
-kya connect qwen --project      # project scope instead of global
-kya connect kiro --force        # overwrite an existing shield-kya entry
-```
-
-Connect merges. It never rewrites a host config it cannot parse, and it keeps your other servers and keys. Supported hosts: `claude`, `codex`, `grok`, `opencode`, `kilo`, `kiro`, `qwen`, `kimi`, `mastracode`, `amp`, `copilot`, `cursor`. Each wires `serve-mcp --stdio` with `KYA_OFFLINE=1` so the gate starts keyless (no API key). Set `KYA_API_KEY` in the host env when you point at an authenticated plane.
-
-Hosts without a `connect` target still work: `kya wrap --offline -- <agent command>` puts the same evaluate gate in front of any CLI. Per-host recipes with verify steps and troubleshooting live in [docs/hosts/](docs/hosts/).
-
-## Hook interception
-
-`kya start` also wires a `PreToolUse` hook into every installed hook-capable host it detects: Claude Code (`~/.claude/settings.json`, merge-only), Grok (`~/.grok/hooks/shield-kya.json`, kya-managed file), and Kimi Code (`~/.kimi-code/config.toml`, `[[hooks]]` append). Every tool call the agent makes then passes through `kya hook` first: it is evaluated locally (offline, sub-second, no network) and written to the global record (trail). (If you opted in to anonymous usage stats, the hook also starts a detached helper at most once a day; see [Anonymous usage stats](#anonymous-usage-stats-opt-in-off-by-default).)
-
-Decision mapping: a local never-list or guard pack **DENY** blocks the tool call (exit `2` plus `hookSpecificOutput` deny JSON with `permissionDecision: "deny"`). **ALLOW** and **REQUIRE_APPROVE** are written to the record as advisory and the call proceeds. Manual wiring can pass `--strict` on the hook command to also block **REQUIRE_APPROVE**.
-
-The never-list also blocks three groups added on 2026-10-30, pending owner review: agent-driven persistence (writes to `~/.ssh/authorized_keys`, cron, LaunchAgents and LaunchDaemons, systemd user units, `at`, `schtasks /create`, shell start files that download, `ssh-copy-id`), reverse tunnels and reverse shells (`ssh -R`, `ssh -L -N` to a raw IP, `nc -e`, bash `/dev/tcp`, `autossh`), and sending environment names or values to a public raw IP address. Loopback and private addresses are allowed. The rows and the known limits are in [docs/never-list.md](docs/never-list.md).
-
-Hooks are fail-open: any hook error or timeout allows the call. They are alerts plus local never-list and guard pack enforcement, not the sole barrier. Plane enforcement stays on the MCP `kya.policy_evaluate` path. Hooks take effect in new sessions; all three hosts load hooks at session start.
-
-```bash
-kya connect claude --hooks   # wire the PreToolUse hook by hand
-kya connect grok --hooks
-kya connect kimi --hooks
-```
+[![npm](https://img.shields.io/npm/v/@shield-agent/kya.svg?logo=npm&label=npm)](https://www.npmjs.com/package/@shield-agent/kya)
+[![npm downloads/week](https://img.shields.io/npm/dw/@shield-agent/kya.svg?logo=npm&label=downloads%2Fweek)](https://www.npmjs.com/package/@shield-agent/kya)
+[![npm downloads, 18 months](https://img.shields.io/npm/d18m/@shield-agent/kya.svg?logo=npm&label=downloads%2C%2018%20months)](https://www.npmjs.com/package/@shield-agent/kya)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Install](https://img.shields.io/badge/install-shield--agent.com%2Finstall-0A0A0A)](https://shield-agent.com/install)
+[![Incident Replay: incidents stopped](https://img.shields.io/endpoint?url=https://shield-agent.com/replays/badge.json)](https://shield-agent.com/replays)
+[![X](https://img.shields.io/badge/X-%40coscosmico-000000?logo=x&logoColor=white)](https://x.com/coscosmico)
 
 ## What it blocks by default
 
 The deny list is the never-list ([docs/never-list.md](docs/never-list.md)) plus the guard pack ([docs/guard-pack.md](docs/guard-pack.md)). A deny exits `2` and names its rule id. In plain words:
 
 - **Wiping files.** `rm` with recursive and force flags on `/`, your home directory, a parent of it or of the project folder (`rm-root-home`, and `rm-recursive-home-or-system`); `find ... -delete` on home or system folders.
-- **Infrastructure and data.** `terraform destroy` and `terraform apply -destroy` (`terraform-destroy`); `DROP TABLE`, `DROP DATABASE`, `DROP SCHEMA` and `TRUNCATE` inside a database client (`sql-drop`); `docker volume rm`, `docker volume prune`, `docker system prune --volumes` and `docker compose down -v` (`docker-volumes`); `kubectl delete namespace` and `kubectl delete --all -A` (`k8s-delete-ns`); `aws ec2 terminate-instances`, `aws s3 rb --force`, `aws s3 rm --recursive`, `aws rds delete-db-instance`, `gcloud projects delete`, `gcloud sql instances delete`, `az group delete` (`cloud-delete`); `railway volume delete` and a `volumeDelete` call (`railway-volume-delete`).
+- **Infrastructure and data.** `terraform destroy` and `terraform apply -destroy` (`terraform-destroy`); `DROP TABLE`, `DROP DATABASE`, `DROP SCHEMA` and `TRUNCATE` inside a database client (`sql-drop`); `docker volume rm`, `docker volume prune`, `docker system prune --volumes` and `docker compose down -v` (`docker-volumes`); `kubectl delete namespace` and `kubectl delete --all -A` (`k8s-delete-ns`); `aws ec2 terminate-instances`, `aws s3 rb --force`, `aws s3 rm --recursive`, `aws rds delete-db-instance`, `gcloud projects delete`, `gcloud sql instances delete`, `az group delete` (`cloud-delete`); `railway volume delete` and a `volumeDelete` call (`railway-volume-delete`); `supabase db reset --linked` (`supabase-reset-linked`); `rm -r .git` at the project root (`rm-git-dir`); `dropDatabase()` in `mongosh` (`mongo-drop-database`); `FLUSHALL` and `FLUSHDB` on a remote Redis (`redis-flush`); `fly volumes destroy` and `fly apps destroy` (`fly-destroy`); `vercel remove` (`vercel-remove`); `gh repo delete` and `gh api -X DELETE repos/...` (`gh-repo-delete`). Four more commands are routine on a local database and not on a remote one, so the hook asks the person instead of denying (Claude Code only; other hosts deny): `DELETE FROM` with no `WHERE` (`sql-delete-all`), `prisma migrate reset` (`prisma-migrate-reset`), `prisma db push --accept-data-loss` (`prisma-accept-data-loss`) and `rm -rf` of the project folder (`rm-project-wipe`). See [guard-pack](docs/guard-pack.md#the-ask-outcome-guard_ask).
 - **Git.** A force push to any branch (`git-force-push`); `--force-with-lease` is allowed except on `main`, `master`, `release*` and `prod*`, where it is denied too (`git-force-push-protected-branch`); deleting `main` or `master` (`git-delete-default-branch`); `git reset --hard` with `git clean -fdx` (`git-hard-reset-clean`).
 - **Secret reads.** SSH keys, `~/.aws/credentials`, gcloud, Azure, kubeconfig, Docker, Railway, GitHub CLI, npm, PyPI, netrc and git credentials, `.env` files (not `.env.example`), `*.pem`, `*.key` (`secret-read-*`).
 - **Secret writes.** AWS key ids, private key headers, GitHub, Slack and Stripe live tokens written into a file (`secret-write-*`). The trail row never holds the text.
@@ -164,481 +45,31 @@ Config keys (`shellNeverList`, `secretsGuard`, `exfilGuard`, `guardAllow`) are r
 
 Moves and renames, edits, and deletes inside the project folder: they are recorded in the audit trail, not blocked. Anything an agent does outside the hook's view: a script it writes then runs, commands built at run time, `ssh host "rm -rf ~"`. Built-in shells of tools that have no hook and do not route through KYA (Cursor, for example, is MCP only). Hosted mode (`--plane-config`) applies the never-list and the plane's policy, not the guard pack. It is a seatbelt, not a sandbox: the guard pack denies this class of command, and the audit trail records what happened either way.
 
-## Claude Code plugin
+## Uninstall
 
-This repo is also a Claude Code plugin marketplace named `shield-kya` with one plugin, `kya`:
+`kya uninstall` undoes `kya start` and `kya connect`. It removes only the keys KYA added, deletes the files KYA created if they are unchanged, and prints what it left alone. `kya uninstall --dry-run` shows the plan and changes nothing. `kya uninstall --project` undoes this directory only. KYA's own data (the trail and report files) is not part of the undo; see [docs/uninstall.md](docs/uninstall.md).
 
-```text
-/plugin marketplace add The-Pixel-Boys/shield-kya
-/plugin install kya@shield-kya
-```
+## Commands
 
-The plugin is **advisory and fails open**: it records every tool call on the local record (`~/.kya/trail.jsonl`) and blocks the never-list and the guard pack. If kya is missing, crashes or times out, the tool call proceeds and nothing is recorded. It evaluates offline, so it has no Hold and no approval. Hosted enforcement is the MCP policy path against a hosted workspace.
+`kya help` lists the six commands a new user needs. `kya help --all` lists every command in four groups, and `kya help <command>` shows one command. Nothing was removed or renamed.
 
-Team rollout: commit `extraKnownMarketplaces` (the `shield-kya` GitHub source) and `enabledPlugins` (`"kya@shield-kya": true`) to the repository's `.claude/settings.json`, or force it org-wide with managed settings. Details and limits: [docs/hosts/claude-plugin.md](docs/hosts/claude-plugin.md).
+| Group | Commands | More |
+|---|---|---|
+| Guard | `kya start`, `kya uninstall`, `kya stop`, `kya connect`, `kya doctor`, `kya hook`, `kya wrap`, `kya gate`, `kya serve-mcp`, `kya init`, `kya update`, `kya version`, `kya sandbox`, `kya telemetry`, `kya posture` | [install](docs/install.md), [hosts and hooks](docs/hosts-and-hooks.md), [gateway](docs/gateway.md) |
+| Report | `kya receipt`, `kya map`, `kya export`, `kya dash`, `kya investigate`, `kya alerts`, `kya discover` | [activity record](docs/activity-record.md), [alerts](docs/alerts-sandbox-showback.md) |
+| Team and hosted | `kya team`, `kya login`, `kya logout`, `kya eval-tool` | [reference](docs/reference.md), [hosted console](docs/hosted-and-develop.md) |
+| Compliance and evidence | `kya certify`, `kya orr`, `kya import` | [compliance and evidence](docs/compliance-evidence.md) |
 
-## GitHub Copilot CLI plugin
+The report opens on Blocked, Activity and Connected tools. Certify, Gateway, System, ORR and cost showback sit behind **More** in the left menu.
 
-**Check first.** If the public repo has no `plugins/kya-copilot` folder yet (every release before the one that ships it), do not install the plugin in Copilot CLI: Copilot then gets the Claude Code plugin, and Copilot CLI 1.0.98 denies every tool call with it ("Denied by preToolUse hook ... (hook errored)"). If you already did, run `copilot plugin uninstall kya@shield-kya`, and use `kya connect copilot` (MCP server only, see [More hosts](#more-hosts)) until a release ships the folder.
+## Links
 
-From that release on:
-
-```bash
-copilot plugin marketplace add The-Pixel-Boys/shield-kya
-copilot plugin install kya@shield-kya
-```
-
-Copilot reads `.plugin/marketplace.json` before `.claude-plugin/marketplace.json`, so `kya@shield-kya` resolves to `plugins/kya-copilot`: an Agent Plugins v1 manifest (`plugin.json`), hooks in `com.github.copilot/hooks/hooks.json` and the MCP server in `mcp.json`. Claude Code and Codex keep loading `plugins/kya` and never see this folder. Same behaviour: advisory, fails open. Copilot denies a tool call when a pre-tool hook exits non-zero. So the hook is a `bash` command that does nothing when `node` is not on Copilot's `PATH`. Otherwise it runs `scripts/copilot-hook.mjs` (which forwards only kya's never-list deny) and turns any exit other than `2` into `0`. Recording needs Node.js 22 or later on that `PATH`. Copilot names MCP tools `<server>-<tool>` (for example `postgres-drop_table`); the never-list does not recognise that form yet, so MCP calls are recorded but not blocked. Rows in the record show the product as `other`. Tested with Copilot CLI 1.0.98 on macOS. **Do not install it on Windows yet**: the pre-tool hook has only a `bash` form and has not been run on Windows; use `kya connect copilot` there. Details: [docs/hosts/copilot.md](docs/hosts/copilot.md#plugin).
-
-## Codex plugin
-
-The same repo is a Codex plugin marketplace (`.agents/plugins/marketplace.json`) with the same `kya` plugin:
-
-```bash
-codex plugin marketplace add The-Pixel-Boys/shield-kya
-codex plugin add kya@shield-kya
-```
-
-Then open `/hooks` in Codex CLI and trust the two Shield KYA hooks: Codex runs no plugin hook until you do. Codex trusts the hook command, not the scripts it runs; the SessionStart command carries the kya version, so each kya release asks again. Codex also auto-upgrades Git marketplaces at startup, so whoever can push to this repo can change what runs next; teams can pin a release ref (see the guide). Same behaviour as the Claude Code plugin: advisory, fails open, records every tool call Codex sends through its hooks (shell, `apply_patch`, MCP and other local tools; not hosted tools such as web search), blocks the never-list and the guard pack. It bundles no MCP server; add one with `kya connect codex`. Details: [docs/hosts/codex.md](docs/hosts/codex.md#codex-plugin).
-
-## Gemini CLI extension
-
-The repo root is also a Gemini CLI extension (`gemini-extension.json` + `hooks/hooks.json`):
-
-```bash
-gemini extensions install https://github.com/The-Pixel-Boys/shield-kya
-```
-
-Same behaviour as the other plugins: advisory, fails open, records every tool call Gemini sends through its `BeforeTool` hook, blocks the never-list and the guard pack. Gemini runs extension hooks without a separate trust step. The extension pins the kya version it was released with. It bundles no MCP server; see the MCP examples. Details: [docs/hosts/gemini.md](docs/hosts/gemini.md#gemini-cli-extension).
-
-## Gate (local MCP gateway)
-
-`kya gate` puts one loopback-only listener (`127.0.0.1`, default port `3930`) in front of any MCP server you already use. Your host talks to the gateway; the gateway fans out to the real servers. Per-tool policy comes from the [top-20 server taxonomy](docs/mcp-servers.md). Destructive names (`drop`/`truncate`/`purge`/`transfer`) and each server's ADMIN-tier tools are denied outright and filtered from `tools/list`. Everything else runs in observe mode: allowed, and recorded. Every call is written to the local record and the live report, and can be forwarded as OTLP to the hosted intake.
-
-**Zero-touch:** `kya start` already does this for you. It scans your detected host configs for third-party MCP servers, imports them into `.kya/gateways.json` (recorded with an `importedFrom` field that says where each server came from), installs the gateway binary, starts the listener, and rewrites each source host so the imported servers route through the gateway. The original host config is kept under `.kya/backups/` before anything is removed. Nothing found → nothing downloaded, no listener. Opt out with `kya start --no-gate` or `KYA_GATE=off`. If the binary download fails (offline, no network), `kya start` warns once and continues without the gateway. Host configs stay untouched. The manual path below is still there when you want full control:
-
-```bash
-kya gate init     # scaffold .kya/gateways.json with ready-to-move recipes
-# edit gateways.json: move a recipe into "servers", fill its placeholders
-kya gate setup    # download the pinned gateway binary into .kya/bin
-kya gate run      # generate the gateway config, start the listener detached
-kya connect claude --gate   # point the host at the gateway (server key shield-kya-gate)
-kya gate doctor   # binary, config, listener health, loopback-only posture
-```
-
-If another process already holds a default port (`port` 3930 or `otlpPort` 3931), `kya gate run` stops with `EADDRINUSE`. Set free ports in `.kya/gateways.json` (`port` and `otlpPort`), then run it again.
-
-`kya gate stop` stops the supervisor and the binary with it. Honest notes: `kya gate setup` (and `kya start`'s auto-bootstrap, only when it found servers to govern) downloads the pinned gateway binary from our releases. Nothing else downloads anything by default. The opt-in offers download only after you say yes: the security alerts offer (the local triage model and its runtime, see [docs/alerts.md](docs/alerts.md)) and the plain-language search offer. The only other network use is the opt-in anonymous usage stats in [docs/telemetry.md](docs/telemetry.md), off unless you say yes. `run` never downloads. Observe mode means allowed calls are recorded, not blocked. The deny set above is the only hard stop, and plane enforcement stays with `kya.policy_evaluate`. `kya connect <host> --gate` covers the same hosts as plain `connect`. Grok gets a `[mcp_servers.shield-kya-gate]` url table in its config.toml (Grok supports remote MCP servers over HTTP). Per-server tiers and recipes: [docs/mcp-servers.md](docs/mcp-servers.md).
-
-## Longer path (optional)
-
-```bash
-# Offline sample evaluate
-kya eval-tool --offline --tool-id org.sample.never.event --irreversible
-kya wrap --offline --tool-id Write --irreversible --args '{"path":"src/x.ts","content":"hi"}'
-kya receipt --open
-# Org Hold: KYA_HOLD=1 kya wrap …
-kya dash --once --offline
-```
-
-
-
-Install hub: [https://shield-agent.com/install](https://shield-agent.com/install)
-
-## Activity record (global)
-
-One record (trail) for all projects: `~/.kya/trail.jsonl` (`KYA_HOME` overrides `~`). `kya receipt --open` from any directory shows activity from every project. Each event carries its project folder name. The report adds a Projects rollup once two or more projects appear, and shows the project on each feed entry. Older per-project `<project>/.kya/trail.jsonl` files are still read and merged; no migration. Reports read only the last 1 MB of the record (oldest events drop out of the view); it is shared across all projects. When `trail.jsonl` reaches 8 MB, KYA renames it to `trail.1.jsonl` and starts a new file; the next rotation replaces that archive. So the record uses about 16 MB on disk at most, and older events are deleted. Imports still check both files for rows they already added.
-
-The report itself is a dashboard. A hero row on top shows the live **Certify** result, the decision mix, an activity sparkline, and showback (cost per agent). Tabbed sections sit below: **Overview** (analytics, sessions, reasons), **Certify** (the full live requirement table: every requirement grouped by domain with status, evidence, and attestation), **Activity** (the filterable event feed), **System** (wired hosts, sandboxes, ORR). Everything is one standalone offline HTML page. The live view adds a single external link: "Star on GitHub". The live daemon from `kya start` re-renders it on every event.
-
-### Map of agent actions
-
-`kya map` draws a graph of what KYA recorded: the device, the agent sessions, the tools and the target classes. Edges are coloured by verdict. Two heat views show when and where the activity happened. The page is local and offline. It shows what was recorded, not what was enforced. The live report has a Map tab. See [docs/map.md](docs/map.md).
-
-`kya export --format agent-flow` writes the same trail as a JSONL event log for the agent-flow viewer (`--out FILE` writes a new 0600 file; `--force` replaces one). Each line holds the hashed session, the tool, the verdict, the reason code, the target class, the device id and the mode. It holds no arguments, paths or command text. See [docs/map.md](docs/map.md#export).
-
-### Sharing a report
-
-`kya receipt --share` publishes a **redacted summary** of the current window (aggregate decision counts, product and reason-code rollups, and the Certify status; no paths, no tool arguments, no session IDs) to shield-agent.com and prints a public URL (`/r/<id>`) with its expiry date (7 days) that anyone can open, plus one line suggesting you send it to your security lead. Every shared page carries the one-line install so readers can audit their own agents, and a button to start a hosted workspace for the team. The Certify status on the page is labelled as self-reported by the CLI, not verified by Shield Agent. With `--json` the command prints only `{"url", "expiresAt"}`. Point it at a different collector with `--share-url <base>` or `KYA_SHARE_URL`.
-
-Sharing is a single attempt by design (storm-proof: no silent retries against the collector). `--share-retries <n>` (max 3) opts into bounded retries on 429/5xx/network failures with exponential backoff plus jitter, and respects the server's `Retry-After`.
-
-### Natural-language search
-
-`kya start` asks once, in a terminal, whether to turn this on (about 400 MB of disk, nothing leaves the machine). Answer yes and it installs the runtime for you before the report opens. A "no" is remembered. Without a terminal it asks nothing: set `KYA_SEMANTIC=on` to install without a question (scripts, images) or `KYA_SEMANTIC=off` to never ask. The manual command is below.
-
-The **Activity** search box understands plain English. It runs a hybrid of BM25 over tool IDs, summaries, reason codes, decisions, projects, and MCP server labels, plus local MiniLM semantic reranking, which is opt-in. The runtime is not part of the default install. Without it, search stays lexical (BM25) and the live report server writes one line to its log (for `kya start`, the background report daemon log) that names the install command. Install it once:
-
-```bash
-# macOS and Linux (bash or zsh)
-npm install --prefix "$HOME/.kya/semantic" @shield-agent/fastembed@3.0.0
-```
-
-```bat
-:: Windows cmd
-npm install --prefix "%USERPROFILE%\.kya\semantic" @shield-agent/fastembed@3.0.0
-```
-
-```powershell
-# Windows PowerShell
-npm install --prefix "$env:USERPROFILE\.kya\semantic" @shield-agent/fastembed@3.0.0
-```
-
-If `KYA_HOME` is set, the prefix is `$KYA_HOME/.kya/semantic` (`%KYA_HOME%\.kya\semantic` on Windows). A built-in concept glossary maps everyday words to the vocabulary events actually use, so `dangerous` finds rm/kill/delete/sudo calls, `blocked` finds denials, and `held` finds approval requests. You can also type things like `failed stripe transfers`, `files written by grok`, or `approval required production`. Stopwords and stemming are handled automatically, and the same search works across the global record.
-
-- Offline or `KYA_OFFLINE=1` keeps search purely lexical (no model download).
-- After you opt in, the live server downloads `BAAI/bge-small-en-v1.5` once into `~/.kya/models` and caches event vectors in `~/.kya/search-index.bin` (1.5 KB for each event). New vectors are added to the end of the file. The file keeps at most 20,000 events (`KYA_SEARCH_INDEX_MAX`); it drops the oldest first and keeps the events of the current report window.
-- An older `~/.kya/search-index.json` is converted once. KYA then renames it to `search-index.json.migrated` and does not read it again. KYA does not delete it. You can delete it yourself.
-- `KYA_SEARCH_SEMANTIC=off` disables the model while still keeping BM25.
-
-The hosted console uses the same hybrid search on the server side (Postgres full-text + optional OpenAI-compatible embeddings), so queries typed in either place behave the same way.
-
-## Upgrade notes
-
-- Semantic search is no longer installed by default (about 230 MB less on disk). After upgrading, activity search is lexical (BM25) only until you run the install command in [Natural-language search](#natural-language-search).
-- The CLI loads the OpenTelemetry SDK only when an OTLP endpoint is set. A start error is logged once to stderr; metrics stay off and the command continues.
-- Hook verdicts and fail-open rules are unchanged.
-- `kya update` self-updates kya to the latest npm version.
-
-## Team rollout
-
-- `kya team init` adds a tag-pinned plugin marketplace and an enabled plugin to the project settings, so everyone who opens the repo gets the plugin. Run it with `--dry-run` first to see the change.
-- `kya team managed-settings` prints the managed-settings JSON that an administrator deploys.
-- Step by step: [Team rollout](docs/team-rollout.md).
-
-## Dual plane
-
-```
- host=ide (authoring)          host=runtime (production)
-        │                              │
-        └────────── same agent ────────┘
-                    identity
-                    policy evaluate  → ALLOW | DENY | REQUIRE_APPROVE
-                    approval + trail
-```
-
-Tag sessions with `KYA_HOST=ide` or `KYA_HOST=runtime`. Same policy path either way.
-
-## Plans (hosted, plan tiers v2)
-
-The rows below apply only when the hosted service turns plan tiers v2 on. Until then the hosted plans are Free, Starter, Pro and Scale.
-
-The hosted console has these plans. The CLI works on every plan. Solo and the no-card trial appear only when the hosted service turns plan tiers on.
-
-| Plan | Price | Seats | Trail history | Notes |
-|---|---|---|---|---|
-| Free | $0 | 2 | 30 days | Start here |
-| Solo | $90 a year | 1 | 90 days | CSV evidence export. Yearly only |
-| Team | $29 a month | 5 | 90 days | Formerly "Starter" |
-| Pro | $149 a month | 25 | 90 days | Compliance report PDF, signed evidence bundles |
-| Scale | $499 a month | Unlimited | 365 days | SSO and SCIM |
-
-n8n and Zapier access is included in every paid plan. There is no add-on price.
-
-## Environment
-
-| Variable | Required | Meaning |
-|----------|----------|---------|
-| `KYA_BASE_URL` | Yes (network cmds) | Control plane origin |
-| `KYA_API_KEY` | When auth is on | API key (or Bearer JWT for decide verbs) |
-| `KYA_HOST` | No (default `ide`) | `ide` \| `runtime` |
-| `KYA_AGENT_ID` | After register | Agent principal id |
-| `KYA_MCP_PORT` | No (default `3920`) | HTTP MCP listen port |
-| `KYA_OFFLINE` | No | `1`/`true` for sample evaluate |
-| `KYA_HOLD` | No | `1`/`true` for the org Hold path (REQUIRE_APPROVE opens a human ticket) |
-| `KYA_DASH_PLAN` | No | `enterprise` unlocks licensed TUI panes |
-| `KYA_IOC` | No | `0` turns off the daily background IoC scan started by `kya hook` (`kya doctor --iocs` still runs) |
-| `KYA_DIFF_PREVIEW` | No | `0` disables clipped change previews on the receipt |
-| `KYA_RECEIPT_AUTO` | No | `0` disables auto-open receipt after wrap; `1` forces |
-| `KYA_SEARCH_SEMANTIC` | No | `off` disables MiniLM semantic reranking (BM25 still works) |
-| `KYA_SEARCH_INDEX_MAX` | No (default `20000`) | Most events kept in the search vector file |
-| `KYA_RECEIPT_MAX_RSS_MB` | No (default `512`; `2048` when plain-language search is installed) | The live report process exits when its memory (RSS) is above this many MB; the next `kya start` or `kya receipt` starts a new one. `0` turns the check off |
-| `KYA_SEMANTIC` | No | `on` lets `kya start` install the plain-language search runtime without asking; `off` never asks |
-| `KYA_SHARE_URL` | No | `kya receipt --share` collector base (default `https://shield-agent.com`) |
-| `KYA_TELEMETRY` | No | `0`/`off` forces anonymous usage stats off ([docs/telemetry.md](docs/telemetry.md)); they are off unless you opted in |
-| `DO_NOT_TRACK` | No | `1` forces anonymous usage stats off, same as `KYA_TELEMETRY=0` |
-| `KYA_BASE_URL` | No | Hosted console for `kya login` (default `https://shield-agent.com`; https or loopback only) |
-| `KYA_QUIET` | No | Any true value hides the one-line hosted calls to action (`kya certify`, `kya receipt`) |
-| `KYA_CTA` | No | `0`/`off` turns off the one-line hosted calls to action ([docs/login.md](docs/login.md#calls-to-action-one-line)) |
-
-Gate mode can also be set in the project's `.kya/config.json`:
-`{"gateMode": "hold"}` or `{"gateMode": "offline"}` (exact values only;
-anything else is ignored). The gate itself (wrap / hook / eval) follows it
-with the precedence flags > env > config > observe, and `kya certify`
-reports through the same resolver, so a certify pass on gate mode always
-reflects how the gate actually runs.
-
-## MCP tools
-
-| Tool | Role |
-|------|------|
-| `kya.policy_evaluate` | `ALLOW` \| `DENY` \| `REQUIRE_APPROVE` |
-| `kya.session_ingest` | Observe / raise-only risk |
-| `kya.request_approval` | Open a human Hold. Does not execute the side effect |
-
-MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Boys/shield-kya`.
-
-```json
-{
-  "mcpServers": {
-    "shield-kya": {
-      "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.34.0", "serve-mcp", "--stdio"],
-      "env": {
-        "KYA_BASE_URL": "http://127.0.0.1:8090",
-        "KYA_API_KEY": "${KYA_API_KEY}",
-        "KYA_HOST": "ide"
-      }
-    }
-  }
-}
-```
-
-## Wrap and decide
-
-```bash
-npx @shield-agent/kya wrap --offline --tool-id org.sample.data.write --irreversible
-npx @shield-agent/kya approve --id <approval-id>
-npx @shield-agent/kya reject --id <approval-id>
-```
-
-A hosted high-risk request (HIGH priority now or before, or created with the irreversible hint) cannot be approved from the CLI or the TUI: the hosted plane answers 403 `kya.approval_console_mfa_required`. Approve it in the hosted console with a two-factor code. `reject` always works.
-
-`wrap --tool-id …` evaluates and may open a pending ticket. It never executes the side effect. `wrap [--offline] -- <cmd…>` gates the command as a shell call and runs it only when the verdict allows (an observed Review counts as allowed). Its exit code is the command's own, or `1` Deny, `4` Hold pending, `126` not executable, `127` not found. The verdict lines go to stderr, so the command's stdout stays clean. `invoke` asks the live plane to authorize after Allow or APPROVED. It does not run the write on this machine. The TUI (`dash`) can `a`/`x` decide only after `y` confirm with a JWT (`sk_*` refused).
-
-## In-process SDK shims
-
-Agents built on LangGraph.js, the Vercel AI SDK, Mastra, OpenAI Agents TS, or the Claude Agent SDK can route tool calls through the same evaluate path without a gateway:
-
-```ts
-import { governed, governLangGraphTool, KyaDeniedError } from "@shield-agent/kya/sdk";
-
-const run = governed({ toolId: "write_file", server: "filesystem", fn: myWrite });
-await run({ path: "out.txt", content: "hi" }); // throws KyaDeniedError on DENY
-```
-
-Offline evaluate by default (no network, no hosted plane); an explicit config uses the live plane. `governA2aSend` gates in-process agent-to-agent sends. The `shield-kya` Python package on PyPI ships framework hooks (LangChain, CrewAI, OpenAI Agents SDK and others), fail-open like `kya hook`. Support matrix and recipes: `docs/sdk-integrations.md`; runnable scripts: `examples/sdk/`.
-
-Framework recipes (each one tested with a scripted model and the published CLI): [LangChain](docs/sdk-integrations.md#langchain-python) · [OpenAI Agents SDK](docs/sdk-integrations.md#openai-agents-sdk-python) · [CrewAI](docs/sdk-integrations.md#crewai-python) · [LlamaIndex](docs/sdk-integrations.md#llamaindex-python) · [Mastra](docs/sdk-integrations.md#mastra-typescript) · [Vercel AI SDK](docs/sdk-integrations.md#vercel-ai-sdk-typescript)
-
-## Claude connector
-
-**Desktop / Claude Code (local stdio):**
-
-```bash
-# Prefer a preinstalled package (no registry auto-install):
-npx --no-install @shield-agent/kya@0.34.0 serve-mcp --stdio
-# Or after npm i -g / local install:
-kya serve-mcp --stdio
-```
-
-Copy `claude/claude_desktop_config.example.json` into Claude Desktop MCP settings, or use `.mcp.json` for Claude Code. Pack a Desktop extension with `npx @anthropic-ai/mcpb pack` (see `manifest.json`). That pack runs the packed `dist/cli.js`, not `npx -y`.
-
-**Claude.ai / Cowork (hosted):** add a custom connector at `https://shield-agent.com/mcp` with request header `Authorization: Bearer <KYA_API_KEY>` (or `X-API-Key`). It is not Directory-listed yet (API-key auth, no OAuth DCR).
-
-## OpenAI (Codex / Responses)
-
-**Codex CLI plugin (hooks):** see [Codex plugin](#codex-plugin). **Codex CLI / IDE (MCP):** copy `openai/codex.config.example.toml` into `~/.codex/config.toml`. Local stdio uses `npx --no-install @shield-agent/kya@0.34.0 serve-mcp --stdio`. Hosted Codex uses `url = "https://shield-agent.com/mcp"` with `bearer_token_env_var = "KYA_API_KEY"`.
-
-**Responses API:** see `openai/responses-mcp.example.json` (`server_url` + `Authorization: Bearer <KYA_API_KEY>`).
-
-**ChatGPT Apps (chatgpt.com):** deferred. Developer Mode wants OAuth. Use Codex until then.
-
-## Gemini CLI
-
-Merge `gemini/settings.example.json` (stdio) or `gemini/settings.hosted.example.json` (`httpUrl` + Bearer) into `~/.gemini/settings.json` or `.gemini/settings.json`. Do not enable both at once.
-
-## Grok
-
-**Grok CLI (local):** `kya connect grok` appends a `[mcp_servers.shield-kya]` table to `~/.grok/config.toml` (`serve-mcp --stdio`, keyless offline sample evaluate). In a running session, press `r` in `/mcps` to refresh.
-
-**grok.com (hosted):** custom connector at `https://shield-agent.com/mcp` (see `grok/README.md`). Grok rejects localhost. Prefer a Bearer machine key when the UI offers a request header.
-
-## More hosts
-
-Each ships a copy-paste example in its own directory; `kya connect <host>` writes the same thing for the starred ones. Full recipes (verify, uninstall, troubleshooting): [docs/hosts/](docs/hosts/).
-
-| Host | Setup | Example |
-|------|-------|---------|
-| Claude Code | `kya connect claude` (or `kya start`) | - (merges `~/.claude.json` / `.mcp.json`) |
-| Grok CLI | `kya connect grok` | - (appends `[mcp_servers.shield-kya]` to `~/.grok/config.toml`) |
-| OpenCode | `kya connect opencode` | `opencode/opencode.example.json` |
-| Kilo Code | `kya connect kilo` | `kilo/kilo.example.json` |
-| Kiro | `kya connect kiro` | `kiro/mcp.example.json` |
-| Qwen Code | `kya connect qwen` | `qwen/settings.example.json` (+ `settings.hosted.example.json`) |
-| Kimi Code | `kya connect kimi` | `kimi/mcp.example.json` |
-| MastraCode | `kya connect mastracode` | `mastracode/mcp.example.json` |
-| Amp | `kya connect amp` | `amp/settings.example.json` |
-| GitHub Copilot CLI | `kya connect copilot` | `copilot/mcp-config.example.json` |
-| Cline | `npm install -g @shield-agent/kya@latest`, then the steps in [`llms-install.md`](llms-install.md) | `cline/cline_mcp_settings.example.json` |
-| Droid | `droid mcp add` (schema unverified) | `droid/mcp.example.json` |
-| Pi · OMP · Devin · Hermes · Qoder · Maki · Muse · Antigravity | `kya wrap --offline -- <cmd>` | [docs/hosts/](docs/hosts/) |
-
-## Cursor plugin
-
-The package includes `.cursor-plugin/plugin.json`, `mcp.json`, and a wrap skill. Public listing repo: https://github.com/The-Pixel-Boys/shield-kya
-
-## ORR (reporting only)
-
-```bash
-npx @shield-agent/kya orr run --path . --out ./orr-report --skip-optional-producers
-npx @shield-agent/kya orr run --path . --out ./orr-report --scorecard ./scorecard.json --producer openssf.scorecard
-npx @shield-agent/kya orr run --path . --out ./orr-report --producer harness.agentshield --agentshield-json ./agentshield-report.json
-```
-
-ORR checks if your agent setup is safe to run. It is a reporting board only. Scanners, `--scorecard`, and `harness.agentshield` are evidence. They never ALLOW a high-stakes side effect, so they are not a second policy gate. AgentShield is optional and read-only: no `--fix`, no MiniClaw, no runtime hook. This package does not depend on `ecc-agentshield`. If you pass `--producer harness.agentshield` and have neither `--agentshield-json` nor an `agentshield` binary, ORR records a coverage gap and still exits 0. Explicit `--producer` always attempts; `--skip-optional-producers` only skips producers you did not ask for.
-
-## Certify (ongoing trust checks)
-
-`kya certify` evaluates the open **Agent Trust Baseline** catalog (`catalog/agent-trust-baseline-v0.json`: 31 requirements across Data & Privacy, Security, Safety, Reliability, Accountability, Society) against local evidence: the global record, ORR output, wired hosts, sandbox inventory, receipts, showback, and your recorded attestations. It writes a gap report to `.kya/certify/` (JSON + Markdown + HTML). The gap list is your work plan. The receipt report shows the same state live: a **Certify** panel recomputed on every render (so `kya start`'s live report updates as events stream in), plus a dedicated **Certify** tab with the full live requirement table. Run `kya certify` for the full gap report plus a signed evidence bundle.
-
-```bash
-npx @shield-agent/kya certify                  # gap report; exit 1 when gaps exist (CI-friendly)
-npx @shield-agent/kya certify --open           # open the HTML report
-npx @shield-agent/kya certify --fail-on never  # report only, always exit 0
-npx @shield-agent/kya certify --attest SOC-01 --text "Acceptable-use policy: https://example.com/aup"
-npx @shield-agent/kya certify --sign           # also emit a signed evidence-bundle.json
-```
-
-Certify is **evidence-only**. It never ALLOWs, DENYs, or blocks anything. The sole PEP (policy enforcement point: the component that can block a call) remains Shield KYA. Record-based machine checks never pass on an empty record (they report `insufficient_evidence`). What a machine cannot check is covered by explicit local attestations (`--attest`), recorded in `.kya/attestations.json`. These are unverified operator statements, labeled as such.
-
-`--sign` emits `evidence-bundle.json`: canonical JSON, ed25519-signed (a public-key signature) by a locally generated key (`~/.kya/keys/evidence-ed25519.json`, mode 0600, auto-created on first use). Each `--sign` run prints the signing key fingerprint. When the key was just created, the CLI notes that key continuity resets there (earlier bundles stay verifiable only under the old pubkey). A self-signed developer key proves bundle **integrity** and **continuity of a key**, **not identity**. Bundles from `--sign` verify offline. On the public verify endpoint (`POST /api/v1/kya/evidence/verify`) and badge, they show a grey `self-signed` badge. Only a bundle signed with the key of an active hosted workspace earns the green Shield Verified badge. That ties the badge to a hosted account. It does not prove the legal identity of the company or the agent. The bundle format is open and documented in `docs/certify.md`; anyone can verify a bundle offline with the embedded pubkey.
-
-`kya certify` is local, free, and offline: no account, no network calls, no license check (it never sends usage stats). The catalog is MIT-licensed and PRs are welcome. An EU AI Act crosswalk (baseline requirements mapped to Articles 9-15, 26, 72) ships in [docs/certify-eu-ai-act.md](docs/certify-eu-ai-act.md) and `src/certify/eu-ai-act-map.json`.
-
-## Import traces (LangSmith, Langfuse, Phoenix, OTel, AGT, ADR Sensor, OpenShell)
-
-Bring existing monitoring exports into the record so the receipt and certify see them:
-
-```bash
-kya import --from langsmith ./runs.json
-kya import --from langfuse ./observations.jsonl
-kya import --from otel ./otraces.json
-kya import --from agt   # Microsoft Agent Governance Toolkit audit log
-kya import --from adr-sensor ./adr-sensor-events.jsonl
-kya import --from openshell ./openshell-events.jsonl
-```
-
-The AGT importer verifies AGT's hash chain (a checksum link between log rows), flags tampered logs with chainVerified=false, and never duplicates rows on re-import; see [docs/import-agt.md](docs/import-agt.md). ADR Sensor events map one `AgentEvent` to one or more KYA events, with stable `uuid` dedup on re-import; see [docs/import-adr-sensor.md](docs/import-adr-sensor.md). OpenShell OCSF logs map one log line to one KYA event, with stable `uid` dedup on re-import; see [docs/import-openshell.md](docs/import-openshell.md). AGT's hash chain is unkeyed (it has no secret key), so "verified" means internally consistent, not authentic. The hosted console accepts the same formats ([docs/import-agt-hosted.md](docs/import-agt-hosted.md)).
-
-Imports land as observe-mode events (`host: import`, `reasonCode: IMPORTED`, error runs become `DENY`/`IMPORTED_ERROR`), with latency and token counts mapped when the source carries them. Files over 50MB are refused. Broken records are skipped; they never stop the import. The report (`kya start` / `kya receipt`) shows an **Import** card with per-format counts, error count, and the latest imported event once any import has landed.
-
-## Investigate (detections + fix briefs)
-
-`kya investigate` runs fixed local detectors over the record, with no LLM calls: PII leaks in summaries, DENY spikes, approval retry loops, repeated never-event attempts, unknown tools under hold, slow tools. Findings group into incidents. Each incident renders a Markdown fix brief shaped to paste into Claude Code, Cursor, or Codex. Every run also saves a compact summary to `~/.kya/investigate-last.json`, which the report renders as an **Investigations** card (findings by severity with detector ids, plus the top fix brief).
-
-```bash
-kya investigate           # summary: counts by severity + top incidents
-kya investigate --json    # findings + incidents + briefs, machine-readable
-```
-
-## Endpoint discovery
-
-`kya discover` lists AI agents, IDE extensions, desktop apps, model runtimes, and MCP servers on the current workstation. The scanner only inspects paths and config files; it never executes discovered binaries and never connects to runtime ports. Snapshots are written to `~/.kya/discovery/<iso-ts>.json` with a `latest.json` copy, and the live report shows a **Discovery** card with totals, sanctioned/review counts, and top categories.
-
-```bash
-kya discover                              # scan, save snapshot, print summary
-kya discover --json                       # print snapshot JSON to stdout
-kya discover --diff ~/.kya/discovery/latest.json  # compare current scan to saved snapshot
-kya discover --push                       # scan and push to hosted console
-```
-
-Push requires `KYA_BASE_URL` and `KYA_API_KEY`:
-
-```bash
-export KYA_BASE_URL=https://shield-agent.com
-export KYA_API_KEY=your-token
-kya discover --push
-```
-
-Home-directory prefixes are redacted from evidence paths (replaced with `~`). The snapshot includes a stable `endpointUid` derived from the OS, a hostname hash, and a user hash. No raw hostname or username leaves the machine. See [docs/discovery.md](docs/discovery.md) for the full scan list and privacy notes.
-
-## IoC check (supply-chain indicators)
-
-`kya doctor --iocs` checks this machine for known indicators of compromise, for example the trojanized `anthropic.claude-code` 2.1.313 extension. It reads local files only and makes no network call. The check is advisory: it reports findings and does not change anything. A clean result does not prove the machine is clean.
-
-```bash
-kya doctor --iocs     # scan now and print findings
-kya doctor            # show the last result
-```
-
-`kya hook` also runs the check in the background, at most once a day. Turn that off with `KYA_IOC=0` or `{"ioc":{"enabled":false}}` in `~/.kya/config.json`. The last result shows in `kya receipt` and in `kya dash` (pane 9). See [docs/ioc-scan.md](docs/ioc-scan.md).
-
-## Developer posture report (opt-in, off by default)
-
-`kya posture` can send a short report about this machine to your hosted workspace: agent hosts, agent-related extensions, MCP server names, the IoC result and the never-list status. Nothing is sent until you run `kya posture on` (it prints the exact report first) and the workspace allows it. `kya posture off` stops at once, and with the toggle off the client makes no network call. The client refuses any report that holds an environment name or value, a path, a user or host name, or an IP address. The check is advisory. See [docs/posture.md](docs/posture.md).
-
-```bash
-kya posture status
-kya posture on            # shows the exact report, then asks (or --yes in scripts)
-kya posture send --dry-run
-kya posture off
-```
-
-## Alert webhooks (decision routing)
-
-Route DENY / REQUIRE_APPROVE events to Slack, Microsoft Teams, Linear, Jira, or any webhook. Config lives in `.kya/config.json` (project) or `~/.kya/config.json` (global):
-
-```json
-{
-  "notify": {
-    "webhooks": [
-      { "url": "https://hooks.slack.com/services/...", "template": "slack", "events": ["DENY", "REQUIRE_APPROVE"] },
-      { "url": "https://<env>.environment.api.powerplatform.com:443/powerautomate/...", "template": "teams", "events": ["DENY"] },
-      { "url": "https://example.invalid/jira", "template": "jira", "events": ["DENY"] }
-    ]
-  }
-}
-```
-
-Every Slack message ends with a line that says a Slack reaction or reply is not an approval. The hosted plane can also post new approval requests to Slack (Approvals > Slack notify in the console); that message only links to the console and has no approve button.
-
-The `teams` template sends one Adaptive Card to a Teams Workflows webhook (in Teams: channel, Workflows, "Send webhook alerts to a channel", copy the webhook link). The card has no buttons and ends with a line that says a Teams reaction or reply is not an approval. Event text loses the characters that Teams uses for links, mentions and Markdown. The workflow URL holds a signature, so keep it secret; the notify log stores the host only. The hosted plane can also post new approval requests to Teams (Approvals > Teams notify in the console).
-
-`KYA_NOTIFY_WEBHOOK=<url>` is the zero-config variant (generic payload). Delivery retries with exponential backoff (250ms/1s/4s + jitter), per-attempt timeouts, a per-URL circuit breaker (stops sending to a target that keeps failing), and a send rate limiter. Payloads are built only from redacted record fields, with an automatic minimized fallback if the secret scan finds something. From short-lived hook/wrap spawns, a detached helper (`kya notify-flush`) sends the webhooks, so the gate path never waits on the network. Every delivery attempt is appended to `~/.kya/notify-log.jsonl` (target host only, never the full URL; capped at the last 500 entries), and the report's System tab shows an **Alerts** panel with per-target delivered/failed counts and the last attempt.
-
-## Security alerts
-
-`kya` can alert you when its detectors find an incident, for example a never-list tool that an agent tries again and again. The fixed detectors decide that it is an incident. An optional local model (about 150 MB plus a local runtime of about 100 MB, fully offline after one download, advisory) adds a category, an urgency and a next step. Alerts are **off by default** and **advisory**: they never block a tool call, and the model never removes an alert.
-
-`kya start` asks once, in a terminal: `Turn on security alerts? [Y/n]`. Yes installs the local runtime and model, turns alerts on and sends one test alert (desktop notification and webhooks). No is remembered and never asked again; turn it on later with `KYA_ALERTS=on kya start`. `KYA_ALERTS=off` never asks. Without a terminal `kya start` prints one hint line. If the install fails, `kya start` still works and alerts use the detector severity only. To turn alerts off: `kya alerts off` (or `KYA_ALERTS=off`). Each new incident also shows a desktop notification (fixed text, no agent text); turn it off with `"alerts": {"desktop": false}`.
-
-```bash
-kya alerts on        # write alerts.enabled to ~/.kya/config.json (no model download)
-kya alerts status    # setting, severity floor, desktop, triage model, receivers, last 10 alerts (--json for scripts)
-kya alerts test      # send one synthetic incident, marked as a test, to the desktop and to each receiver
-kya alerts off
-```
-
-The alert goes to every webhook in `notify.webhooks` of `~/.kya/config.json` whose `events` list holds `"incident.opened"` (or that has no `events` list). It uses the same templates, retries, circuit breaker and rate limit as the decision alerts. The live report also lists the incidents that alerted, with the triage. The `triage` object holds `model`, `category`, `urgency` and `action` (each `{id, p}`) and `benign` (the probability that the incident is harmless); the model cannot change the severity or remove an alert, and a missing model means no `triage` object. Settings (user level only, a repo config cannot change them): `{"alerts": {"enabled": true, "minSeverity": "high", "windowMinutes": 120, "desktop": true}}`. `KYA_ALERTS=on|off` overrides `enabled`. See [docs/alerts.md](docs/alerts.md).
-
-## Optional sandbox wrap (Firecracker, OpenShell)
-
-Beside the gate, not inside MCP. Opt-in only:
-
-```bash
-KYA_SANDBOX=mock kya sandbox spawn
-KYA_SANDBOX=mock kya sandbox exec --sandbox-id <id> --cmd "true"
-KYA_SANDBOX=mock kya sandbox kill --sandbox-id <id>
-```
-
-`org.sample.sandbox.exec` without `--sandbox-id` is **DENY** `MISSING_SANDBOX_ID`. Real Firecracker needs `firecracker` + `jailer` on PATH and kernel/rootfs env (`KYA_SANDBOX_KERNEL`, `KYA_SANDBOX_ROOTFS`). We do not ship those binaries. `KYA_SANDBOX=openshell` drives [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) through the `openshell` CLI and needs `openshell` plus `docker` or `podman` on PATH; KYA renders an OpenShell policy per spawn, pins a minimum CLI version, and always sets `OPENSHELL_TELEMETRY_ENABLED=false`. See [docs/sandbox.md](docs/sandbox.md) for backend details. `serve-mcp` still exposes only evaluate / ingest / request_approval.
-
-## Cost showback (observe only)
-
-`kya orr run --usage ./usage.json` (or `.kya/usage.json`) adds a showback section: tokens and estimated USD by agent and run. Subagents nest under `parentRunId`. That section is not a billing meter and not a policy gate. Hosted metrics show the same rollup when usage is ingested with a session. Events in the record that carry host-reported token counts (hook payloads with a `usage` object, imported traces) are used before the static per-event estimate, and the report states how many window events had real usage.
-
-## Enterprise (separate tier)
-
-Pin, private registry, multi-tenant density, ORR board ops, and support are not required for the day-1 `npx` path above.
-
-## Develop
-
-```bash
-pnpm install
-pnpm test
-pnpm build
-```
+- [Install hub](https://shield-agent.com/install) and [how KYA works](https://shield-agent.com/how-kya-works)
+- [All documentation](docs/index.md), [per-host recipes](docs/hosts/) and the [feature list](docs/features.md)
+- [The never-list](docs/never-list.md), [the guard pack](docs/guard-pack.md) and [LIMITATIONS.md](LIMITATIONS.md)
+- Cline: `npm install -g @shield-agent/kya@latest`, then follow [`llms-install.md`](llms-install.md)
+- [Anonymous usage stats: off by default, what is sent](docs/telemetry.md)
+- [What is open source and what is hosted](docs/oss-vs-hosted.md)
 
 ## All features
 
@@ -648,7 +79,8 @@ Generated from `sdks/kya/features.json` by `pnpm sync:features`. Do not edit by 
 | Feature | Command or flag | Status |
 |---|---|---|
 | Print version | `kya version`, `--version`, `-v`, `-V` | stable |
-| One-line start | `kya start`, `--no-open`, `--force`, `--no-gate` | stable |
+| One-line start | `kya start`, `--no-open`, `--force`, `--no-gate`, `--yes`, `--dry-run`, `KYA_YES=1` | stable |
+| Undo kya start | `kya uninstall`, `--project`, `--dry-run`, `~/.kya/manifest.json`, `~/.kya/bin/kya-hook` | stable |
 | Stop report server | `kya stop`, `--all` | stable |
 | Scaffold config | `kya init`, `--force` | stable |
 | Wire a coding host | `kya connect`, `--project`, `--force` | stable |
@@ -660,11 +92,14 @@ Generated from `sdks/kya/features.json` by `pnpm sync:features`. Do not edit by 
 | Scoop install | `scoop install shield-kya` | beta |
 | Team rollout: commit plugin pin | `kya team init`, `--dry-run` | beta |
 | Managed-settings JSON for admins | `kya team managed-settings` | beta |
+| Team rollout: guard plugin for a repository | `--guard` | beta |
 | Repository policy file | `.kya/policy.json` | beta |
 | Opt-in usage stats | `kya telemetry`, `--purge` | stable |
 | Global activity record | `KYA_HOME` | stable |
 | Activity report | `kya receipt`, `--open`, `--days`, `--session`, `--q`, `--json`, `--out` | stable |
+| Near-miss card | `kya receipt`, `--card` | stable |
 | Redacted share link | `kya receipt`, `--share`, `--share-url`, `--share-retries`, `KYA_SHARE_URL` | beta |
+| Share and claim | `kya start`, `kya receipt`, `--share`, `kya login`, `KYA_SHARE_URL` | beta |
 | Natural-language search in report | none | beta |
 | Map of agent actions | `kya map`, `--days`, `--json`, `--html`, `--session` | beta |
 | Agent-flow export | `kya export`, `--format`, `--days`, `--session`, `--out`, `--force` | beta |
@@ -709,58 +144,5 @@ Generated from `sdks/kya/features.json` by `pnpm sync:features`. Do not edit by 
 | Plane connection and keys | `KYA_API_KEY`, `KYA_BASE_URL`, `KYA_HOST`, `--base-url`, `--api-key`, `--host`, `--agent-id` | stable |
 | Hosted login (device code) | `kya login`, `--base-url` | beta |
 | Sign out on this machine | `kya logout` | beta |
-| Hosted calls to action | `KYA_QUIET`, `KYA_CTA` | beta |
+| Share calls to action | `KYA_QUIET`, `KYA_CTA` | beta |
 <!-- features:end -->
-
-## Docs
-
-- [Install hub](https://shield-agent.com/install)
-- [How KYA works](https://shield-agent.com/how-kya-works)
-- [Per-host recipes (23 hosts)](docs/hosts/)
-- [Herdr mod: KYA calls beside your agent terminals](docs/herdr.md)
-- [Top-20 MCP server support matrix (taxonomy + gate recipes)](docs/mcp-servers.md)
-- [OTLP metrics (OSS + hosted)](docs/otlp.md)
-- [Anonymous usage stats (opt-in): what is sent, controls, retention](docs/telemetry.md)
-- [Link this machine to the hosted console (kya login)](docs/login.md)
-- [OWASP MCP governance map](docs/owasp-mcp-governance.md)
-- [Claude Code plugin](docs/hosts/claude-plugin.md) · [Copilot CLI plugin](docs/hosts/copilot.md#plugin) · [Codex plugin](docs/hosts/codex.md#codex-plugin) · [Gemini CLI extension](docs/hosts/gemini.md#gemini-cli-extension)
-- [Import the AGT audit log (CLI)](docs/import-agt.md) · [hosted](docs/import-agt-hosted.md)
-- [kya certify - Agent Trust Baseline gap reports](docs/certify.md)
-- [EU AI Act crosswalk for the Agent Trust Baseline](docs/certify-eu-ai-act.md)
-- [Security alerts for detected incidents (optional local triage model, advisory)](docs/alerts.md)
-- [Sandbox backends (mock / firecracker / openshell)](docs/sandbox.md)
-- [Works with your observability stack](docs/marketing/observability-stack.md)
-- [SDK & framework integrations (in-process shims)](docs/sdk-integrations.md)
-- [Hosted operator SSO / SCIM (not in OSS CLI)](docs/hosted-operator-sso.md)
-- [What is open source and what is hosted](docs/oss-vs-hosted.md)
-- See also `LIMITATIONS.md` in this repo
-
-## Hosted console (`kya login`, optional)
-
-`kya login` links this machine to your hosted Shield KYA workspace. It uses the device code flow: the CLI shows a short code, you approve it in the hosted console, and the CLI saves a full-workspace API key with mode 0600 in `~/.kya/hosted-credentials.json`. `kya logout` deletes that file. It does not revoke the key on the server, so revoke it in the console too. The OSS CLI works without an account, and `kya certify` and the hook never read the saved key. Details, failure cases and the one-line calls to action: [docs/login.md](docs/login.md).
-
-## Anonymous usage stats (opt-in, off by default)
-
-The first time you run `kya start`, `kya init` or `kya connect` in a terminal, KYA asks once whether to share anonymous usage stats (`[y/N]`, the default is No). Only an explicit `y` or `yes` turns it on. Nothing is sent in CI, in non-interactive runs, with `--json`, or when `DO_NOT_TRACK=1` / `KYA_TELEMETRY=0` is set. `kya hook` itself never touches the network; when you opted in it starts a detached helper at most once a day that sends one `ping`, so hook-only installs still count as active.
-
-```bash
-kya telemetry show        # the exact payload, field by field
-kya telemetry status      # on / off / not asked, and what overrides it
-kya telemetry off --purge # turn off and erase what the server holds for this install
-```
-
-Full details, the payload, retention and how to self-host the endpoint: [docs/telemetry.md](docs/telemetry.md).
-
-## OTLP (optional)
-
-Opt-in. Default off.
-
-**OSS CLI:** set `KYA_OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_ENDPOINT`) to export thin evaluate latency (`kya.client.evaluate.latency`) with tags `verdict` and `host` only. No tool args or API keys.
-
-**Decision span export:** set `KYA_OTLP_EXPORT_ENDPOINT` (or `"otlpExport": { "endpoint": ... }` in `.kya/config.json`) to emit every decision as an OTLP/JSON GenAI span (`gen_ai.tool.name`, `kya.verdict`, `kya.reason_code`, token attributes when known) to any OTLP/HTTP backend. Long-lived processes (MCP gate, gateway) export every decision. Hook/wrap spawns export DENY / REQUIRE_APPROVE via the detached `notify-flush` helper. Plaintext http is accepted for loopback only unless `"insecure": true`. Flush results collect in `~/.kya/otel-stats.json` (endpoint host label, spans sent/failed, last export time), shown as the **OTel export** panel on the report's System tab.
-
-**Map attributes on spans (opt-in, default off):** `"otlpExport": { "endpoint": ..., "mapAttrs": true }` in `.kya/config.json` in your account home folder (not `HOME` or `KYA_HOME`; owned by you, no group or other write (600 recommended), no hard link, not inside the project, symlink checks apply) adds `kya.target.class` (a class, never a path; a project class goes out as `project`) and `kya.device` (hashed device id), and sends `kya.session_id` as the session hash of `kya export`, so dashboards keyed on the raw id work only while it is off. `kya doctor` says on stderr when the file is ignored. Env, `HOME`, `KYA_HOME` and a project `.kya/config.json` cannot turn it on. See [`docs/otlp.md`](docs/otlp.md).
-
-**Hosted plane:** richer Micrometer gauges and timers when `KYA_OTLP_ENABLED=true`.
-
-Full env, Grafana/Datadog notes, forbid list, and a Collector sample: [`docs/otlp.md`](docs/otlp.md).

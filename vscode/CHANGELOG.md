@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+Listing text now opens with the kya promise: "Stops your coding agent from deleting, leaking or dropping things. Records everything else." The README opens with the same line.
+
 ## 0.1.1
 
 Listing text now says that kya blocks the never-list and the guard pack (the 0.1.0 listing said it blocks only the never-list). The extension is now published to the VS Code Marketplace and Open VSX by the release pipeline on each `kya-v*` tag.

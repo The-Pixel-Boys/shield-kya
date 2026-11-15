@@ -181,7 +181,7 @@ describe("cli certify", () => {
 
   it("HELP lists certify", async () => {
     const { io, logs } = captureIo();
-    const code = await runCli(["--help"], io, env(tmp()), tmp());
+    const code = await runCli(["--help", "--all"], io, env(tmp()), tmp());
     expect(code).toBe(0);
     expect(logs.join("\n")).toContain("certify");
   });

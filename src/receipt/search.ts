@@ -580,6 +580,8 @@ export function eventMatchesFilter(e: TrailEvent, group: string, value: string):
   switch (group) {
     case "verdict":
       return e.verdict.toUpperCase() === value;
+    case "outcome":
+      return e.outcome === value;
     case "never":
       return (e.neverEvent || e.reasonCode === "NEVER_EVENT") && value === "1";
     case "mode":

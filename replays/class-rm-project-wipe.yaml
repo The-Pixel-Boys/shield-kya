@@ -1,0 +1,13 @@
+id: class-rm-project-wipe
+kind: class
+title: rm -rf of everything in the project folder
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    rm -rf ./*
+expect: ask
+rule: rm-project-wipe
+since: 0.35.0
+credit: ""

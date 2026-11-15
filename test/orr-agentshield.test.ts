@@ -768,7 +768,7 @@ describe("e2e: kya orr run CLI + AgentShield JSON", () => {
 
   it("help names the producer id", async () => {
     const { io, logs } = captureIo();
-    const code = await runCli(["--help"], io);
+    const code = await runCli(["--help", "--all"], io);
     expect(code).toBe(0);
     expect(logs.join("\n")).toContain("harness.agentshield");
     expect(logs.join("\n")).toContain("--agentshield-json");

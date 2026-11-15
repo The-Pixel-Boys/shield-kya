@@ -11,9 +11,9 @@ PackageUrl: https://shield-agent.com/install
 License: MIT
 LicenseUrl: https://github.com/The-Pixel-Boys/shield-kya/blob/main/LICENSE
 Copyright: Copyright (c) 2026 MFR Limited
-ShortDescription: Audit trail and traceability for AI agents
+ShortDescription: Stops your coding agent from deleting, leaking or dropping things
 Description: |
-  Audit trail and traceability for AI agents. See what every coding agent did and check each tool call against policy.
+  Stops your coding agent from deleting, leaking or dropping things. Records everything else.
 Moniker: shield-kya
 Tags:
   - kya

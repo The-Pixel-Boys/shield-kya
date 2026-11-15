@@ -10,6 +10,9 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// These tests spawn CLIs or git, or wait on timers: 0.8 to 1.6 s each on an idle Mac, so the 5 s default is too tight on a loaded CI host. Hang guard only; budget assertions stay.
+vi.setConfig({ testTimeout: 30_000 });
 import { runCli, type CliIo } from "../src/cli.js";
 import { loadIocList } from "../src/ioc/list.js";
 import { authorizedKeyComments, runIocScan } from "../src/ioc/scan.js";

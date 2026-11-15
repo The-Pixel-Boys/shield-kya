@@ -27,14 +27,20 @@ function cfg(cwd: string) {
 }
 
 describe("kya start", () => {
-  it("inits, wires MCP configs, does not hang without open", async () => {
+  it("inits, wires project MCP configs for the hosts found, does not hang without open", async () => {
     const cwd = tmp("kya-start-");
     const home = tmp("kya-start-home-");
     try {
+      mkdirSync(join(home, ".claude"));
+      mkdirSync(join(home, ".cursor"));
       const r = await runStart(cfg(cwd), { open: false, home });
       expect(existsSync(join(cwd, ".kya", "config.json"))).toBe(true);
-      expect(r.wired.length).toBeGreaterThanOrEqual(3);
-      for (const p of [".mcp.json", "mcp.json", join(".cursor", "mcp.json")]) {
+      expect(r.wired.length).toBeGreaterThanOrEqual(2);
+      // Not written by start: the generic mcp.json, and the init extras (they belong to `kya init`).
+      for (const p of ["mcp.json", ".env.example", join(".kya", "tools.sample.json"), "orr-report"]) {
+        expect(existsSync(join(cwd, p))).toBe(false);
+      }
+      for (const p of [".mcp.json", join(".cursor", "mcp.json")]) {
         const full = join(cwd, p);
         expect(existsSync(full)).toBe(true);
         const raw = JSON.parse(readFileSync(full, "utf8")) as {
@@ -55,6 +61,8 @@ describe("kya start", () => {
     const cwd = tmp("kya-start-");
     const home = tmp("kya-start-home-");
     try {
+      mkdirSync(join(home, ".claude"));
+      mkdirSync(join(home, ".cursor"));
       await runStart(cfg(cwd), { open: false, home });
       const claude = JSON.parse(readFileSync(join(cwd, ".mcp.json"), "utf8")) as {
         mcpServers: { "shield-kya": { env: Record<string, string> } };
@@ -126,7 +134,8 @@ describe("kya start", () => {
       expect(second.wiredHosts).toHaveLength(0);
       expect(second.wired).toHaveLength(0);
       expect(second.skipped).toContain(join(home, ".grok", "config.toml"));
-      expect(second.skipped).toContain(join(cwd, ".mcp.json"));
+      // No Claude Code on this machine: no project .mcp.json either.
+      expect(existsSync(join(cwd, ".mcp.json"))).toBe(false);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
       rmSync(home, { recursive: true, force: true });
@@ -137,6 +146,8 @@ describe("kya start", () => {
     const cwd = tmp("kya-start-");
     const home = tmp("kya-start-home-");
     try {
+      mkdirSync(join(home, ".claude"));
+      mkdirSync(join(home, ".cursor"));
       writeFileSync(join(cwd, ".mcp.json"), "{ not json", "utf8");
       const r = await runStart(cfg(cwd), {
         open: false,
@@ -145,11 +156,11 @@ describe("kya start", () => {
       });
       expect(readFileSync(join(cwd, ".mcp.json"), "utf8")).toBe("{ not json");
       expect(r.skipped.some((s) => s.includes("not valid JSON"))).toBe(true);
+      // The project file that failed is not reported as wired, and the failure is the only thing that says so.
+      expect(r.wired).not.toContain(join(cwd, ".mcp.json"));
+      expect(r.wired.some((w) => w.endsWith(".mcp.json") && !w.includes(".cursor"))).toBe(false);
       // The other project files still wire.
-      expect(existsSync(join(cwd, "mcp.json"))).toBe(true);
       expect(existsSync(join(cwd, ".cursor", "mcp.json"))).toBe(true);
-      // A host whose wiring failed must not claim a shield-kya load.
-      expect(r.next).not.toMatch(/[Cc]laude/);
       expect(r.next).toContain("No restart needed"); // Cursor wired fine
     } finally {
       rmSync(cwd, { recursive: true, force: true });

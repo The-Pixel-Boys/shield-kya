@@ -23,19 +23,49 @@
     {
       "id": "kya-start",
       "name": "One-line start",
-      "summary": "Wires the local MCP gate into your coding host and opens the live report in the background.",
+      "summary": "Shows a plan first (each file, created or merged, exact keys), asks once, then wires the local MCP gate into the coding hosts found on this machine and opens the live report in the background. It ends with a guard proof: three built-in demo calls go through the hook and are blocked, and they are not saved to the trail.",
       "cli": [
         "kya start",
         "--no-open",
         "--force",
-        "--no-gate"
+        "--no-gate",
+        "--yes",
+        "--dry-run",
+        "KYA_YES=1"
       ],
       "docs": [
         "README.md"
       ],
       "tests": [
         "test/start.test.ts",
-        "test/start-gate.test.ts"
+        "test/start-gate.test.ts",
+        "test/start-consent.test.ts",
+        "test/guard-first-e2e.test.ts",
+        "test/uninstall-hardening.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-uninstall",
+      "name": "Undo kya start",
+      "summary": "Reads the manifest of every write, removes only the keys KYA added, deletes files KYA created if unchanged, restores merged files byte for byte, and prints what it left alone. Hook launcher in ~/.kya/bin fails open; kya doctor flags a dead path.",
+      "cli": [
+        "kya uninstall",
+        "--project",
+        "--dry-run",
+        "~/.kya/manifest.json",
+        "~/.kya/bin/kya-hook"
+      ],
+      "docs": [
+        "README.md",
+        "docs/uninstall.md"
+      ],
+      "tests": [
+        "test/start-consent.test.ts",
+        "test/manifest.test.ts",
+        "test/start-gate.test.ts",
+        "test/uninstall-hardening.test.ts"
       ],
       "status": "stable",
       "plan": "oss"
@@ -228,6 +258,23 @@
       "plan": "oss"
     },
     {
+      "id": "kya-team-init-guard",
+      "name": "Team rollout: guard plugin for a repository",
+      "summary": "Adds a tag-pinned plugin marketplace and the kya-guard plugin to the project settings, prints the exact diff and an agent-guarded README badge that links to the public scoreboard, and is reversed by kya uninstall --project.",
+      "cli": [
+        "--guard"
+      ],
+      "docs": [
+        "docs/for-maintainers.md",
+        "docs/team-rollout.md"
+      ],
+      "tests": [
+        "test/team-guard.test.ts"
+      ],
+      "status": "beta",
+      "plan": "oss"
+    },
+    {
       "id": "kya-project-policy",
       "name": "Repository policy file",
       "summary": "Optional .kya/policy.json committed with the repo. Adds deny and requireApprove tool ids for the local gate; it cannot relax a verdict, and an invalid file is ignored with a note.",
@@ -258,6 +305,7 @@
       "tests": [
         "test/telemetry.test.ts",
         "test/telemetry-e2e.test.ts",
+        "test/telemetry-host-e2e.test.ts",
         "../../app/src/test/java/com/shieldagent/app/KyaOssTelemetryE2eIT.java"
       ],
       "status": "stable",
@@ -282,7 +330,7 @@
     {
       "id": "kya-receipt",
       "name": "Activity report",
-      "summary": "Writes the activity report as HTML, JSON or Markdown for the last few days or one session.",
+      "summary": "Writes the activity report as HTML, JSON or Markdown for the last few days or one session. The first panel is Blocked (the last five blocked calls, or a labelled demo before the first one); Certify has its own tab.",
       "cli": [
         "kya receipt",
         "--open",
@@ -297,7 +345,29 @@
         "docs/report-design.md"
       ],
       "tests": [
-        "test/receipt-render.test.ts"
+        "test/receipt-render.test.ts",
+        "test/guard-first-e2e.test.ts",
+        "test/guard-first-render.test.ts",
+        "test/honest-verdicts.test.ts",
+        "test/honest-verdicts-e2e.test.ts"
+      ],
+      "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-receipt-card",
+      "name": "Near-miss card",
+      "summary": "Makes a 1200 by 630 image (SVG, and PNG when a renderer is on the machine) about the last call the guard denied: the rule, the host and the date, nothing private. Prints a two-line caption. A button next to each stopped call in the live report, and the command in a saved report.",
+      "cli": [
+        "kya receipt",
+        "--card"
+      ],
+      "docs": [
+        "docs/guard-pack.md"
+      ],
+      "tests": [
+        "test/near-miss-card.test.ts",
+        "test/near-miss-card-e2e.test.ts"
       ],
       "status": "stable",
       "plan": "oss"
@@ -305,7 +375,7 @@
     {
       "id": "kya-receipt-share",
       "name": "Redacted share link",
-      "summary": "Publishes a redacted summary of the report and prints a public link.",
+      "summary": "Publishes a redacted summary of the report and prints a public link and a claim link.",
       "cli": [
         "kya receipt",
         "--share",
@@ -319,7 +389,34 @@
       ],
       "tests": [
         "test/receipt-share.test.ts",
-        "../../app/src/test/java/com/shieldagent/app/ShareToHostedE2eIT.java"
+        "test/share-claim-e2e.test.ts",
+        "../../app/src/test/java/com/shieldagent/app/ShareToHostedE2eIT.java",
+        "test/honest-verdicts.test.ts"
+      ],
+      "status": "beta",
+      "plan": "both"
+    },
+    {
+      "id": "kya-share-claim",
+      "name": "Share and claim",
+      "summary": "The live report has a Share this report button that makes the redacted public link, with a copy control. The shared page has a claim form: confirm an email address to keep the report and get one summary email each week. A claim never connects a computer: kya login does. Unclaimed links are deleted after 7 days.",
+      "cli": [
+        "kya start",
+        "kya receipt",
+        "--share",
+        "kya login",
+        "KYA_SHARE_URL"
+      ],
+      "docs": [
+        "docs/login.md",
+        "docs/activity-record.md",
+        "docs/oss-vs-hosted.md"
+      ],
+      "tests": [
+        "test/share-claim-e2e.test.ts",
+        "../../app/src/test/java/com/shieldagent/app/ShareClaimE2eIT.java",
+        "../../app/src/test/java/com/shieldagent/app/ShareClaimLimitsE2eIT.java",
+        "../../app/src/test/java/com/shieldagent/app/KyaShareSignalE2eIT.java"
       ],
       "status": "beta",
       "plan": "both"
@@ -498,7 +595,7 @@
     {
       "id": "kya-hook-guard-pack",
       "name": "Guard pack",
-      "summary": "Second layer of local denies in the PreToolUse hook, local and hosted (--plane-config): destructive shell commands, credential reads, secret-shaped writes and secret exfiltration. Config and guardAllow come from the user-level ~/.kya/config.json only.",
+      "summary": "Second layer of local denies in the PreToolUse hook, local and hosted (--plane-config): destructive shell commands, credential reads, secret-shaped writes and secret exfiltration. Four rules ask the person instead of denying (Claude Code permissionDecision ask; other hosts deny). Config and guardAllow come from the user-level ~/.kya/config.json only.",
       "cli": [
         "kya hook"
       ],
@@ -542,7 +639,8 @@
         "README.md"
       ],
       "tests": [
-        "test/hook.test.ts"
+        "test/hook.test.ts",
+        "test/honest-verdicts-e2e.test.ts"
       ],
       "status": "stable",
       "plan": "oss"
@@ -749,7 +847,8 @@
       ],
       "tests": [
         "test/certify.test.ts",
-        "test/certify-cli.test.ts"
+        "test/certify-cli.test.ts",
+        "test/honest-verdicts.test.ts"
       ],
       "status": "stable",
       "plan": "oss"
@@ -1019,6 +1118,59 @@
         "test/claude-plugin.test.ts"
       ],
       "status": "stable",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-plugin-claude-guard",
+      "name": "Claude Code guard plugin (kya-guard)",
+      "summary": "A second Claude Code plugin with one bundled file, one PreToolUse hook and no install step. It runs the guard pack locally with no network call, fails open, writes one trail line per call, and has /kya-guard:status.",
+      "cli": [
+        "/plugin install kya-guard@shield-kya",
+        "/kya-guard:status"
+      ],
+      "docs": [
+        "plugins/kya-guard/README.md",
+        "plugins/kya-guard/SECURITY.md"
+      ],
+      "tests": [
+        "test/guard-bundle.test.ts",
+        "test/guard-plugin-e2e.test.ts"
+      ],
+      "status": "planned",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-plugin-guard-share",
+      "name": "KYA Guard near-miss card (/kya-guard:share)",
+      "summary": "A plugin command that makes the near-miss card (SVG, no network, no child process) for the last denied call and prints a caption. /kya-guard:status offers it when a deny is under 7 days old.",
+      "cli": [
+        "/kya-guard:share"
+      ],
+      "docs": [
+        "plugins/kya-guard/README.md",
+        "docs/guard-pack.md"
+      ],
+      "tests": [
+        "test/near-miss-card-e2e.test.ts",
+        "test/guard-bundle.test.ts"
+      ],
+      "status": "planned",
+      "plan": "oss"
+    },
+    {
+      "id": "kya-plugin-guard-hosts",
+      "name": "KYA Guard for Codex, Cursor, Copilot CLI and Gemini CLI",
+      "summary": "The same bundled guard file for four more coding agents, each with the hook file its host reads. Hosts without an ask prompt turn an ask rule into a deny.",
+      "cli": [],
+      "docs": [
+        "plugins/kya-guard/HOSTS.md",
+        "plugins/kya-guard/submission/README.md"
+      ],
+      "tests": [
+        "test/guard-hosts.test.ts",
+        "test/guard-submission.test.ts"
+      ],
+      "status": "planned",
       "plan": "oss"
     },
     {
@@ -1350,8 +1502,8 @@
     },
     {
       "id": "kya-cta",
-      "name": "Hosted calls to action",
-      "summary": "One line, at most once a day, after kya certify (gaps) and kya receipt. Silent in CI, non-TTY, KYA_QUIET, KYA_CTA=0 and config opt-out.",
+      "name": "Share calls to action",
+      "summary": "One line, at most once a day, after kya certify (gaps), kya receipt, and kya start once the trail has 10 events. Every line asks for kya receipt --share. Silent in CI, non-TTY, KYA_QUIET, KYA_CTA=0 and config opt-out.",
       "cli": [
         "KYA_QUIET",
         "KYA_CTA"
@@ -1361,7 +1513,8 @@
         "docs/login.md"
       ],
       "tests": [
-        "test/cta.test.ts"
+        "test/cta.test.ts",
+        "test/cta-start.test.ts"
       ],
       "status": "beta",
       "plan": "both"
@@ -1641,12 +1794,6 @@
       "rule": "R6-tests",
       "id": "kya-scoop",
       "reason": "No test names the Scoop install line. Clears when install-channel tests cover it.",
-      "clearedBy": "B6"
-    },
-    {
-      "rule": "R6-tests",
-      "id": "kya-receipt",
-      "reason": "test/receipt-render.test.ts exists but does not run kya receipt by name. Clears when a test names the command.",
       "clearedBy": "B6"
     },
     {

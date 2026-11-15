@@ -42,6 +42,16 @@ export const MANIFESTS = [
   { file: ".cursor-plugin/plugin.json", pointers: ["version"] },
 ];
 
+// Manifests with their own semantic version: they do not follow the CLI's release train. The kya-guard plugin
+// is released only when its rules or behaviour change (spec G1), so it is not pinned to the package version.
+export const OWN_VERSION_MANIFESTS = [
+  "plugins/kya-guard/.claude-plugin/plugin.json",
+  "plugins/kya-guard/.codex-plugin/plugin.json",
+  "plugins/kya-guard-cursor/.cursor-plugin/plugin.json",
+  "plugins/kya-guard-copilot/plugin.json",
+  "plugins/kya-guard-gemini/gemini-extension.json",
+];
+
 // Optional extra scan roots, relative to the package root. Missing directories are skipped.
 export const EXTRA_ROOTS = ["../kya-vscode", "../../integrations"];
 
@@ -145,6 +155,7 @@ export function packagingVersions(rel, text) {
 
 /** Version fields of a manifest file (matched by `rel` path suffix); [] when `rel` is not one. */
 export function manifestVersions(rel, text) {
+  if (OWN_VERSION_MANIFESTS.some((f) => rel === f || rel.endsWith(`/${f}`))) return [];
   const spec = MANIFESTS.find((s) => rel === s.file || rel.endsWith(`/${s.file}`));
   if (!spec) return [];
   let tree;

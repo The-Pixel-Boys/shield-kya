@@ -7,12 +7,12 @@
  */
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
-import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import type { Server } from "node:http";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { installFakeModel, installFakeOrt } from "./support/fake-triage-runtime.js";
+import { receiver as makeReceiver, type Receiver } from "./support/alert-receiver.js";
 import { triageRuntimeDir } from "../src/alerts/triage-status.js";
 
 const cliJs = join(import.meta.dirname, "..", "dist", "cli.js");
@@ -35,38 +35,7 @@ const NEVER = JSON.stringify({
   tool_input: { table: "users" },
 });
 
-interface Hit {
-  readonly body: Record<string, any>;
-}
-interface Receiver {
-  readonly url: string;
-  readonly hits: Hit[];
-  incidents(): Hit[];
-  denies(): Hit[];
-}
-async function receiver(): Promise<Receiver> {
-  const hits: Hit[] = [];
-  const server = createServer((req, res) => {
-    let raw = "";
-    req.on("data", (d) => (raw += String(d)));
-    req.on("end", () => {
-      try {
-        hits.push({ body: JSON.parse(raw) as Record<string, any> });
-      } catch {
-        /* not JSON */
-      }
-      res.writeHead(200, { "content-type": "application/json" }).end("{}");
-    });
-  });
-  servers.push(server);
-  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
-  return {
-    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
-    hits,
-    incidents: () => hits.filter((h) => h.body["event"] === "incident.opened"),
-    denies: () => hits.filter((h) => h.body["kind"] === "kya.trail.verdict"),
-  };
-}
+const receiver = (): Promise<Receiver> => makeReceiver(servers);
 
 const temp = (prefix: string): string => {
   const d = mkdtempSync(join(tmpdir(), prefix));
@@ -294,7 +263,8 @@ describe.skipIf(process.platform === "win32")("desktop notification e2e (stub no
     expect(args).toContain("KYA security alert");
     expect(args).toContain("Severity: high. Detectors: never-repeat. Open kya report.");
     // the webhook alert was sent as well
-    expect(r.inc.incidents()).toHaveLength(1);
+    const trace = JSON.stringify({ hits: r.inc.hits.map((h) => [h.path, h.body["incident"]?.ref]), foreign: r.inc.foreign.map((h) => h.path) });
+    expect(r.inc.incidents(), trace).toHaveLength(1);
   }, 60_000);
 
   it("alerts.desktop false in the user config: no notification, the webhook alert still goes out", async () => {

@@ -20,7 +20,8 @@ import {
   normalizePath, parseShell, pathStrings, windowsOf, type Shell,
 } from "./never-list-input.js";
 
-export type GuardCode = "NEVER_SHELL" | "NEVER_SECRET_READ" | "NEVER_SECRET_WRITE" | "NEVER_EXFIL";
+/** GUARD_ASK is the second outcome: the human decides (see ASK_RULES). It is not a NEVER_ code, so it is not counted as a block. */
+export type GuardCode = "NEVER_SHELL" | "NEVER_SECRET_READ" | "NEVER_SECRET_WRITE" | "NEVER_EXFIL" | "GUARD_ASK";
 
 export interface GuardHit {
   readonly rule: string;
@@ -57,7 +58,13 @@ export const GUARD_DEFAULTS: GuardConfig = { shellNeverList: true, secretsGuard:
 export const GUARD_SHELL_RULES = [
   "rm-root-home", "terraform-destroy", "sql-drop", "git-force-push", "git-delete-default-branch", "git-hard-reset-clean",
   "docker-volumes", "k8s-delete-ns", "cloud-delete", "railway-volume-delete",
+  "sql-delete-all", "prisma-migrate-reset", "prisma-accept-data-loss", "supabase-reset-linked", "rm-project-wipe", "rm-git-dir",
+  "mongo-drop-database", "redis-flush", "fly-destroy", "vercel-remove", "gh-repo-delete",
+  // new-rule:ids (pnpm new-rule adds a rule id above this line)
 ] as const;
+
+/** Rules whose outcome is ask, not deny: routine on a local database or a scratch folder, catastrophic on a remote one. */
+export const ASK_RULES: ReadonlySet<string> = new Set(["sql-delete-all", "prisma-migrate-reset", "prisma-accept-data-loss", "rm-project-wipe"]);
 
 // ---------------------------------------------------------------------------------------------
 // Config
@@ -386,6 +393,127 @@ const railwayVolumeDelete: Matcher = (sh) =>
     return pos[0] === "volume" && pos[1] === "delete";
   }) ? "" : NO;
 
+/** Args after `tool`, run directly or through a package runner (`npx prisma ...`, `pnpm exec prisma@5 ...`). */
+const RUNNERS = new Set(["npx", "pnpx", "bunx", "yarn", "pnpm", "npm", "bun"]);
+function toolArgs(c: Cmd, tool: string): readonly string[] | undefined {
+  if (c.name === tool) return c.args;
+  if (!RUNNERS.has(c.name)) return NO;
+  const i = c.args.findIndex((a) => a === tool || a.startsWith(`${tool}@`));
+  return i >= 0 ? c.args.slice(i + 1) : NO;
+}
+
+/** DELETE FROM <table> with no WHERE before the end of the statement (`;` or the closing quote). */
+const SQL_DELETE = /\bdelete\s+from\s+(?:only\s+)?(?:[\w.]+|\\?"[\w. ]+\\?"|`[^`]+`)([^;"'`]*)/gi;
+const sqlDeleteAll: Matcher = (sh) => {
+  if (!hasCommand(sh, (c) => DB_CLIENTS.has(c.name))) return NO;
+  for (const m of sh.raw.matchAll(SQL_DELETE)) if (!/\bwhere\b/i.test(m[1]!)) return "";
+  return NO;
+};
+
+const PRISMA_VALUE_OPTS = new Set(["--schema", "--config"]);
+const prismaWords = (sh: Shell): Words[] => {
+  const out: Words[] = [];
+  hasCommand(sh, (c) => {
+    const a = toolArgs(c, "prisma");
+    if (a) out.push(words(a, PRISMA_VALUE_OPTS));
+    return false;
+  });
+  return out;
+};
+const prismaMigrateReset: Matcher = (sh) => (prismaWords(sh).some((w) => w.pos[0] === "migrate" && w.pos[1] === "reset") ? "" : NO);
+const prismaAcceptDataLoss: Matcher = (sh) => (prismaWords(sh).some((w) => w.pos[0] === "db" && w.pos[1] === "push" && hasLong(w.flags, "--accept-data-loss")) ? "" : NO);
+
+const SUPABASE_VALUE_OPTS = new Set(["--workdir", "--db-url", "--password", "-p", "--project-ref", "--version"]);
+const supabaseResetLinked: Matcher = (sh) =>
+  hasCommand(sh, (c) => {
+    const a = toolArgs(c, "supabase");
+    if (!a) return false;
+    const { pos, flags } = words(a, SUPABASE_VALUE_OPTS);
+    return pos[0] === "db" && pos[1] === "reset" && (hasLong(flags, "--linked") || hasLong(flags, "--db-url"));
+  }) ? "" : NO;
+
+/** `rm -r` targets that resolve to the project root (`.`, `./*`, `*`, its absolute path) or to its `.git`. A `cd` elsewhere in the command changes what a relative target means, so those are skipped. */
+function rmProjectTargets(sh: Shell, ctx: GuardContext, want: "root" | "git"): string[] {
+  const root = ctx.projectRoot ?? ctx.cwd;
+  const moved = hasCommand(sh, (c) => (c.name === "cd" || c.name === "pushd") && c.args.some((a) => a !== "." && a !== "./"));
+  const assigned = runtimeVars(sh.raw);
+  const hits: string[] = [];
+  hasCommand(sh, (c) => {
+    if (c.name !== "rm") return false;
+    const { pos, flags } = words(c.args);
+    if (!isRecursiveFlags(flags) || (want === "root" && !isForceFlags(flags))) return false;
+    for (const t of pos) {
+      if (t.includes("$(") || t.includes("`") || [...t.matchAll(/\$\{?([A-Za-z_][A-Za-z0-9_]*)/g)].some((m) => assigned.has(m[1]!))) continue;
+      if (moved && !t.startsWith("/") && !t.startsWith("~") && !t.startsWith("$")) continue;
+      const p = absPath(t, ctx).replace(/\/(\.\*|\*)$/, "");
+      if (want === "root" ? p === root : p === `${root}/.git`) hits.push(p);
+    }
+    return false;
+  });
+  return hits;
+}
+const rmProjectWipe: Matcher = (sh, ctx) => {
+  const t = rmProjectTargets(sh, ctx, "root");
+  return t.length ? t : NO;
+};
+const rmGitDir: Matcher = (sh, ctx) => {
+  const t = rmProjectTargets(sh, ctx, "git");
+  return t.length ? t : NO;
+};
+
+const mongoDropDatabase: Matcher = (sh) => (hasCommand(sh, named("mongosh", "mongo")) && /\bdropDatabase\s*\(/.test(sh.raw) ? "" : NO);
+
+/** Every server a redis-cli call selects: all `-h` values and all `-u`/`--uri` URLs, in any order. An unreadable value counts as remote. */
+const redisHosts = (args: readonly string[]): string[] => {
+  const out: string[] = [];
+  args.forEach((a, i) => {
+    if (a === "-h") out.push(args[i + 1] ?? "");
+    else if (a === "-u" || a === "--uri") out.push(/^unix:\/\//i.test(args[i + 1] ?? "") ? "localhost" : hostOf(args[i + 1] ?? "") ?? "");
+  });
+  return out;
+};
+// Deny unless every host-selecting option is loopback: `-h localhost -h prod` and `-u redis://127.0.0.1 -h prod` are remote.
+const redisFlush: Matcher = (sh) =>
+  hasCommand(sh, (c) => named("redis-cli", "valkey-cli")(c) && /\bflush(?:all|db)\b/i.test(sh.raw) && redisHosts(c.args).some((h) => !LOOPBACK.test(h))) ? "" : NO;
+
+const FLY_VALUE_OPTS = new Set(["-a", "--app", "-c", "--config", "-t", "--access-token", "-o", "--org", "--region", "-r"]);
+const flyDestroy: Matcher = (sh) =>
+  hasCommand(sh, (c) => {
+    if (!named("fly", "flyctl")(c)) return false;
+    const { pos } = words(c.args, FLY_VALUE_OPTS);
+    const group = /^(volumes?|vol|apps?)$/.test(pos[0] ?? "");
+    return pos[0] === "destroy" || (group && /^(destroy|delete)$/.test(pos[1] ?? ""));
+  }) ? "" : NO;
+
+const VERCEL_VALUE_OPTS = new Set(["-t", "--token", "-S", "--scope", "-A", "--local-config", "--global-config", "--cwd", "-d"]);
+const vercelRemove: Matcher = (sh) =>
+  hasCommand(sh, (c) => {
+    const a = toolArgs(c, "vercel") ?? toolArgs(c, "vc");
+    if (!a) return false;
+    const { pos } = words(a, VERCEL_VALUE_OPTS);
+    const rm = (w: string | undefined): boolean => w === "remove" || w === "rm";
+    return rm(pos[0]) || (pos[0] === "project" && rm(pos[1]));
+  }) ? "" : NO;
+
+const ghDeleteMethod = (args: readonly string[]): boolean =>
+  args.some((a, i) => {
+    const v = a === "-X" || a === "--method" ? args[i + 1] : a.startsWith("--method=") ? a.slice(9) : /^-X./.test(a) ? a.slice(2).replace(/^=/, "") : undefined;
+    return v !== undefined && v.toUpperCase() === "DELETE";
+  });
+/** `repos/...` path of a `gh api` endpoint: scheme, host, a GHES `api/v3/` prefix, leading slashes, query and fragment removed. */
+const ghRepoPath = (endpoint: string): boolean => /^repos\//i.test(endpoint.replace(/^https?:\/\/[^/]+/i, "").replace(/[?#].*$/, "").replace(/^\/+/, "").replace(/^api\/v3\//i, ""));
+const GH_VALUE_OPTS = new Set(["-R", "--repo", "-H", "--header", "--hostname", "-X", "--method", "-f", "-F", "--field", "--raw-field", "--jq", "-q", "-t", "--template", "--input", "--cache", "-p", "--preview"]);
+const ghRepoDelete: Matcher = (sh) =>
+  hasCommand(sh, (c) => {
+    if (c.name !== "gh") return false;
+    const { pos } = words(c.args, GH_VALUE_OPTS);
+    if (pos[0] === "repo") return pos[1] === "delete";
+    // Every operand is checked, so a stray value cannot hide the endpoint.
+    return pos[0] === "api" && ghDeleteMethod(c.args) && pos.slice(1).some(ghRepoPath);
+  }) ? "" : NO;
+
+// new-rule:matchers (pnpm new-rule adds a matcher stub above this line)
+
 const SHELL_MATCHERS: ReadonlyArray<readonly [string, Matcher]> = [
   ["rm-root-home", rmRoot],
   ["terraform-destroy", terraformDestroy],
@@ -397,6 +525,18 @@ const SHELL_MATCHERS: ReadonlyArray<readonly [string, Matcher]> = [
   ["k8s-delete-ns", k8sDeleteNs],
   ["cloud-delete", cloudDelete],
   ["railway-volume-delete", railwayVolumeDelete],
+  ["sql-delete-all", sqlDeleteAll],
+  ["prisma-migrate-reset", prismaMigrateReset],
+  ["prisma-accept-data-loss", prismaAcceptDataLoss],
+  ["supabase-reset-linked", supabaseResetLinked],
+  ["rm-project-wipe", rmProjectWipe],
+  ["rm-git-dir", rmGitDir],
+  ["mongo-drop-database", mongoDropDatabase],
+  ["redis-flush", redisFlush],
+  ["fly-destroy", flyDestroy],
+  ["vercel-remove", vercelRemove],
+  ["gh-repo-delete", ghRepoDelete],
+  // new-rule:entries (pnpm new-rule adds an entry above this line)
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -640,7 +780,8 @@ function* shellHits(sh: Shell, ctx: GuardContext, cfg: GuardConfig): Generator<G
       const t = m(sh, ctx);
       if (t === undefined) continue;
       const targets = typeof t === "string" ? [t] : t;
-      for (const target of targets) yield { rule, code: "NEVER_SHELL", ...(target ? { target } : {}) };
+      const code = ASK_RULES.has(rule) ? "GUARD_ASK" : "NEVER_SHELL";
+      for (const target of targets) yield { rule, code, ...(target ? { target } : {}) };
     }
   }
   if (cfg.secretsGuard) {
@@ -668,10 +809,16 @@ export function guardPackMatch(
   try {
     const f = fieldsOf(toolInput);
     if (!f) return NO;
+    // A deny anywhere in the call beats an ask, so `prisma migrate reset && rm -rf ~` is a deny.
+    let ask: GuardHit | undefined;
     if (isShellTool(toolId)) {
       for (const cmd of commandStrings(f)) {
         const sh = parseShell(cmd, ctx.home);
-        for (const hit of shellHits(sh, ctx, cfg)) if (!allowed(hit, cfg, ctx, cmd)) return hit;
+        for (const hit of shellHits(sh, ctx, cfg)) {
+          if (allowed(hit, cfg, ctx, cmd)) continue;
+          if (hit.code !== "GUARD_ASK") return hit;
+          ask ??= hit;
+        }
       }
     }
     const path = typeof f.file_path === "string" ? f.file_path : typeof f.path === "string" ? f.path : undefined;
@@ -685,7 +832,7 @@ export function guardPackMatch(
         if (abs === gcp || real === gcp) return { rule: "guard-config-write", code: "NEVER_SHELL", target: gcp };
       }
     }
-    if (!cfg.secretsGuard) return NO;
+    if (!cfg.secretsGuard) return ask;
     if (isWriteLike(toolId)) {
       for (const text of writtenStrings(f)) {
         const kind = secretShape(text);
@@ -702,6 +849,7 @@ export function guardPackMatch(
         if (!allowed(hit, cfg, ctx, undefined)) return hit;
       }
     }
+    return ask;
   } catch {
     // Fail open: a parse problem never adds a deny.
   }
@@ -731,6 +879,18 @@ const HINTS: Readonly<Record<string, string>> = {
   "k8s-delete-ns": "Deleting a namespace or everything in all namespaces needs the user to run it.",
   "cloud-delete": "Cloud deletes are not reversible. Ask the user to run this.",
   "railway-volume-delete": "Volume deletes are not reversible. Ask the user to run this.",
+  "sql-delete-all": "DELETE without WHERE removes every row. Add a WHERE clause, or the user approves it.",
+  "prisma-migrate-reset": "prisma migrate reset drops the database. Check DATABASE_URL points at a local database, or the user approves it.",
+  "prisma-accept-data-loss": "--accept-data-loss can drop columns and tables. Run prisma db push without it, or the user approves it.",
+  "supabase-reset-linked": "supabase db reset on a linked project wipes the remote database. Reset the local stack only, without --linked or --db-url.",
+  "rm-project-wipe": "This removes the whole project folder. Delete the specific folder instead (dist, build, node_modules), or the user approves it.",
+  "rm-git-dir": "Removing .git deletes the project history. Ask the user.",
+  "mongo-drop-database": "dropDatabase deletes a whole database. Ask the user to run it, after a backup.",
+  "redis-flush": "FLUSHALL and FLUSHDB on a remote server delete every key. Ask the user to run it.",
+  "fly-destroy": "Destroying a Fly volume or app is not reversible. Use fly volumes list, or ask the user to run it.",
+  "vercel-remove": "Removing a Vercel project or deployment is not reversible. Ask the user to run it.",
+  "gh-repo-delete": "Deleting a GitHub repository is not reversible. Ask the user to run it.",
+  // new-rule:hints (pnpm new-rule adds a hint above this line)
   "guard-config-write": "Do not edit the KYA guard settings. Ask the user.",
 };
 
@@ -742,4 +902,41 @@ export function guardHint(rule: string): string {
   if (rule.startsWith("secret-write-")) return "Do not write secrets into files. Read the value from an environment variable instead.";
   if (rule.startsWith("exfil-")) return "Do not send environment variables or credential files over the network.";
   return "";
+}
+
+/** Human phrase per rule, for "My coding agent tried to <label>." (near-miss card, /kya-guard:status). Plain words, no command text. */
+const LABELS: Readonly<Record<string, string>> = {
+  "rm-root-home": "wipe your home folder",
+  "terraform-destroy": "destroy your infrastructure",
+  "sql-drop": "drop or empty a database table",
+  "git-force-push": "force push over git history",
+  "git-delete-default-branch": "delete the main branch",
+  "git-hard-reset-clean": "throw away all uncommitted work",
+  "docker-volumes": "delete Docker volumes",
+  "k8s-delete-ns": "delete a Kubernetes namespace",
+  "cloud-delete": "delete cloud resources",
+  "railway-volume-delete": "delete a cloud volume",
+  "sql-delete-all": "delete every row in a table",
+  "prisma-migrate-reset": "reset your database",
+  "prisma-accept-data-loss": "push a schema change that can drop data",
+  "supabase-reset-linked": "wipe a linked Supabase database",
+  "rm-project-wipe": "wipe the project folder",
+  "rm-git-dir": "delete the git history of the project",
+  "mongo-drop-database": "drop a MongoDB database",
+  "redis-flush": "flush every key on a Redis server",
+  "fly-destroy": "destroy a Fly app or volume",
+  "vercel-remove": "remove a Vercel project",
+  "gh-repo-delete": "delete a GitHub repository",
+  // new-rule:labels (pnpm new-rule adds a label above this line)
+  "guard-config-write": "edit the KYA guard settings",
+};
+
+/** Human phrase for a guard-pack rule id (the `secret-read-*`, `secret-write-*` and `exfil-*` families included), or undefined. */
+export function guardLabel(rule: string): string | undefined {
+  const fixed = LABELS[rule];
+  if (fixed) return fixed;
+  if (rule.startsWith("secret-read-")) return "read a credentials file";
+  if (rule.startsWith("secret-write-")) return "write a secret into a file";
+  if (rule.startsWith("exfil-")) return "send secrets over the network";
+  return undefined;
 }

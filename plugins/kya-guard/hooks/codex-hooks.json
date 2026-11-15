@@ -1,0 +1,17 @@
+{
+  "description": "KYA Guard for Codex: check every tool call before it runs (local, offline, fails open). Codex runs this only after you trust it in /hooks.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/dist/guard.mjs\" --host codex",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

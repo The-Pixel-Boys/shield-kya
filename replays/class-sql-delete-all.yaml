@@ -1,0 +1,13 @@
+id: class-sql-delete-all
+kind: class
+title: DELETE FROM a table with no WHERE clause
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    psql -c "DELETE FROM users;"
+expect: ask
+rule: sql-delete-all
+since: 0.35.0
+credit: ""

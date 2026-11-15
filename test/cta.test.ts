@@ -166,3 +166,31 @@ describe("CLI wiring", () => {
     expect(readFileSync(ctaStatePath(env), "utf8")).toContain("lastShownAt");
   });
 });
+
+describe("CTA lines (F4)", () => {
+  const ASK = "Run kya receipt --share for a link to send a colleague.";
+
+  it("every line asks for kya receipt --share and none sends the user to kya login", () => {
+    for (const [kind, line] of Object.entries(CTA_LINES)) {
+      expect(line, kind).toContain(ASK);
+      expect(line, kind).not.toContain("kya login");
+    }
+    expect(Object.keys(CTA_LINES).sort()).toEqual(["certify-gaps", "receipt-share", "receipt-truncated", "start-share"]);
+  });
+
+  it("keeps the context in front of the ask", () => {
+    expect(CTA_LINES["certify-gaps"]).toBe(`Gaps found. ${ASK}`);
+    expect(CTA_LINES["receipt-truncated"]).toBe(`This report shows only the newest part of the trail. ${ASK}`);
+    expect(CTA_LINES["receipt-share"]).toBe(ASK);
+    expect(CTA_LINES["start-share"]).toBe(ASK);
+  });
+
+  it("the start line follows the same 24 hour and terminal rules as every other line", () => {
+    const { gate, log } = clean();
+    expect(maybeCta("start-share", gate, (m) => log.push(m))).toBe(true);
+    expect(maybeCta("start-share", { ...gate, now: NOW + 60_000 }, (m) => log.push(m))).toBe(false);
+    expect(maybeCta("start-share", { ...gate, now: NOW + CTA_INTERVAL_MS }, (m) => log.push(m))).toBe(true);
+    expect(maybeCta("start-share", { ...gate, isTty: false, now: NOW + 3 * CTA_INTERVAL_MS }, (m) => log.push(m))).toBe(false);
+    expect(log).toEqual([CTA_LINES["start-share"], CTA_LINES["start-share"]]);
+  });
+});
