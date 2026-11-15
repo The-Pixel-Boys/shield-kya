@@ -94,6 +94,14 @@ const events = [
   }),
 ];
 
+// Outcome per row (F3), plus the calls the guard stops: they fill the Blocked panel of the overview.
+for (const e of events) e.outcome = e.verdict === "DENY" ? "blocked" : "ran";
+events.push(
+  { ...baseEvent, ts: iso(8), toolId: "Bash", verdict: "DENY", outcome: "blocked", reasonCode: "NEVER_EVENT", neverEvent: true, neverRule: "rm-recursive-home-or-system", summary: "shell rm (+2 args)" },
+  { ...baseEvent, ts: iso(3), toolId: "Read", verdict: "DENY", outcome: "blocked", reasonCode: "NEVER_EVENT", neverEvent: true, neverRule: "secret-read-file", summary: "read .env" },
+  { ...baseEvent, ts: iso(1), toolId: "Bash", verdict: "DENY", outcome: "blocked", reasonCode: "NEVER_EVENT", neverEvent: true, neverRule: "pipe-network-to-shell", summary: "shell curl (+3 args)" },
+);
+
 const certifyCard = {
   result: "gap",
   pass: 11,
@@ -213,6 +221,7 @@ const orr = {
   generatedAt: iso(60),
   targetName: "demo-target",
   scorecards: { pass: 2, fail: 1, partial: 1, notEvaluated: 0 },
+  findings: [],
 };
 
 const showback = {
@@ -252,6 +261,8 @@ const emptyGatePage = {
 
 const fixtures = [
   { name: "empty", model: buildWindowReceiptModel([], 3), zone: "overview", height: 900 },
+  // README and listing picture of the first screen: no activity yet, so the Blocked panel shows the labelled demo.
+  { name: "blocked", model: buildWindowReceiptModel([], 3), zone: "overview", height: 900 },
   { name: "overview", model: modelWith({ gate: gatePage, showback }), zone: "overview", height: 1500 },
   { name: "activity", model: modelWith({}), zone: "activity", height: 1700 },
   { name: "changes", model: modelWith({}), zone: "changes", height: 750 },
@@ -281,9 +292,14 @@ const zoneStyle = (zone) => `
 </style>`;
 
 const screenshots = [];
-for (const { name, model, zone, height } of fixtures) {
+// KYA_SHOT_ONLY=blocked,overview and KYA_SHOT_THEMES=light limit the run; KYA_SHOT_HEIGHT=900 forces the window height.
+const only = process.env.KYA_SHOT_ONLY?.split(",").filter(Boolean);
+const themes = (process.env.KYA_SHOT_THEMES ?? "dark,light").split(",");
+for (const { name, model, zone, height: fixtureHeight } of fixtures) {
+  if (only && !only.includes(name)) continue;
+  const height = Number(process.env.KYA_SHOT_HEIGHT) || fixtureHeight;
   const html = renderReceiptHtml(model);
-  for (const theme of ["dark", "light"]) {
+  for (const theme of themes) {
     let themed = html.replace("<html lang=\"en\">", `<html lang="en" data-theme="${theme}">`);
     themed = themed.replace("</head>", `${zoneStyle(zone)}\n</head>`);
     const file = join(outDir, `${name}-${theme}.html`);

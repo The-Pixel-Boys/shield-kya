@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "node ./dist/guard.mjs --host cursor",
+        "timeout": 5
+      }
+    ]
+  }
+}

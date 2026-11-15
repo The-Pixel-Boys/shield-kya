@@ -11,6 +11,7 @@ import type { AddressInfo } from "node:net";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { receiver as makeReceiver, type Receiver } from "./support/alert-receiver.js";
 
 const cliJs = join(import.meta.dirname, "..", "dist", "cli.js");
 const dirs: string[] = [];
@@ -32,41 +33,7 @@ const NEVER = JSON.stringify({
   tool_input: { table: "users" },
 });
 
-interface Hit {
-  readonly path: string;
-  readonly body: Record<string, unknown>;
-}
-interface Receiver {
-  readonly url: string;
-  readonly hits: Hit[];
-  incidents(): Hit[];
-  denies(): Hit[];
-}
-
-async function receiver(): Promise<Receiver> {
-  const hits: Hit[] = [];
-  const server = createServer((req, res) => {
-    let raw = "";
-    req.on("data", (d) => (raw += String(d)));
-    req.on("end", () => {
-      try {
-        hits.push({ path: req.url ?? "", body: JSON.parse(raw) as Record<string, unknown> });
-      } catch {
-        /* not JSON */
-      }
-      res.writeHead(200, { "content-type": "application/json" }).end("{}");
-    });
-  });
-  servers.push(server);
-  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
-  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return {
-    url,
-    hits,
-    incidents: () => hits.filter((h) => h.body["event"] === "incident.opened"),
-    denies: () => hits.filter((h) => h.body["kind"] === "kya.trail.verdict"),
-  };
-}
+const receiver = (): Promise<Receiver> => makeReceiver(servers);
 
 async function deadUrl(): Promise<string> {
   const s = createServer();

@@ -1,0 +1,13 @@
+id: class-sql-truncate-cascade
+kind: class
+title: TRUNCATE TABLE with CASCADE
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    psql -c "TRUNCATE TABLE orders CASCADE;"
+expect: deny
+rule: sql-drop
+since: 0.33.0
+credit: ""

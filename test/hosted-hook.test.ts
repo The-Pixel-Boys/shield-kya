@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// These tests spawn CLIs or git, or wait on timers: 0.8 to 1.6 s each on an idle Mac, so the 5 s default is too tight on a loaded CI host. Hang guard only; budget assertions stay.
+vi.setConfig({ testTimeout: 30_000 });
 import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer, type Server } from "node:http";
@@ -616,6 +619,12 @@ describe("hosted hook: behaviour matrix", () => {
         expect(r.trail).toHaveLength(1);
         expect(r.trail[0]).toMatchObject({ verdict: row.verdict, reasonCode: row.code, mode: mode === "strict" ? "hold" : "observe", product: "claude" });
         expect(r.trail[0]!.shadow).toBe(mode === "shadow" ? true : undefined);
+        // outcome: what the hook did. Exit 2 blocks (DENY) or holds (REQUIRE_APPROVE); exit 0 ran, except a hook
+        // failure that shadow mode let through, which is an error row.
+        const ownFailure = /^(PLANE_|FAIL_CLOSED)/.test(row.code);
+        expect(r.trail[0]!.outcome).toBe(
+          row.exit[i] === 2 ? (row.verdict === "DENY" ? "blocked" : "held") : row.verdict === "DENY" && ownFailure ? "error" : "ran",
+        );
         if (mode === "shadow" && row.exit[0] === 2 && row.exit[2] === 0) expect(r.stderr).toContain("KYA shadow: would deny");
         // The key never reaches stdout, stderr or the trail.
         for (const text of [r.stdout, r.stderr, r.trailText]) expect(text).not.toContain("TESTKEY");
@@ -954,7 +963,8 @@ describe("hosted hook spawn e2e (dist/cli.js, loopback stub plane)", () => {
     expect(r.status).toBe(2);
     expect(r.stdout).toContain("PLANE_UNREACHABLE");
     expect(r.ms).toBeLessThan(4000);
-    const sh = await hook(port, ["--plane-budget-ms", "300", "--plane-shadow"]);
+    // 300 ms is gone before the first attempt on a loaded host (PLANE_TIMEOUT); the reason-code check needs a budget that survives start-up.
+    const sh = await hook(port, ["--plane-budget-ms", "1000", "--plane-shadow"]);
     expect(sh.status).toBe(0);
     expect(readTrail(tmp("x-"), { KYA_HOME: sh.home })[0]).toMatchObject({ verdict: "DENY", reasonCode: "PLANE_UNREACHABLE", shadow: true });
   });

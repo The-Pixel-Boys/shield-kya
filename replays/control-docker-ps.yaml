@@ -1,0 +1,11 @@
+id: control-docker-ps
+kind: control
+title: docker ps
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    docker ps
+expect: allow
+credit: ""

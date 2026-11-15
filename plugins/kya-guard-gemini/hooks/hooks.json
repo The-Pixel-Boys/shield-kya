@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "name": "kya-guard",
+            "description": "Check every tool call before it runs. Local, offline, fails open.",
+            "command": "node \"${extensionPath}${/}dist${/}guard.mjs\" --host gemini; exit 0",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}

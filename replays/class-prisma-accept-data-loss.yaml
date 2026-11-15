@@ -1,0 +1,13 @@
+id: class-prisma-accept-data-loss
+kind: class
+title: Prisma db push that accepts data loss
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    npx prisma db push --accept-data-loss
+expect: ask
+rule: prisma-accept-data-loss
+since: 0.35.0
+credit: ""

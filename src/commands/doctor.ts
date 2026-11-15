@@ -7,6 +7,10 @@ import { iocLines } from "../ioc/format.js";
 import { readIocResult } from "../ioc/result.js";
 import { runIocScanAndStore } from "../ioc/scan.js";
 import { optInHint } from "../otel/map-attrs-optin.js";
+import { kyaHome } from "../config.js";
+import { hookHealth } from "../hook-health.js";
+import { semanticOffNotice } from "../receipt/semantic-setup.js";
+import { triageOffNotice } from "../alerts/triage-setup.js";
 
 export async function runDoctor(
   log: (line: string) => void,
@@ -17,10 +21,14 @@ export async function runDoctor(
   if (hint) opts.warn!(hint);
   const result = opts.iocs ? await runIocScanAndStore(opts.env) : readIocResult(opts.env);
   const enabled = iocEnabled(opts.env);
+  const health = hookHealth(kyaHome(opts.env), opts.env);
   if (opts.json) {
-    log(JSON.stringify({ iocs: { enabled, ran: opts.iocs, result: result ?? null } }, null, 2));
+    log(JSON.stringify({ iocs: { enabled, ran: opts.iocs, result: result ?? null }, hook: { launcher: health.launcher, problems: health.problems } }, null, 2));
   } else {
     for (const line of iocLines(result, enabled)) log(line);
+    for (const line of health.lines) log(line);
+    // Moved here from `kya start`, which no longer prints them first. Text mode only: --json keeps its shape.
+    for (const line of [semanticOffNotice(opts.env), triageOffNotice(opts.env)]) if (line) log(line);
   }
   return 0;
 }

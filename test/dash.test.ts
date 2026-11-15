@@ -25,7 +25,7 @@ function captureIo() {
 describe("kya dash --once", () => {
   it("help lists dash", async () => {
     const { io, logs } = captureIo();
-    const code = await runCli(["--help"], io);
+    const code = await runCli(["--help", "--all"], io);
     expect(code).toBe(0);
     expect(logs.join("\n")).toContain("dash");
   });

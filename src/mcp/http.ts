@@ -20,6 +20,7 @@ export interface HttpMcpOptions {
   readonly agentId?: string;
   readonly offline?: boolean;
   readonly trail?: McpTrailContext;
+  readonly onClientInfo?: (name: string) => void;
   /** Optional shared secret; also read from KYA_MCP_HTTP_TOKEN. */
   readonly sharedSecret?: string;
 }
@@ -60,6 +61,7 @@ export function startHttpMcp(options: HttpMcpOptions): Promise<HttpMcpServer> {
     agentId: options.agentId,
     offline: options.offline,
     trail: options.trail,
+    onClientInfo: options.onClientInfo,
   };
 
   const server = createServer((req, res) => {

@@ -474,8 +474,11 @@ describe("activity hero card - 7-bucket sparkline", () => {
 });
 
 describe("showback hero card", () => {
-  it("renders inside the hero grid when model.showback is present", () => {
+  it("renders in its own Showback tab, behind the More menu, when model.showback is present", () => {
     const html = renderReceiptHtml(buildWindowReceiptModel([], 3, { showback: SHOWBACK }));
+    const nav = html.slice(html.indexOf('<nav class="sidebar-nav"'), html.indexOf("</nav>"));
+    expect(nav.indexOf('href="#showback"')).toBeGreaterThan(nav.indexOf('id="nav-more"'));
+    expect(html).toContain('<section class="zone" id="showback"');
     const iOverview = html.indexOf('id="overview"');
     const iHero = html.indexOf('class="hero"');
     const iTiles = html.indexOf('class="hero-tiles"');

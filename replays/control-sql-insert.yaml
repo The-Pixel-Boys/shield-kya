@@ -1,0 +1,11 @@
+id: control-sql-insert
+kind: control
+title: INSERT a row
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    psql -c "INSERT INTO users (name) VALUES ('test');"
+expect: allow
+credit: ""

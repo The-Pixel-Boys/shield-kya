@@ -14,6 +14,7 @@ export interface StdioMcpOptions {
   readonly agentId?: string;
   readonly offline?: boolean;
   readonly trail?: McpTrailContext;
+  readonly onClientInfo?: (name: string) => void;
   readonly input?: NodeJS.ReadableStream;
   readonly output?: NodeJS.WritableStream;
   /** When true, do not attach process signal handlers (tests). */
@@ -39,6 +40,7 @@ export function startStdioMcp(options: StdioMcpOptions): StdioMcpHandle {
     agentId: options.agentId,
     offline: options.offline,
     trail: options.trail,
+    onClientInfo: options.onClientInfo,
   };
 
   let closed = false;

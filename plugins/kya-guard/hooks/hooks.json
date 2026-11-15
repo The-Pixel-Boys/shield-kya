@@ -1,0 +1,22 @@
+{
+  "description": "KYA Guard: check every tool call before it runs (local, offline, fails open).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/dist/guard.mjs",
+              "--host",
+              "claude"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

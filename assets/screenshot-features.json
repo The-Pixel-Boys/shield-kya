@@ -4,6 +4,7 @@
     "assets/logo.svg": { "features": [] },
     "assets/activity-receipt.png": { "features": ["kya-receipt"] },
     "assets/report-activity.png": { "features": ["kya-receipt"] },
+    "assets/report-blocked.png": { "features": ["kya-start", "kya-receipt"] },
     "assets/report-certify.png": { "features": ["kya-certify", "kya-receipt"] },
     "assets/report-changes.png": { "features": ["kya-diff-preview", "kya-receipt"] },
     "assets/report-gateway-backends.png": { "features": ["kya-gate"] },

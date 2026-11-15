@@ -6,7 +6,7 @@
  */
 import type { OrrRating } from "../commands/orr.js";
 import type { OrrCard } from "../receipt/enrich.js";
-import type { TrailEvent } from "../trail.js";
+import { countOutcomes, type TrailEvent } from "../trail.js";
 import type { OpenshellProverOutcome } from "./openshell-prover.js";
 import type {
   CatalogRequirement,
@@ -44,6 +44,16 @@ export interface CertifyTrailStats {
     readonly observe: number;
     readonly hold: number;
     readonly offline: number;
+  };
+  /**
+   * Counts by outcome (what happened to each call). Present only when a row records an outcome, so a trail from
+   * before outcomes existed gives the same report as before. Not part of the signed evidence bundle.
+   */
+  readonly outcomes?: {
+    readonly ran: number;
+    readonly blocked: number;
+    readonly held: number;
+    readonly error: number;
   };
 }
 
@@ -146,7 +156,13 @@ export function trailStats(events: readonly TrailEvent[]): CertifyTrailStats {
     else if (e.mode === "hold") modes.hold++;
     else modes.offline++;
   }
-  return { eventCount: events.length, verdictMix, modes };
+  const oc = countOutcomes(events);
+  return {
+    eventCount: events.length,
+    verdictMix,
+    modes,
+    ...(oc.recorded > 0 ? { outcomes: { ran: oc.ran, blocked: oc.blocked, held: oc.held, error: oc.error } } : {}),
+  };
 }
 
 export function matchEvent(e: TrailEvent, m: TrailMatch): boolean {

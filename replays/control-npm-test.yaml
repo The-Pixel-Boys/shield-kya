@@ -1,0 +1,11 @@
+id: control-npm-test
+kind: control
+title: Run the tests
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    npm test
+expect: allow
+credit: ""

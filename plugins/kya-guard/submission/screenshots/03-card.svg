@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="t d">
+<title id="t">My coding agent tried to delete a cloud volume. KYA Guard stopped it.</title>
+<desc id="d">My coding agent tried to delete a cloud volume. KYA Guard stopped it. Rule railway-volume-delete | Claude Code | 2026-11-14 Install: npx @shield-agent/kya@latest start</desc>
+<rect width="1200" height="630" fill="#0b1220"/>
+<rect width="16" height="630" fill="#3ddc84"/>
+<rect x="40" y="40" width="1120" height="550" rx="20" fill="none" stroke="#1f2a44" stroke-width="2"/>
+<text font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="60" font-weight="700" fill="#f4f7ff"><tspan x="80" y="150">My coding agent tried to</tspan><tspan x="80" y="222">delete a cloud volume.</tspan></text>
+<text x="80" y="318" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="64" font-weight="800" fill="#3ddc84">KYA Guard stopped it.</text>
+<text x="80" y="500" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="26" fill="#9fb0d0">Rule railway-volume-delete | Claude Code | 2026-11-14</text>
+<text x="80" y="560" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="30" fill="#7cc4ff">Install: npx @shield-agent/kya@latest start</text>
+</svg>

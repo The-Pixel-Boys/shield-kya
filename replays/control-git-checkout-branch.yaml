@@ -1,0 +1,11 @@
+id: control-git-checkout-branch
+kind: control
+title: Create a feature branch
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    git checkout -b feature/replays
+expect: allow
+credit: ""

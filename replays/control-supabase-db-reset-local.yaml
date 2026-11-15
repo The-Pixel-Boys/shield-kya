@@ -1,0 +1,11 @@
+id: control-supabase-db-reset-local
+kind: control
+title: Supabase db reset on the local stack
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    supabase db reset
+expect: allow
+credit: ""

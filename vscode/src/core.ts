@@ -280,8 +280,9 @@ export function gateModeFromTexts(texts: readonly string[]): { mode: GateMode; h
   let advisory = 0;
   for (const text of texts) {
     for (const cmd of hookCommands(text)) {
-      // Exact shape kya writes: `"<node>" "<.../cli.js>" hook --host <id> [flags]` (or a `kya` bin).
-      const m = /^(?:"[^"]*"\s+"[^"]*cli\.js"|\S*\bkya)\s+hook --host [a-z0-9-]+((?:\s.*)?)$/.exec(cmd.trim());
+      // Exact shape kya writes: `"<node>" "<.../cli.js>" hook --host <id> [flags]`, the launcher
+      // `"<home>/.kya/bin/kya-hook" hook --host <id>` (kya start 0.35+), or a `kya` bin.
+      const m = /^(?:"[^"]*"\s+"[^"]*cli\.js"|"[^"]*[\\/]\.kya[\\/]bin[\\/]kya-hook"|\S*\bkya)\s+hook --host [a-z0-9-]+((?:\s.*)?)$/.exec(cmd.trim());
       if (!m) continue;
       // --plane-shadow records hosted verdicts and never blocks (kya hook.ts: enforce needs !shadow).
       if (/\s--plane-shadow\b/.test(m[1] ?? "")) advisory++;

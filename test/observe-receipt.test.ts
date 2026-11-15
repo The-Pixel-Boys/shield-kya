@@ -1,3 +1,4 @@
+import { PROMISE } from "../src/guard-demo.js";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -104,7 +105,7 @@ describe("receipt 3-day window", () => {
     expect(filtered).toHaveLength(2);
     const model = buildWindowReceiptModel(filtered, 3);
     const html = renderReceiptHtml(model);
-    expect(html).toContain("Agent activity");
+    expect(html).toContain(PROMISE);
     expect(html).toContain("last 3 days");
     expect(html).toContain('aria-label="Activity feed"');
     expect(html).toContain("class=\"ev");
@@ -219,7 +220,7 @@ describe("receipt 3-day window", () => {
       expect(out.days).toBe(3);
       expect(out.rangeLabel).toContain("last 3 days");
       const html = readFileSync(out.htmlPath, "utf8");
-      expect(html).toContain("Agent activity");
+      expect(html).toContain(PROMISE);
       expect(html).toContain('aria-label="Activity feed"');
       expect(html).not.toContain("observe path");
     } finally {

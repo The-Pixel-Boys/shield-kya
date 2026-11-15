@@ -1,0 +1,13 @@
+id: class-git-force-push-main
+kind: class
+title: Force push to the main branch
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    git push --force origin main
+expect: deny
+rule: git-force-push-protected-branch
+since: 0.32.8
+credit: ""

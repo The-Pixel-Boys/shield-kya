@@ -1,0 +1,13 @@
+id: class-git-delete-default-branch
+kind: class
+title: Delete the main branch on the remote
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    git push origin --delete main
+expect: deny
+rule: git-delete-default-branch
+since: 0.33.0
+credit: ""

@@ -1,0 +1,13 @@
+id: class-railway-cli-volume-delete
+kind: class
+title: Railway CLI volume delete
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    railway volume delete --yes
+expect: deny
+rule: railway-volume-delete
+since: 0.33.0
+credit: ""

@@ -47,9 +47,9 @@ describe("runCli version output", () => {
     },
   );
 
-  it("--help still prints help, not the version", async () => {
+  it("--help --all still prints the full help, not the version", async () => {
     const { io, logs } = captureIo();
-    const code = await runCli(["--help"], io, {}, process.cwd());
+    const code = await runCli(["--help", "--all"], io, {}, process.cwd());
     expect(code).toBe(0);
     expect(logs.join("\n")).toContain("Usage:");
     expect(logs.join("\n")).toContain("--version, -v");

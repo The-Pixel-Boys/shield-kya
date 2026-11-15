@@ -1,0 +1,11 @@
+id: control-vercel-env-ls
+kind: control
+title: vercel env ls
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    vercel env ls
+expect: allow
+credit: ""
