@@ -12,6 +12,8 @@ import {
   type SharePayload,
   formatShareLine,
   SHARE_HOSTED_HINT,
+  SHARE_CONNECT_HINT,
+  sameOrigin,
 } from "../src/receipt/share.js";
 import {
   buildWindowReceiptModel,
@@ -128,7 +130,7 @@ describe("shareBaseUrl", () => {
     expect(shareBaseUrl("https://flag.example/", {})).toBe("https://flag.example");
     expect(shareBaseUrl(undefined, { KYA_SHARE_URL: "https://env.example/" })).toBe("https://env.example");
     expect(shareBaseUrl(undefined, {})).toBe(SHARE_DEFAULT_BASE_URL);
-    expect(shareBaseUrl("https://flag.example", { KYA_SHARE_URL: "https://env.example" })).toBe("https://flag.example");
+    expect(shareBaseUrl("https://flag.example", { KYA_HOME: process.env.KYA_HOME, KYA_SHARE_URL: "https://env.example" })).toBe("https://flag.example");
   });
 });
 
@@ -141,10 +143,10 @@ describe("shareReceiptPayload", () => {
     const calls: { url: string; init: RequestInit }[] = [];
     const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
       calls.push({ url, init });
-      return new Response(JSON.stringify({ url: "https://shield-agent.com/share/abc123" }), { status: 201 });
+      return new Response(JSON.stringify({ url: "https://api.example/share/abc123" }), { status: 201 });
     }) as unknown as typeof fetch;
     const result = await shareReceiptPayload(payload, { baseUrl: "https://api.example", fetchImpl });
-    expect(result).toEqual({ ok: true, url: "https://shield-agent.com/share/abc123" });
+    expect(result).toEqual({ ok: true, url: "https://api.example/share/abc123" });
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe("https://api.example/api/v1/share/reports");
     expect(calls[0]!.init.method).toBe("POST");
@@ -225,7 +227,7 @@ describe("shareReceiptWithRetry", () => {
     const fetchImpl = scriptFetch(
       new Response("slow down", { status: 429, headers: { "Retry-After": "1" } }),
       new Response("boom", { status: 500 }),
-      new Response(JSON.stringify({ url: "https://shield-agent.com/r/ok" }), { status: 201 }),
+      new Response(JSON.stringify({ url: "https://api.example/r/ok" }), { status: 201 }),
     ) as unknown as typeof fetch;
     const sleep = vi.fn(async (_ms: number) => {});
     const result = await shareReceiptWithRetry(payload, {
@@ -234,7 +236,7 @@ describe("shareReceiptWithRetry", () => {
       retries: 2,
       sleep,
     });
-    expect(result).toEqual({ ok: true, url: "https://shield-agent.com/r/ok" });
+    expect(result).toEqual({ ok: true, url: "https://api.example/r/ok" });
     expect(fetchImpl).toHaveBeenCalledTimes(3);
     expect(sleep).toHaveBeenCalledTimes(2);
     // First delay honors Retry-After exactly (no jitter).
@@ -247,7 +249,7 @@ describe("shareReceiptWithRetry", () => {
   it("never retries 4xx validation errors, even with retries left", async () => {
     const fetchImpl = scriptFetch(
       new Response("bad payload", { status: 400 }),
-      new Response(JSON.stringify({ url: "https://shield-agent.com/r/ok" }), { status: 201 }),
+      new Response(JSON.stringify({ url: "https://api.example/r/ok" }), { status: 201 }),
     ) as unknown as typeof fetch;
     const sleep = vi.fn(async (_ms: number) => {});
     const result = await shareReceiptWithRetry(payload, {
@@ -265,7 +267,7 @@ describe("shareReceiptWithRetry", () => {
   it("default (retries 0) is a single attempt on 429", async () => {
     const fetchImpl = scriptFetch(
       new Response("slow down", { status: 429 }),
-      new Response(JSON.stringify({ url: "https://shield-agent.com/r/ok" }), { status: 201 }),
+      new Response(JSON.stringify({ url: "https://api.example/r/ok" }), { status: 201 }),
     ) as unknown as typeof fetch;
     const sleep = vi.fn(async (_ms: number) => {});
     const result = await shareReceiptWithRetry(payload, { baseUrl: "https://api.example", fetchImpl, sleep });
@@ -336,7 +338,7 @@ describe("kya receipt --share", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     const { io, logs } = captureIo();
-    const code = await runCli(["receipt", "--share"], io, {}, cwd);
+    const code = await runCli(["receipt", "--share"], io, { KYA_HOME: process.env.KYA_HOME }, cwd);
     expect(code).toBe(0);
     expect(logs.join("\n")).toContain("Shared report: https://shield-agent.com/r/pub-1");
     // Payload redaction end-to-end: raw summary never leaves the machine.
@@ -352,10 +354,11 @@ describe("kya receipt --share", () => {
         expiresAt: "2026-10-23T09:15:00.123Z" }), { status: 201 }),
     ));
     const { io, logs } = captureIo();
-    expect(await runCli(["receipt", "--share"], io, {}, cwd)).toBe(0);
+    expect(await runCli(["receipt", "--share"], io, { KYA_HOME: process.env.KYA_HOME }, cwd)).toBe(0);
     expect(logs).toEqual([
       "Shared report: https://shield-agent.com/r/pub-9 (expires 2026-10-23)",
       SHARE_HOSTED_HINT,
+      SHARE_CONNECT_HINT,
     ]);
   });
 
@@ -365,10 +368,27 @@ describe("kya receipt --share", () => {
         { status: 201 }),
     ));
     const { io, logs } = captureIo();
-    expect(await runCli(["receipt", "--share", "--json"], io, {}, cwd)).toBe(0);
+    expect(await runCli(["receipt", "--share", "--json"], io, { KYA_HOME: process.env.KYA_HOME }, cwd)).toBe(0);
     expect(logs).toHaveLength(1);
     expect(JSON.parse(logs[0]!)).toEqual({ url: "https://shield-agent.com/r/pub-8", expiresAt: "2026-10-23T09:15:00Z" });
     expect(logs.join("\n")).not.toContain("security lead");
+  });
+
+  it("sameOrigin: same origin only, http or https only, garbage is false", () => {
+    expect(sameOrigin("https://shield-agent.com/r/a", "https://shield-agent.com")).toBe(true);
+    expect(sameOrigin("http://127.0.0.1:8080/r/a", "http://127.0.0.1:8080")).toBe(true);
+    expect(sameOrigin("https://shield-agent.com.evil.example/r/a", "https://shield-agent.com")).toBe(false);
+    expect(sameOrigin("https://shield-agent.com@evil.example/r/a", "https://shield-agent.com")).toBe(false);
+    expect(sameOrigin("http://shield-agent.com/r/a", "https://shield-agent.com")).toBe(false);
+    expect(sameOrigin("javascript:alert(1)", "https://shield-agent.com")).toBe(false);
+    expect(sameOrigin("not a url", "https://shield-agent.com")).toBe(false);
+    expect(sameOrigin("https://shield-agent.com/r/a", "")).toBe(false);
+  });
+
+  it("a share answer on another origin is an error", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ url: "https://evil.example/r/x" }), { status: 201 }));
+    const r = await shareReceiptPayload(buildSharePayload(richModel()), { baseUrl: "https://shield-agent.com", fetchImpl: fetchMock });
+    expect(r).toEqual({ ok: false, error: "share failed: the response link is not on the server that was asked" });
   });
 
   it("formatShareLine leaves the date out when the server sent none or garbage", () => {
@@ -379,7 +399,7 @@ describe("kya receipt --share", () => {
   it("exits 1 with a one-line error on failure", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 502 })));
     const { io, logs, errors } = captureIo();
-    const code = await runCli(["receipt", "--share"], io, {}, cwd);
+    const code = await runCli(["receipt", "--share"], io, { KYA_HOME: process.env.KYA_HOME }, cwd);
     expect(code).toBe(1);
     expect(logs).toEqual([]);
     expect(errors.join("\n")).toContain("share failed: HTTP 502");
@@ -391,14 +411,14 @@ describe("kya receipt --share", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     const { io } = captureIo();
-    await runCli(["receipt", "--share", "--share-url", "https://flag.example/"], io, {}, cwd);
+    await runCli(["receipt", "--share", "--share-url", "https://flag.example/"], io, { KYA_HOME: process.env.KYA_HOME }, cwd);
     expect(fetchMock.mock.calls[0]![0]).toBe("https://flag.example/api/v1/share/reports");
 
     const fetchMock2 = vi.fn(async () =>
       new Response(JSON.stringify({ url: "https://shield-agent.com/r/pub-3" }), { status: 201 }),
     );
     vi.stubGlobal("fetch", fetchMock2);
-    await runCli(["receipt", "--share"], io, { KYA_SHARE_URL: "https://env.example" }, cwd);
+    await runCli(["receipt", "--share"], io, { KYA_HOME: process.env.KYA_HOME, KYA_SHARE_URL: "https://env.example" }, cwd);
     expect(fetchMock2.mock.calls[0]![0]).toBe("https://env.example/api/v1/share/reports");
   });
 
@@ -413,7 +433,7 @@ describe("kya receipt --share", () => {
     const fetchMock = vi.fn(async () => new Response("slow down", { status: 429 }));
     vi.stubGlobal("fetch", fetchMock);
     const { io, errors } = captureIo();
-    const code = await runCli(["receipt", "--share"], io, {}, cwd);
+    const code = await runCli(["receipt", "--share"], io, { KYA_HOME: process.env.KYA_HOME }, cwd);
     expect(code).toBe(1);
     expect(errors.join("\n")).toContain("share failed: rate limited - retry later");
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -423,7 +443,7 @@ describe("kya receipt --share", () => {
     const fetchMock = vi.fn(async () => new Response("bad payload", { status: 400 }));
     vi.stubGlobal("fetch", fetchMock);
     const { io, errors } = captureIo();
-    const code = await runCli(["receipt", "--share", "--share-retries", "3"], io, {}, cwd);
+    const code = await runCli(["receipt", "--share", "--share-retries", "3"], io, { KYA_HOME: process.env.KYA_HOME }, cwd);
     expect(code).toBe(1);
     expect(errors.join("\n")).toContain("share failed: HTTP 400");
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -431,7 +451,7 @@ describe("kya receipt --share", () => {
 
   it("runReceiptShare returns an error result instead of throwing", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("err", { status: 500 })));
-    const result = await runReceiptShare(config, {}, {});
+    const result = await runReceiptShare(config, {}, { KYA_HOME: process.env.KYA_HOME });
     expect(result.ok).toBe(false);
   });
 });

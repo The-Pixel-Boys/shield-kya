@@ -5,7 +5,10 @@
  * ever running `kya orr run` (docs/report-design.md).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync } from "node:fs";
+
+// These tests spawn CLIs or git, or wait on timers: 0.8 to 1.6 s each on an idle Mac, so the 5 s default is too tight on a loaded CI host. Hang guard only; budget assertions stay.
+vi.setConfig({ testTimeout: 30_000 });
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveConfig, type ResolvedConfig } from "../src/config.js";
@@ -21,6 +24,16 @@ vi.mock("../src/commands/gate.js", () => ({
 }));
 
 const dirs: string[] = [];
+
+/** Bounded poll: true as soon as pred holds, false at the deadline. */
+async function waitFor(pred: () => boolean, ms: number): Promise<boolean> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (pred()) return true;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return pred();
+}
 
 function tmp(): string {
   const d = mkdtempSync(join(tmpdir(), "kya-orr-auto-"));
@@ -82,9 +95,8 @@ describe("ORR auto-generation in the live server", () => {
   it("generates orr-report/report.json shortly after the server starts", async () => {
     expect(existsSync(join(dir, "orr-report", "report.json"))).toBe(false);
     const s = await start();
-    // The refresh fires 1.5s after listen; give it room on a loaded machine.
-    await new Promise((r) => setTimeout(r, 4_000));
-    expect(existsSync(join(dir, "orr-report", "report.json"))).toBe(true);
+    // The refresh fires 1.5s after listen and runs the scan; poll up to 25 s for a loaded machine.
+    expect(await waitFor(() => existsSync(join(dir, "orr-report", "report.json")), 25_000)).toBe(true);
     const card = loadOrrCard(dir);
     expect(card).toBeDefined();
     expect(["green", "amber", "red"]).toContain(card?.overall);
@@ -110,11 +122,9 @@ describe("ORR auto-generation in the live server", () => {
     const old = new Date(Date.now() - 31 * 60 * 1000);
     utimesSync(reportPath, old, old);
     const s2 = await start();
-    await new Promise((r) => setTimeout(r, 4_000));
-    const { statSync } = await import("node:fs");
-    expect(statSync(reportPath).mtimeMs).toBeGreaterThan(Date.now() - 60_000);
+    expect(await waitFor(() => statSync(reportPath).mtimeMs > Date.now() - 60_000, 25_000)).toBe(true);
     await s2.close();
-  }, 20_000);
+  }, 60_000);
 
   it("POST /action/orr-run regenerates the board and reports the rating", async () => {
     const s = await start();

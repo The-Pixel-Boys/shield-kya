@@ -1,0 +1,11 @@
+id: control-git-commit
+kind: control
+title: Commit with a message
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    git commit -m "fix: correct the date format"
+expect: allow
+credit: ""

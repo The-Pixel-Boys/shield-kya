@@ -8,6 +8,7 @@
  * a machine, project, or person stays local. Dependency-free: global fetch.
  */
 import { CLI_VERSION } from "../version.js";
+import { countOutcomes, outcomeOf } from "../trail.js";
 import { aggregateEvents, type ReceiptModel } from "./render-receipt.js";
 
 export const SHARE_DEFAULT_BASE_URL = "https://shield-agent.com";
@@ -27,6 +28,14 @@ export interface ShareStats {
   readonly review: number;
   readonly deny: number;
   readonly never: number;
+  /**
+   * Counts by outcome (what happened to each call). Present when any row records one. `allow`, `review` and `deny`
+   * then count ran, held and blocked rows, so `review` is never a call that already ran.
+   */
+  readonly ran?: number;
+  readonly blocked?: number;
+  readonly held?: number;
+  readonly error?: number;
   /** Distinct sessions in the window - a count, never ids. */
   readonly sessions: number;
 }
@@ -68,12 +77,19 @@ export function buildSharePayload(model: ReceiptModel): SharePayload {
   for (const e of events) {
     const v = e.verdict.toUpperCase();
     if (e.neverEvent || e.reasonCode === "NEVER_EVENT") never++;
-    if (v === "ALLOW") allow++;
+    const o = outcomeOf(e);
+    // An outcome says what happened; the verdict only counts rows written before outcomes existed.
+    if (o) {
+      if (o === "ran") allow++;
+      else if (o === "blocked") deny++;
+      else if (o === "held") review++;
+    } else if (v === "ALLOW") allow++;
     else if (v === "DENY") deny++;
     else if (v === "REQUIRE_APPROVE") review++;
     sessions.add(e.sessionId?.trim() || "unknown");
   }
   const agg = aggregateEvents(events);
+  const oc = countOutcomes(events);
   return {
     version: 1,
     title: model.title,
@@ -86,6 +102,7 @@ export function buildSharePayload(model: ReceiptModel): SharePayload {
       review,
       deny,
       never,
+      ...(oc.recorded > 0 ? { ran: oc.ran, blocked: oc.blocked, held: oc.held, error: oc.error } : {}),
       sessions: sessions.size,
     },
     products: agg.products.slice(0, 6).map(({ label, count }) => ({ label, count })),
@@ -126,6 +143,17 @@ export type ShareResult =
       /** Parsed Retry-After seconds from a 429, when present. */
       readonly retryAfterSeconds?: number;
     };
+
+/** True when both URLs parse, use http or https, and have the same origin. */
+export function sameOrigin(url: string, baseUrl: string): boolean {
+  try {
+    const a = new URL(url);
+    const b = new URL(baseUrl);
+    return (a.protocol === "https:" || a.protocol === "http:") && a.origin === b.origin;
+  } catch {
+    return false;
+  }
+}
 
 /** Parse a Retry-After header as integer seconds; undefined when absent/malformed. */
 function parseRetryAfterSeconds(raw: string | null): number | undefined {
@@ -184,6 +212,10 @@ export async function shareReceiptPayload(
     if (!data || typeof data.url !== "string" || !data.url) {
       return { ok: false, error: "share failed: response did not include a url" };
     }
+    // The link is shown, copied and opened: it must stay on the server we sent the summary to.
+    if (!sameOrigin(data.url, opts.baseUrl)) {
+      return { ok: false, error: "share failed: the response link is not on the server that was asked" };
+    }
     return typeof data.expiresAt === "string" && data.expiresAt
       ? { ok: true, url: data.url, expiresAt: data.expiresAt }
       : { ok: true, url: data.url };
@@ -236,6 +268,13 @@ export async function shareReceiptWithRetry(
     await sleep(shareRetryDelayMs(result, attempt));
   }
 }
+
+/**
+ * One line after a successful share (F4): claiming is on the shared page, and connecting this computer is the
+ * device login. A claim never links a computer by itself.
+ */
+export const SHARE_CONNECT_HINT =
+  "To claim the report, open the link above and confirm your email. To connect this computer to your account, run kya login.";
 
 /** One-line hint after a successful share (human output only, never under --json). */
 export const SHARE_HOSTED_HINT =

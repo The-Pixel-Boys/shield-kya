@@ -727,3 +727,177 @@ describe("guard pack: kya hook end to end", () => {
     }, 30000);
   }
 });
+
+// ---------------------------------------------------------------------------------------------
+// G2: eleven rule gaps, and the second outcome (ask)
+// ---------------------------------------------------------------------------------------------
+describe("guard pack G2: new rules (deny and ask)", () => {
+  interface G2Run { readonly exit: number; readonly stdout: string; readonly stderr: string; readonly outcome: "deny" | "ask" | "allow"; readonly rule: string }
+  async function g2(command: string, opts: { host?: string; strict?: boolean; home?: string; cwd?: string; kyaHome?: string } = {}): Promise<G2Run> {
+    const home = opts.home ?? HOME;
+    const cwd = opts.cwd ?? CWD;
+    const r = await runHook({
+      host: (opts.host ?? "claude") as "claude", strict: opts.strict ?? false, stdinText: event("Bash", { command }, cwd),
+      env: { HOME: home, KYA_HOME: opts.kyaHome ?? tmp("kya-g2-kh-") }, cwd,
+    });
+    const outcome = r.exitCode === 2 ? "deny" : r.stdout.includes('"permissionDecision":"ask"') ? "ask" : "allow";
+    const text = outcome === "ask" ? r.stdout : r.stderr;
+    return { exit: r.exitCode, stdout: r.stdout, stderr: r.stderr, outcome, rule: /\(([a-z0-9-]+)\)/.exec(text)?.[1] ?? "" };
+  }
+
+  // [rule, outcome, commands that must be stopped, commands that must pass]
+  const RULES: readonly (readonly [string, "deny" | "ask", readonly string[], readonly string[]])[] = [
+    ["sql-delete-all", "ask",
+      [`psql -c "DELETE FROM users;"`, `mysql -e 'delete from orders'`, `bash -c "sqlite3 app.db 'DELETE FROM \\"t\\"'" `, `cat x | psql && psql -c "DELETE FROM a WHERE id=1; DELETE FROM b;"`],
+      [`psql -c "DELETE FROM users WHERE id = 1;"`, `mysql -e "delete from orders where status='x'"`, `psql -c "SELECT * FROM users"`, `echo "DELETE FROM users"`, `psql -c "INSERT INTO a VALUES (1)"`]],
+    ["prisma-migrate-reset", "ask",
+      [`npx prisma migrate reset --force`, `prisma migrate reset`, `pnpm exec prisma migrate reset --skip-seed`, `FOO=1 bash -c "cd api && npx prisma migrate reset"`],
+      [`npx prisma migrate dev`, `npx prisma migrate deploy`, `prisma migrate status`, `npx prisma generate`, `echo prisma migrate reset`]],
+    ["prisma-accept-data-loss", "ask",
+      [`npx prisma db push --accept-data-loss`, `pnpm dlx prisma@5 db push --schema x.prisma --accept-data-loss`, `bunx prisma db push --accept-data-loss --skip-generate`],
+      [`npx prisma db push`, `prisma db push --skip-generate`, `prisma db pull`]],
+    ["supabase-reset-linked", "deny",
+      [`supabase db reset --linked`, `npx supabase db reset --db-url postgres://u@h/db`, `supabase db reset --linked --no-seed`],
+      [`supabase db reset`, `supabase start`, `supabase db push`, `supabase db diff --linked`]],
+    ["rm-project-wipe", "ask",
+      [`rm -rf ./*`, `rm -rf *`, `rm -rf .`, `rm -rf ${CWD}`, `ls && rm -fr ./`],
+      [`rm -rf dist`, `rm -rf build node_modules .next coverage tmp`, `rm -rf ./dist/*`, `rm -rf src/*`, `cd build && rm -rf *`, `rm file.txt`]],
+    ["rm-git-dir", "deny",
+      [`rm -rf .git`, `rm -rf ./.git/`, `rm -rf ${CWD}/.git`, `echo go; rm -r .git`],
+      [`rm -rf node_modules/pkg/.git`, `rm -rf vendor/lib/.git`, `rm -rf .github`, `git status`, `rm -rf .gitignore`]],
+    ["mongo-drop-database", "deny",
+      [`mongosh --eval "db.dropDatabase()"`, `mongo mydb --eval 'db.dropDatabase();'`, `mongosh "mongodb://h/db" <<EOF\ndb.getSiblingDB("x").dropDatabase()\nEOF`],
+      [`mongosh --eval "db.users.find()"`, `mongosh --eval "db.users.insertOne({a:1})"`, `mongosh --eval "db.users.createIndex({a:1})"`, `echo dropDatabase`]],
+    ["redis-flush", "deny",
+      [`redis-cli -u $REDIS_URL FLUSHALL`, `redis-cli -h prod.example.com FLUSHDB`, `redis-cli -u redis://cache.example.com:6379 flushall`, `echo FLUSHALL | redis-cli -h 10.0.0.5`, `redis-cli -h localhost -h prod.example FLUSHALL`, `redis-cli -h prod.example -h localhost FLUSHALL`, `redis-cli -u redis://127.0.0.1 -h prod.example FLUSHALL`, `redis-cli -h localhost -u redis://prod.example:6379 FLUSHDB`, `redis-cli FLUSHALL -h`],
+      [`redis-cli FLUSHALL`, `redis-cli -h localhost FLUSHDB`, `redis-cli -h 127.0.0.1 -p 6380 FLUSHALL`, `redis-cli -u redis://localhost:6379 FLUSHALL`, `redis-cli -u redis://127.0.0.1:6379 -h localhost FLUSHDB`, `redis-cli -u unix:///tmp/redis.sock FLUSHALL`, `redis-cli -h prod.example.com GET key`, `redis-cli -h localhost -h 127.0.0.1 FLUSHALL`]],
+    ["fly-destroy", "deny",
+      [`fly volumes destroy vol_123 --yes`, `flyctl apps destroy my-app`, `fly -a my-app volume destroy vol_1`, `fly destroy my-app`],
+      [`fly volumes list`, `fly deploy`, `flyctl status`, `fly apps list`]],
+    ["vercel-remove", "deny",
+      [`vercel remove my-prod-app --yes`, `npx vercel rm my-app`, `vercel --token $T project rm my-app`],
+      [`vercel env ls`, `vercel deploy`, `vercel --prod`, `vercel list`]],
+    ["gh-repo-delete", "deny",
+      [`gh repo delete org/repo --yes`, `gh api -X DELETE repos/org/repo`, `gh api --method=delete /repos/org/repo`, `gh api -XDELETE repos/org/repo`, `gh api -X=DELETE repos/org/repo`, `gh api --method DELETE https://api.github.com/repos/org/repo`, `gh api -X DELETE "https://ghe.example.com/api/v3/repos/org/repo"`, `gh api -X DELETE /repos/org/repo?x=1`, `gh api --header "Accept: x" -X DELETE repos/org/repo`, `gh api --hostname ghe.example.com -X DELETE repos/org/repo`],
+      [`gh repo view org/repo`, `gh pr list`, `gh pr view 5`, `gh api repos/org/repo`, `gh api -X POST repos/org/repo/issues`, `gh api -X DELETE user/emails`, `gh api https://api.github.com/repos/org/repo`, `gh api -X GET https://ghe.example.com/api/v3/repos/org/repo`, `gh api -X DELETE https://api.github.com/user/emails`]],
+  ];
+
+  for (const [rule, outcome, stopped, passing] of RULES) {
+    it(`${rule}: at least 2 stopped (${outcome}) and 3 passing commands are listed`, () => {
+      expect(stopped.length).toBeGreaterThanOrEqual(2);
+      expect(passing.length).toBeGreaterThanOrEqual(3);
+    });
+    for (const cmd of stopped) {
+      it(`${rule} ${outcome}: ${cmd.slice(0, 60)}`, async () => {
+        const r = await g2(cmd);
+        expect({ outcome: r.outcome, rule: r.rule }).toEqual({ outcome, rule });
+      });
+    }
+    for (const cmd of passing) {
+      it(`${rule} passes: ${cmd.slice(0, 60)}`, async () => {
+        const r = await g2(cmd);
+        expect(r).toMatchObject({ exit: 0, stdout: "", stderr: "" });
+      });
+    }
+  }
+
+  it("every new rule id is in GUARD_SHELL_RULES and documented in docs/guard-pack.md", async () => {
+    const { GUARD_SHELL_RULES, ASK_RULES } = await import("../src/guard-pack.js");
+    const doc = readFileSync(join(import.meta.dirname, "..", "docs", "guard-pack.md"), "utf8");
+    for (const [rule, outcome] of RULES) {
+      expect(GUARD_SHELL_RULES as readonly string[]).toContain(rule);
+      expect(doc).toContain(`\`${rule}\``);
+      expect(ASK_RULES.has(rule)).toBe(outcome === "ask");
+    }
+  });
+
+  it("ask on Claude: exit 0, stdout permissionDecision ask, empty stderr, reason has code and rule id and no command", async () => {
+    const r = await g2(`psql -c "DELETE FROM secret_table_name;"`);
+    expect(r).toMatchObject({ exit: 0, stderr: "", outcome: "ask", rule: "sql-delete-all" });
+    const body = JSON.parse(r.stdout).hookSpecificOutput;
+    expect(body).toMatchObject({ hookEventName: "PreToolUse", permissionDecision: "ask" });
+    expect(body.permissionDecisionReason).toMatch(/^KYA asks before Bash: GUARD_ASK \(sql-delete-all\)\. .+docs\/guard-pack\.md\.$/);
+    expect(r.stdout).not.toContain("secret_table_name");
+    const wipe = await g2(`rm -rf ./*`);
+    expect(wipe.stdout).not.toContain(CWD);
+  });
+
+  it("ask falls back to deny on a host without ask (codex, gemini), with the same rule id and no command", async () => {
+    for (const host of ["codex", "gemini", "kimi"]) {
+      const r = await g2(`npx prisma migrate reset --force`, { host });
+      expect({ host, exit: r.exit, rule: r.rule }).toEqual({ host, exit: 2, rule: "prisma-migrate-reset" });
+      expect(r.stderr).toMatch(/^KYA denied Bash: GUARD_ASK \(prisma-migrate-reset\)\. .+Ask the user; see docs\/guard-pack\.md\.\n$/);
+      expect(r.stderr).not.toContain("--force");
+    }
+  });
+
+  it("trail: an ask is verdict REQUIRE_APPROVE, outcome held, reason GUARD_ASK, not counted as a never-list block", async () => {
+    const kyaHome = tmp("kya-g2-kh-");
+    await g2(`psql -c "DELETE FROM users;"`, { kyaHome });
+    const rows = readTrail(CWD, { KYA_HOME: kyaHome });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ verdict: "REQUIRE_APPROVE", outcome: "held", reasonCode: "GUARD_ASK", neverRule: "sql-delete-all" });
+    expect(rows[0]!.neverEvent).toBe(false);
+    expect(isNeverCode("GUARD_ASK")).toBe(false);
+  });
+
+  it("trail: the deny fallback of an ask rule is outcome blocked", async () => {
+    const kyaHome = tmp("kya-g2-kh-");
+    await g2(`rm -rf ./*`, { host: "codex", kyaHome });
+    expect(readTrail(CWD, { KYA_HOME: kyaHome })[0]).toMatchObject({ verdict: "REQUIRE_APPROVE", outcome: "blocked", reasonCode: "GUARD_ASK", neverRule: "rm-project-wipe" });
+  });
+
+  it("trail: a deny rule row is unchanged (DENY, blocked, NEVER_SHELL)", async () => {
+    const kyaHome = tmp("kya-g2-kh-");
+    await g2(`gh repo delete org/repo --yes`, { kyaHome });
+    expect(readTrail(CWD, { KYA_HOME: kyaHome })[0]).toMatchObject({ verdict: "DENY", outcome: "blocked", reasonCode: "NEVER_SHELL", neverEvent: true, neverRule: "gh-repo-delete" });
+  });
+
+  it("a deny in the same call beats an ask", async () => {
+    const r = await g2(`npx prisma migrate reset --force && terraform destroy`);
+    expect({ outcome: r.outcome, rule: r.rule }).toEqual({ outcome: "deny", rule: "terraform-destroy" });
+  });
+
+  it("strict mode is stricter than an ask: deny with the rule id, outcome blocked; not strict is unchanged", async () => {
+    for (const [cmd, rule] of [[`rm -rf ./*`, "rm-project-wipe"], [`npx prisma migrate reset`, "prisma-migrate-reset"], [`psql -c "DELETE FROM t;"`, "sql-delete-all"]] as const) {
+      const kyaHome = tmp("kya-g2-kh-");
+      const r = await g2(cmd, { strict: true, kyaHome });
+      expect({ exit: r.exit, outcome: r.outcome, rule: r.rule }).toEqual({ exit: 2, outcome: "deny", rule });
+      expect(r.stdout).toContain('"permissionDecision":"deny"');
+      expect(readTrail(CWD, { KYA_HOME: kyaHome })[0]).toMatchObject({ verdict: "REQUIRE_APPROVE", outcome: "blocked", reasonCode: "GUARD_ASK", neverRule: rule });
+      expect((await g2(cmd)).outcome).toBe("ask");
+    }
+  });
+
+  it("guardAllow by rule id (command) lifts a new rule, and only that command", async () => {
+    for (const [rule, , stopped] of RULES) {
+      const cmd = stopped[0]!;
+      const { home, cwd } = scratch({ guardAllow: [{ rule, command: cmd }] });
+      expect((await g2(cmd, { home, cwd })).outcome, rule).toBe("allow");
+      const other = scratch({ guardAllow: [{ rule: "some-other-rule", command: cmd }] });
+      expect((await g2(cmd, { home: other.home, cwd: other.cwd })).rule, rule).toBe(rule);
+    }
+  });
+
+  it("guardAllow path lifts rm-project-wipe for that folder; shellNeverList false lifts all new rules", async () => {
+    const { home, cwd } = scratch({ guardAllow: [{ rule: "rm-project-wipe", path: "~/work/app" }] });
+    expect((await g2(`rm -rf ./*`, { home, cwd })).outcome).toBe("allow");
+    const off = scratch({ shellNeverList: false });
+    expect((await g2(`gh repo delete a/b`, { home: off.home, cwd: off.cwd })).outcome).toBe("allow");
+  });
+
+  it("the hook error fallback turns an ask rule into a deny (config is not read there)", async () => {
+    const r = await runHook({
+      host: "claude", strict: false, stdinText: event("Bash", { command: "npx prisma migrate reset" }),
+      env: { HOME, KYA_HOME: tmp("kya-g2-kh-") }, cwd: CWD, evaluate: () => { throw new Error("boom"); },
+    });
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toContain("GUARD_ASK (prisma-migrate-reset)");
+  });
+
+  it("the other offline callers see an ask as REQUIRE_APPROVE with the rule id", () => {
+    const ctx = { cwd: CWD, home: HOME, projectRoot: CWD, env: { HOME } };
+    const out = evaluateOffline({ toolId: "Bash", action: "Bash" } as never, "ide", { command: "npx prisma migrate reset" }, undefined, ctx);
+    expect(out).toMatchObject({ verdict: "REQUIRE_APPROVE", reasonCode: "GUARD_ASK", ruleId: "prisma-migrate-reset" });
+  });
+});

@@ -1,0 +1,14 @@
+{
+  "name": "kya-guard",
+  "displayName": "KYA Guard",
+  "version": "1.0.0",
+  "description": "Stops your coding agent from deleting, leaking or dropping things. No network, one file, fails open.",
+  "author": {
+    "name": "MFR Limited (Shield KYA)",
+    "email": "it@shield-agent.com"
+  },
+  "homepage": "https://shield-agent.com/install",
+  "repository": "https://github.com/The-Pixel-Boys/shield-kya",
+  "license": "MIT",
+  "keywords": ["guard", "safety", "hooks", "destructive-commands", "secrets"]
+}

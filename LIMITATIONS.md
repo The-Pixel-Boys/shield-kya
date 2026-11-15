@@ -1,11 +1,12 @@
 # Known limitations
 
+- Local hooks fail open. They block the never-list and the guard pack, and they record every other tool call without blocking it. Real blocking and human approval run on the MCP policy path against a hosted workspace (the Shield Agent cloud service).
 - This package does not scan a network or discover agents that never call evaluate.
 - Offline `eval-tool --offline` and `dash --once --offline` use a sample policy surface for demos. Production needs a real control plane (local free or hosted).
 - Unsigned v1 passport JSON is observational. Signed v2 claims (`shield-kya-agent-passport-v2`, `shield-kya-session-claim-v1`) need the hosted control-plane key.
 - If a host never wraps tools, session shrink cannot stop it. Spawn without a control plane cannot be gated.
 - `wrap` evaluates and records a local trail. **Default is observe:** REQUIRE_APPROVE does **not** open a Hold ticket (no second approve). Use `--hold` / `KYA_HOLD=1` for the org Hold path. Never-events still DENY with no prompt. `wrap --tool-id` never executes the side effect; `wrap -- <cmd>` runs the command only after an allowing verdict.
-- `kya start` is the OSS one-liner: init + write local MCP configs + open the live receipt. Hosts still must reload MCP once; KYA cannot inject into Cursor/Claude without that.
+- `kya start` is the OSS one-liner: it prints a plan, asks once (`--yes` skips; off a terminal it applies only with `--yes`), then inits, writes local MCP configs for the hosts it finds, and opens the live receipt. `kya uninstall` undoes it. Hosts still must reload MCP once; KYA cannot inject into Cursor/Claude without that.
 - PreToolUse hooks (claude/grok/kimi) are fail-open advisory plus a local never-list and guard pack DENY. They do not replace the MCP `kya.policy_evaluate` plane path, and they apply to new sessions only - hosts load hooks at session start.
 - After wrap on an interactive TTY, KYA writes the receipt HTML and opens it in the browser once per project (always on DENY). Set `KYA_RECEIPT_AUTO=0` to disable, `KYA_RECEIPT_AUTO=1` to force. `receipt --open` is the live-updating loopback server.
 - Write/edit wraps may store a **clipped redacted `diffPreview`** (≤8 lines / ≤480 chars body; PEM collapsed to `[redacted-pem]`) on the trail for the receipt. Never full patches. Shell/exec never get a preview. Disable with `KYA_DIFF_PREVIEW=0`.

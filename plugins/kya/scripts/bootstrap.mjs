@@ -2,10 +2,13 @@
 // hook can run `node <data>/node_modules/@shield-agent/kya/dist/cli.js` with no npx and no
 // npm/registry traffic at hook time. Node builtins only. Idempotent. Never edits user settings,
 // never approves anything. Always exits 0; a problem becomes a loud `systemMessage`.
-// usage: bootstrap.mjs @shield-agent/kya@X.Y.Z   (the pin comes only from hooks.json)
+// usage: bootstrap.mjs [@shield-agent/kya@X.Y.Z]
+// The pin is the argument when a host passes one (Codex, Copilot, Gemini). With no argument (Claude
+// Code) it is the `version` of the manifest next to this scripts folder, which `pnpm sync:version`
+// keeps equal to package.json. So hooks.json carries no package spec, only a literal script path.
 //
 // Install: exact version only, fixed public registry, empty user/global npmrc (fresh 0600 files),
-// every npm_config_* and NODE_OPTIONS stripped from the npm child, --ignore-scripts
+// every npm_config_* and NODE_OPTIONS stripped from the npm child, and every variable that looks like a credential (token, secret, password, api key) stripped from both children, --ignore-scripts
 // --omit=optional. It installs into a staging prefix inside DATA, verifies it (version, cli.js,
 // `--help` load check) and only then swaps node_modules into place. The swap is a pair of renames:
 // a hook that starts in that instant fails open once (follow-up: versioned dirs plus a symlink).
@@ -19,12 +22,25 @@ import {
   closeSync, constants, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync,
   renameSync, rmSync, statSync, unlinkSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, isAbsolute } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const SEMVER = "(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*)?";
-const spec = process.argv[2] ?? "";
+/** The version of this plugin's own manifest (Claude first, then Codex), or "" when none can be read. */
+function manifestVersion() {
+  for (const m of [".claude-plugin", ".codex-plugin"]) {
+    try {
+      const v = JSON.parse(readFileSync(fileURLToPath(new URL(`../${m}/plugin.json`, import.meta.url)), "utf8")).version;
+      if (typeof v === "string") return v;
+    } catch { /* try the next manifest */ }
+  }
+  return "";
+}
+const spec = process.argv[2] ?? `@shield-agent/kya@${manifestVersion()}`;
 const pin = new RegExp(`^@shield-agent/kya@(${SEMVER})$`).exec(spec)?.[1];
-const data = process.env.CLAUDE_PLUGIN_DATA;
+// Only an absolute, expanded path: a relative or "${...}" value would install into the user's project.
+const rawData = process.env.CLAUDE_PLUGIN_DATA ?? "";
+const data = isAbsolute(rawData) && !rawData.includes("${") ? rawData : "";
 const STALE_LOCK_MS = 150_000;
 const notes = []; // problems: kya cannot do its job
 const warns = []; // kya works, but the user should know
@@ -64,6 +80,9 @@ function done() {
   process.exit(0);
 }
 
+/** The user's environment minus anything that looks like a credential: no child of this script gets a token or key from the user's machine. */
+const noSecrets = (env) => Object.fromEntries(Object.entries(env).filter(([k]) => !/token|secret|passw|api_?key|credential/i.test(k)));
+
 /** Async spawn with a hard timeout (a sync spawn would block the signal handlers above). */
 function run(cmd, args, opts, ms) {
   return new Promise((resolve) => {
@@ -85,7 +104,7 @@ async function loadsAt(root, wantVersion) {
     if (wantVersion && JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).version !== wantVersion) return false;
     const cli = join(dir, "dist/cli.js");
     if (!existsSync(cli)) return false;
-    const r = await run(process.execPath, [cli, "--help"], { env: { ...process.env, KYA_SKIP_NODE_CHECK: "1" } }, 10_000);
+    const r = await run(process.execPath, [cli, "--help"], { env: { ...noSecrets(process.env), KYA_SKIP_NODE_CHECK: "1" } }, 10_000);
     return r.status === 0;
   } catch {
     return false;
@@ -143,7 +162,7 @@ async function install() {
   const rc = mkdtempSync(join(data, ".rc-"));
   scratch.add(stage).add(rc);
   mkdirSync(stage);
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^npm_config_/i.test(k) && k !== "NODE_OPTIONS"));
+  const env = Object.fromEntries(Object.entries(noSecrets(process.env)).filter(([k]) => !/^npm_config_/i.test(k) && k !== "NODE_OPTIONS"));
   const r = await run(
     win ? "npm.cmd" : "npm",
     [
@@ -175,7 +194,7 @@ async function install() {
   }
 }
 
-if (!pin) notes.push(`bad kya pin "${spec}" in hooks.json (an exact semver version is required).`);
+if (!pin) notes.push(`bad kya pin "${spec}" (an exact semver version is required).`);
 else if (!data) notes.push("CLAUDE_PLUGIN_DATA is not set, cannot install kya.");
 else if (!(await completeAt(data))) {
   try {

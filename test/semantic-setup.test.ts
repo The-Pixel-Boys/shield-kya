@@ -130,7 +130,7 @@ echo 'exports.x=1' > "$prefix/node_modules/@shield-agent/fastembed/index.js"
     const proj = join(dir, "proj");
     mkdirSync(proj, { recursive: true });
     return new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [cliJs, "start", "--no-open", "--no-gate"], {
+      const child = spawn(process.execPath, [cliJs, "start", "--yes", "--no-open", "--no-gate"], {
         cwd: proj,
         env: {
           ...process.env,
@@ -152,11 +152,11 @@ echo 'exports.x=1' > "$prefix/node_modules/@shield-agent/fastembed/index.js"
     });
   }
 
-  it("no terminal: start exits 0, installs nothing, prints the hint", async () => {
+  it("no terminal: start exits 0, installs nothing, prints no hint (kya doctor prints it, see help-surface-e2e)", async () => {
     const r = await run({});
     expect(r.code).toBe(0);
-    expect(r.stderr).toContain("Plain-language search is off");
-    expect(r.stderr).toContain("KYA_SEMANTIC=on kya start");
+    expect(r.stderr).not.toContain("Plain-language search is off");
+    expect(r.stdout).not.toContain("Plain-language search is off");
     expect(existsSync(join(dir, "npm-args.txt"))).toBe(false);
     expect(semanticRuntimeInstalled({ KYA_HOME: dir })).toBe(false);
   }, 30_000);

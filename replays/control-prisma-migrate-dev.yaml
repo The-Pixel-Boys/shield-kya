@@ -1,0 +1,11 @@
+id: control-prisma-migrate-dev
+kind: control
+title: Prisma migrate dev
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    npx prisma migrate dev
+expect: allow
+credit: ""

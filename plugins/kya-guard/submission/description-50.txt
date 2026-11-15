@@ -1,0 +1,1 @@
+Stops coding agents deleting, leaking or dropping.

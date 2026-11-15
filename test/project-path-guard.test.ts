@@ -323,14 +323,14 @@ describe.skipIf(!posix || !existsSync(cliJs))("e2e: real kya CLI, project symlin
     }
   });
 
-  it("start refuses a generic mcp.json symlink out of the project", () => {
+  it("start no longer writes the generic mcp.json, so a symlinked one is never followed", () => {
     const f = fixture();
     try {
       symlinkSync(f.victim, join(f.cwd, "mcp.json"));
-      const r = kya(["start"], f.cwd, f.home);
-      expect(r.code).toBe(1);
-      expect(r.out).toContain("outside the project");
+      const r = kya(["start", "--yes", "--no-open", "--no-gate"], f.cwd, f.home);
+      expect(r.code, r.out).toBe(0);
       expect(readFileSync(f.victim, "utf8")).toBe(SECRET);
+      expect(lstatSync(join(f.cwd, "mcp.json")).isSymbolicLink()).toBe(true);
     } finally {
       f.done();
     }
@@ -433,8 +433,9 @@ describe.skipIf(!posix || !existsSync(cliJs))("e2e: real kya CLI, project symlin
   it("start refuses a .mcp.json symlink out of the project before writing anything", () => {
     const f = fixture();
     try {
+      mkdirSync(join(f.home, ".claude"), { recursive: true }); // Claude Code is installed, so start wires .mcp.json
       symlinkSync(f.victim, join(f.cwd, ".mcp.json"));
-      const r = kya(["start"], f.cwd, f.home);
+      const r = kya(["start", "--yes"], f.cwd, f.home);
       expect(r.code).toBe(1);
       expect(r.out).toContain("outside the project");
       expect(readFileSync(f.victim, "utf8")).toBe(SECRET);

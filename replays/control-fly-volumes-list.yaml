@@ -1,0 +1,11 @@
+id: control-fly-volumes-list
+kind: control
+title: fly volumes list
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    fly volumes list
+expect: allow
+credit: ""

@@ -76,12 +76,13 @@ commands do not read the saved key.
 
 ## Calls to action (one line)
 
-Some commands print one line that points to `kya login`:
+Some commands print one line that asks you to run `kya receipt --share` for a link to send a colleague:
 
 | Command | When the line appears |
 |---------|-----------------------|
 | `kya certify` | The report has gaps. |
-| `kya receipt` | When the trail is too large to read in full, the line says the report shows only the newest part. Otherwise the line suggests `kya receipt --share`. |
+| `kya receipt` | When the trail is too large to read in full, the line says the report shows only the newest part. Otherwise the line only asks for the share. |
+| `kya start` | The trail has 10 or more events. |
 
 A line appears at most once every 24 hours on this machine. It never appears when:
 
@@ -94,6 +95,31 @@ A line appears at most once every 24 hours on this machine. It never appears whe
 - `~/.kya/cta.json` contains `"optOut": true`.
 
 The line makes no network call and sends no telemetry.
+
+## Claim a shared report
+
+You do not need `kya login` to keep a shared report. The live report (`kya start`) has a **Share this report**
+button in its header. It makes the same redacted public link as `kya receipt --share` and shows it with a
+copy control. If there is no network, the button shows an error and the report keeps working.
+
+1. Click **Share this report**. Send the public link to a colleague, and open it yourself to claim it.
+2. Type your email address on the shared page. We send one email with a link. Open it and press the button.
+
+When you press the button, the account is created, the report is kept, and you get **one summary email each
+week** with the calls that ran, the calls that were blocked and the top reasons. Every email has a link that
+stops it without a login (it works for 90 days). Nothing is saved until you confirm the email address.
+
+**Claiming does not connect your computer.** A link can be copied, so it must never hand out a key. To connect
+this computer, run `kya login` (the page after the claim shows the command): the CLI shows a code, you approve
+it in the console with your normal sign-in and second factor, and the CLI saves a key as described above.
+
+- A report that nobody claims is deleted after 7 days. The shared page says so. A claimed report is kept.
+- The page and the emails hold counts and public labels only. They never hold a command, a file path, a
+  project name or a session ID. The share payload is the same as before, and `kya` sends nothing else with it.
+- If the address already has an account, the link asks you to sign in with that account first (with the second
+  factor, if you use one). Nothing changes for a person who is not signed in. The account needs the owner or
+  admin role.
+- The first person who confirms a claim gets the report. A colleague who opens the public link can claim it too.
 
 ## Known limits
 

@@ -1,0 +1,11 @@
+id: control-gh-repo-view
+kind: control
+title: gh repo view
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    gh repo view org/repo
+expect: allow
+credit: ""

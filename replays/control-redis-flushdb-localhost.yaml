@@ -1,0 +1,11 @@
+id: control-redis-flushdb-localhost
+kind: control
+title: redis-cli FLUSHDB on localhost
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    redis-cli -h localhost FLUSHDB
+expect: allow
+credit: ""

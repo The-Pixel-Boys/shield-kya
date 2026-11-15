@@ -1,5 +1,5 @@
 class ShieldKya < Formula
-  desc "Audit trail and traceability for AI agents"
+  desc "Stops your coding agent from deleting, leaking or dropping things"
   homepage "https://shield-agent.com/install"
   url "https://registry.npmjs.org/@shield-agent/kya/-/kya-0.27.0.tgz"
   sha256 "16b1d6e2e04d90d378efe8367e8a85aba9a8a67c4b47ac498cc39d221fc8def8"

@@ -12,7 +12,7 @@ export interface ParsedArgs {
 }
 
 /** Pure switches: never take the next token as their value (`kya --dry-run team init` must not eat `team`). */
-const SWITCHES = new Set(["dry-run"]);
+const SWITCHES = new Set(["dry-run", "yes", "project"]);
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const args = [...argv];

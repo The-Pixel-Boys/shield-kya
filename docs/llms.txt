@@ -7,7 +7,8 @@
 ## Features
 
 - Print version: Prints the installed kya version and exits. Command or flag: `kya version`, `--version`, `-v`, `-V`.
-- One-line start: Wires the local MCP gate into your coding host and opens the live report in the background. Command or flag: `kya start`, `--no-open`, `--force`, `--no-gate`.
+- One-line start: Shows a plan first (each file, created or merged, exact keys), asks once, then wires the local MCP gate into the coding hosts found on this machine and opens the live report in the background. It ends with a guard proof: three built-in demo calls go through the hook and are blocked, and they are not saved to the trail. Command or flag: `kya start`, `--no-open`, `--force`, `--no-gate`, `--yes`, `--dry-run`, `KYA_YES=1`.
+- Undo kya start: Reads the manifest of every write, removes only the keys KYA added, deletes files KYA created if unchanged, restores merged files byte for byte, and prints what it left alone. Hook launcher in ~/.kya/bin fails open; kya doctor flags a dead path. Command or flag: `kya uninstall`, `--project`, `--dry-run`, `~/.kya/manifest.json`, `~/.kya/bin/kya-hook`.
 - Stop report server: Stops the background report server that kya start began. Command or flag: `kya stop`, `--all`.
 - Scaffold config: Creates the .kya config folder with sample tools and an env example. Command or flag: `kya init`, `--force`.
 - Wire a coding host: Writes the KYA MCP server into the config of one coding host (12 hosts). Command or flag: `kya connect`, `--project`, `--force`.
@@ -19,11 +20,14 @@
 - Scoop install: Installs kya on Windows with Scoop. Command or flag: `scoop install shield-kya`.
 - Team rollout: commit plugin pin: Adds a tag-pinned plugin marketplace and an enabled plugin to the project settings for everyone who opens the repo. Command or flag: `kya team init`, `--dry-run`.
 - Managed-settings JSON for admins: Prints the managed-settings JSON an administrator deploys. Command or flag: `kya team managed-settings`.
+- Team rollout: guard plugin for a repository: Adds a tag-pinned plugin marketplace and the kya-guard plugin to the project settings, prints the exact diff and an agent-guarded README badge that links to the public scoreboard, and is reversed by kya uninstall --project. Command or flag: `--guard`.
 - Repository policy file: Optional .kya/policy.json committed with the repo. Adds deny and requireApprove tool ids for the local gate; it cannot relax a verdict, and an invalid file is ignored with a note. Command or flag: `.kya/policy.json`.
 - Opt-in usage stats: Anonymous usage stats, off by default. Status, on, off, show and reset. Command or flag: `kya telemetry`, `--purge`.
 - Global activity record: Keeps a global activity log in the KYA home folder. Reports read the last 1 MB of it. Command or flag: `KYA_HOME`.
-- Activity report: Writes the activity report as HTML, JSON or Markdown for the last few days or one session. Command or flag: `kya receipt`, `--open`, `--days`, `--session`, `--q`, `--json`, `--out`.
-- Redacted share link: Publishes a redacted summary of the report and prints a public link. Command or flag: `kya receipt`, `--share`, `--share-url`, `--share-retries`, `KYA_SHARE_URL`.
+- Activity report: Writes the activity report as HTML, JSON or Markdown for the last few days or one session. The first panel is Blocked (the last five blocked calls, or a labelled demo before the first one); Certify has its own tab. Command or flag: `kya receipt`, `--open`, `--days`, `--session`, `--q`, `--json`, `--out`.
+- Near-miss card: Makes a 1200 by 630 image (SVG, and PNG when a renderer is on the machine) about the last call the guard denied: the rule, the host and the date, nothing private. Prints a two-line caption. A button next to each stopped call in the live report, and the command in a saved report. Command or flag: `kya receipt`, `--card`.
+- Redacted share link: Publishes a redacted summary of the report and prints a public link and a claim link. Command or flag: `kya receipt`, `--share`, `--share-url`, `--share-retries`, `KYA_SHARE_URL`.
+- Share and claim: The live report has a Share this report button that makes the redacted public link, with a copy control. The shared page has a claim form: confirm an email address to keep the report and get one summary email each week. A claim never connects a computer: kya login does. Unclaimed links are deleted after 7 days. Command or flag: `kya start`, `kya receipt`, `--share`, `kya login`, `KYA_SHARE_URL`.
 - Natural-language search in report: Search box in the activity report. Command or flag: none.
 - Map of agent actions: Graph and heat views of what KYA recorded for agent actions on this machine. Local only. Advisory. Command or flag: `kya map`, `--days`, `--json`, `--html`, `--session`.
 - Agent-flow export: Writes the local trail as an agent-flow JSONL event log. Classes only, no args. Local only. Advisory. Command or flag: `kya export`, `--format`, `--days`, `--session`, `--out`, `--force`.
@@ -33,7 +37,7 @@
 - Developer posture report (opt-in): Off by default. kya posture on prints the exact report and asks; a send needs the local toggle, a hosted login and the workspace policy. Minimised fields only; the client refuses any report with an environment name or value, a path, a user or host name, or an IP address. Advisory. Command or flag: `kya posture`, `status`, `on`, `off`, `send`, `--dry-run`, `--json`, `label`, `--yes`.
 - Cost showback: Observe-only cost showback inside the activity report. Command or flag: none.
 - Never-list block: Blocks never-list tools in the PreToolUse hook. kya hook exits 2 on DENY. Command or flag: `kya hook`.
-- Guard pack: Second layer of local denies in the PreToolUse hook, local and hosted (--plane-config): destructive shell commands, credential reads, secret-shaped writes and secret exfiltration. Config and guardAllow come from the user-level ~/.kya/config.json only. Command or flag: `kya hook`.
+- Guard pack: Second layer of local denies in the PreToolUse hook, local and hosted (--plane-config): destructive shell commands, credential reads, secret-shaped writes and secret exfiltration. Four rules ask the person instead of denying (Claude Code permissionDecision ask; other hosts deny). Config and guardAllow come from the user-level ~/.kya/config.json only. Command or flag: `kya hook`.
 - Advisory hook record: Records ALLOW and REQUIRE_APPROVE decisions in the hook. The call proceeds. Command or flag: `kya hook`.
 - Strict hook mode: Strict mode denies advisory decisions in the hook. Command or flag: `kya hook`, `--strict`.
 - Local MCP gate server: Serves the local MCP gate over HTTP, or over stdio for hosts. Command or flag: `kya serve-mcp`, `--stdio`, `--port`.
@@ -68,4 +72,4 @@
 - Plane connection and keys: Connects the CLI to the hosted plane with an API key, a base URL, a host and an agent ID. Command or flag: `KYA_API_KEY`, `KYA_BASE_URL`, `KYA_HOST`, `--base-url`, `--api-key`, `--host`, `--agent-id`.
 - Hosted login (device code): Links this machine to the hosted console with a device code. Saves a full-workspace key with mode 0600 in ~/.kya/hosted-credentials.json. Command or flag: `kya login`, `--base-url`.
 - Sign out on this machine: Deletes the saved hosted key file on this machine. The key stays active on the server until revoked. Command or flag: `kya logout`.
-- Hosted calls to action: One line, at most once a day, after kya certify (gaps) and kya receipt. Silent in CI, non-TTY, KYA_QUIET, KYA_CTA=0 and config opt-out. Command or flag: `KYA_QUIET`, `KYA_CTA`.
+- Share calls to action: One line, at most once a day, after kya certify (gaps), kya receipt, and kya start once the trail has 10 events. Every line asks for kya receipt --share. Silent in CI, non-TTY, KYA_QUIET, KYA_CTA=0 and config opt-out. Command or flag: `KYA_QUIET`, `KYA_CTA`.

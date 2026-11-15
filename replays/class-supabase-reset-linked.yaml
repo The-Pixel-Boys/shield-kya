@@ -1,0 +1,13 @@
+id: class-supabase-reset-linked
+kind: class
+title: Supabase db reset on the linked remote project
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    supabase db reset --linked
+expect: deny
+rule: supabase-reset-linked
+since: 0.35.0
+credit: ""

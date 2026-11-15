@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "command",
+        "matcher": "*",
+        "bash": "command -v node >/dev/null 2>&1 || exit 0; node \"$PLUGIN_ROOT/dist/guard.mjs\" --host copilot; [ $? -eq 2 ] && exit 2; exit 0",
+        "timeoutSec": 5
+      }
+    ]
+  }
+}

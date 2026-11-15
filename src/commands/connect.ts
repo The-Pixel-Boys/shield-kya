@@ -14,7 +14,6 @@
 import {
   existsSync,
   lstatSync,
-  mkdirSync,
   readFileSync,
   readlinkSync,
   realpathSync,
@@ -29,6 +28,7 @@ import { hostReload, hostRunning, listProcessNames, reloadMessage } from "../hos
 import { hookSupported, PROJECT_HOOK_CLAUDE_ONLY, wireHook, type HostedHookWiring } from "./wire-hooks.js";
 import { loadPlaneConfig, PlaneError } from "./hosted-hook.js";
 import { atomicWriteSync, projectWritePath, writeProjectFile } from "../fs-atomic.js";
+import { journalMkdir } from "../write-journal.js";
 
 export { atomicWriteSync } from "../fs-atomic.js";
 
@@ -279,13 +279,13 @@ export function createTarget(path: string): string {
   try {
     if (lstatSync(path).isSymbolicLink()) {
       const resolved = resolve(dirname(path), readlinkSync(path));
-      mkdirSync(dirname(resolved), { recursive: true });
+      journalMkdir(dirname(resolved));
       return resolved;
     }
   } catch {
     /* not a symlink or unreadable link - plain create below */
   }
-  mkdirSync(dirname(path), { recursive: true });
+  journalMkdir(dirname(path));
   return path;
 }
 

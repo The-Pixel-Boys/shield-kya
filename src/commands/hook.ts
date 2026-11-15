@@ -12,7 +12,7 @@ import { isAbsolute, join } from "node:path";
 import { configFilePath, globalConfigDir, resolveConfig } from "../config.js";
 import type { PolicyEvaluateResponse } from "../client.js";
 import { runEvalTool } from "./eval-tool.js";
-import { appendTrail, defaultSessionId, hostToProduct } from "../trail.js";
+import { appendTrail, defaultSessionId, hostToProduct, type TrailOutcome } from "../trail.js";
 import { trailMapFields } from "../trail-map-fields.js";
 import { deriveWireChangeFields } from "../diff-preview.js";
 import { matchesNeverList } from "../offline-evaluate.js";
@@ -177,6 +177,17 @@ function parsePayload(stdinText: string): HookPayload | undefined {
 const ALLOW: HookResult = { exitCode: 0, stdout: "", stderr: "" };
 
 /**
+ * What the hook did with a call whose verdict is known: DENY blocks (exit 2), REQUIRE_APPROVE holds in strict mode,
+ * everything else runs (exit 0). A guard ask rule (`askMode`) is held when the host can ask, else blocked. Used for the trail row; the exit code below follows the same two tests.
+ */
+function outcomeFor(verdict: string, strict: boolean, askMode?: "ask" | "deny"): TrailOutcome {
+  if (askMode) return askMode === "ask" ? "held" : "blocked";
+  if (verdict === "DENY") return "blocked";
+  if (strict && verdict === "REQUIRE_APPROVE") return "held";
+  return "ran";
+}
+
+/**
  * Deny text. An input-rule hit names its rule id; the never-list cannot be overridden. A guard pack
  * hit names its rule id and says what to do instead. It does not say where the allowlist lives: that file
  * is writable by the agent, so the text points at the docs for the person. Never carries command text,
@@ -186,11 +197,31 @@ function denyReason(toolName: string, reasonCode: string, ruleId?: string): stri
   if (reasonCode === "NEVER_EVENT" && ruleId) {
     return `KYA denied ${toolName}: NEVER_EVENT (rule ${ruleId}; never-list rules cannot be overridden)`;
   }
-  if (isNeverCode(reasonCode) && reasonCode !== "NEVER_EVENT" && ruleId) {
+  if ((isNeverCode(reasonCode) || reasonCode === GUARD_ASK) && reasonCode !== "NEVER_EVENT" && ruleId) {
     const hint = guardHint(ruleId);
     return `KYA denied ${toolName}: ${reasonCode} (${ruleId}).${hint ? ` ${hint}` : ""} Ask the user; see docs/guard-pack.md.`;
   }
   return `KYA denied ${toolName}: ${reasonCode}`;
+}
+
+/**
+ * Ask outcome of a guard ask rule. Claude Code takes `permissionDecision: "ask"` on stdout with exit 0 and shows the
+ * reason in its permission prompt (https://code.claude.com/docs/en/hooks, "PreToolUse decision control"). Other hosts
+ * have no ask we rely on, so there it is a deny.
+ */
+const GUARD_ASK = "GUARD_ASK";
+const askMode = (input: HookInput, p?: HookPayload): "ask" | "deny" =>
+  // --strict is stricter than an ask: it denies every REQUIRE_APPROVE, so an ask rule is a deny there.
+  !input.strict && input.host.trim().toLowerCase() === "claude" && !geminiShape(input, p) ? "ask" : "deny";
+
+function askReason(toolName: string, ruleId: string | undefined): string {
+  const hint = ruleId ? guardHint(ruleId) : "";
+  return `KYA asks before ${toolName}: ${GUARD_ASK}${ruleId ? ` (${ruleId})` : ""}.${hint ? ` ${hint}` : ""} See docs/guard-pack.md.`;
+}
+
+function ask(reason: string): HookResult {
+  const body = { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: reason } };
+  return { exitCode: 0, stdout: `${JSON.stringify(body)}\n`, stderr: "" };
 }
 
 function deny(reason: string, gemini = false): HookResult {
@@ -296,6 +327,7 @@ function auditedDeny(
       product: hostToProduct(input.host),
       toolId: payload?.toolName ?? "unknown",
       verdict: "DENY",
+      outcome: "blocked" as const,
       reasonCode,
       mode: "offline" as const,
       neverEvent: isNeverCode(reasonCode),
@@ -331,6 +363,8 @@ function noteGuardConfigProblem(ctx: GuardContext, input: HookInput, payload?: H
       product: hostToProduct(input.host),
       toolId: "kya:guard-config",
       verdict: "ALLOW",
+      // Not a tool call: the hook ran on its defaults. Counted as an error row, never as a call that ran.
+      outcome: "error" as const,
       reasonCode: "GUARD_CONFIG_INVALID",
       mode: "offline" as const,
       summary: `guard config ignored (${problem}); defaults in force`,
@@ -407,6 +441,7 @@ export async function runHook(input: HookInput): Promise<HookResult> {
         product: hostToProduct(input.host),
         toolId: response.toolId ?? toolName,
         verdict: response.verdict,
+        outcome: outcomeFor(response.verdict, input.strict, response.reasonCode === GUARD_ASK ? askMode(input, payload) : undefined),
         reasonCode: response.reasonCode ?? "",
         mode: "offline" as const,
         neverEvent: isNeverCode(response.reasonCode),
@@ -435,6 +470,10 @@ export async function runHook(input: HookInput): Promise<HookResult> {
     if (response.verdict === "DENY") {
       return { ...deny(denyReason(toolName, response.reasonCode, response.ruleId), geminiShape(input, payload)), firstSeen };
     }
+    if (response.reasonCode === GUARD_ASK) {
+      const reason = askReason(toolName, response.ruleId);
+      return { ...(askMode(input, payload) === "ask" ? ask(reason) : deny(denyReason(toolName, GUARD_ASK, response.ruleId), geminiShape(input, payload))), firstSeen };
+    }
     if (input.strict && response.verdict === "REQUIRE_APPROVE") {
       return { ...deny(`KYA strict mode: ${toolName} requires approval (${response.reasonCode})`, geminiShape(input, payload)), firstSeen };
     }
@@ -462,7 +501,38 @@ export async function runHook(input: HookInput): Promise<HookResult> {
     if (input.failClosed) {
       return auditedDeny("KYA fail-closed: internal error, tool call denied", "FAIL_CLOSED", input, payload);
     }
-    return ALLOW;
+    // The row is the only trace of a call the hook did not judge: if it cannot be written, say so once on stderr.
+    return recordFailOpen(input, payload) ? ALLOW : { ...ALLOW, stderr: "KYA hook: error recording a failed hook call (the call was let through)\n" };
+  }
+}
+
+/**
+ * Fail-open path: the hook failed and let the call go on. Leave an `error` row (best effort, never throws), so a
+ * call the hook did not judge is not missing from the record or counted as one that ran.
+ * Runs once, from the end of the catch block: nothing in it calls back into runHook or the evaluator, and every
+ * failure inside it is caught here, so a failing write cannot re-enter the handler. Returns false when the row was
+ * wanted but could not be written.
+ */
+function recordFailOpen(input: HookInput, payload?: HookPayload): boolean {
+  try {
+    if (!payload?.toolName) return true;
+    const trailCwd = payload.cwd?.trim() || input.cwd;
+    appendTrail(trailCwd, {
+      ts: new Date().toISOString(),
+      sessionId: payload.sessionId ?? defaultSessionId(input.env),
+      host: "ide",
+      product: hostToProduct(input.host),
+      toolId: payload.toolName,
+      verdict: "ALLOW",
+      outcome: "error",
+      reasonCode: "HOOK_ERROR",
+      mode: "offline",
+      summary: "hook error; the call was let through (fail-open)",
+      ...trailMapFields(payload.toolName, payload.toolInput, trailCwd, input.env),
+    }, input.env);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -590,7 +660,7 @@ async function runHostedHook(input: HookInput, plane: HostedHookOptions): Promis
     // Raise-only merge: the local never-list beats any plane answer or failure.
     if (neverListed) {
       verdict = { verdict: "DENY", reasonCode: "NEVER_EVENT", reason: denyReason(toolName, "NEVER_EVENT", neverRule), dedupe: true, ruleId: neverRule };
-    } else if (guardHit) {
+    } else if (guardHit && guardHit.code !== GUARD_ASK) {
       verdict = { verdict: "DENY", reasonCode: guardHit.code, reason: denyReason(toolName, guardHit.code, guardHit.rule), dedupe: true, ruleId: guardHit.rule };
     } else if (failure || !response) {
       const f = failure ?? { code: "FAIL_CLOSED", message: "internal error" };
@@ -602,20 +672,30 @@ async function runHostedHook(input: HookInput, plane: HostedHookOptions): Promis
       };
     } else if (response.verdict === "DENY") {
       verdict = { verdict: "DENY", reasonCode: response.reasonCode, reason: `KYA denied ${toolName}: ${response.reasonCode}`, dedupe: true };
+    } else if (guardHit) {
+      // A guard ask rule: raise-only, so the plane's DENY above still wins; otherwise the human decides.
+      verdict = { verdict: "REQUIRE_APPROVE", reasonCode: GUARD_ASK, reason: askReason(toolName, guardHit.rule), dedupe: true, ruleId: guardHit.rule };
     } else {
       verdict = { verdict: response.verdict, reasonCode: response.reasonCode, reason: "", dedupe: true };
     }
   }
 
+  // A guard ask rule always acts (it is a local rule, so shadow mode does not lift it): ask where the host can, else deny.
+  const isAsk = verdict.verdict === "REQUIRE_APPROVE" && verdict.reasonCode === GUARD_ASK;
   const blocks =
     verdict.verdict === "DENY" ||
+    isAsk ||
     (input.strict && verdict.verdict === "REQUIRE_APPROVE");
   // Shadow never blocks, except the LOCAL never-list and guard pack. Keyed to the local evaluation,
   // never to the plane's reason code: the plane answers NEVER_EVENT for every registered DENY-tier tool.
   const enforce = blocks && (!plane.shadow || localDeny);
   let firstSeen = true;
   try {
-    firstSeen = recordHostedRow(input, stateEnv, homeOk, home, payload, verdict, response, plane.shadow, configIgnored);
+    // Own failure (dedupe false) that did not block = shadow mode let the call through despite a hook failure.
+    const outcome: TrailOutcome = enforce
+      ? verdict.verdict === "DENY" || (isAsk && askMode(input, payload) === "deny") ? "blocked" : "held"
+      : !verdict.dedupe ? "error" : "ran";
+    firstSeen = recordHostedRow(input, stateEnv, homeOk, home, payload, verdict, response, plane.shadow, configIgnored, outcome);
   } catch { /* the trail never decides the verdict */ }
 
   if (blocks && !enforce) {
@@ -623,8 +703,10 @@ async function runHostedHook(input: HookInput, plane: HostedHookOptions): Promis
   }
   const notes = stderrNotes.length ? `${stderrNotes.join("\n")}\n` : "";
   if (!enforce) return { exitCode: 0, stdout: "", stderr: notes, firstSeen };
-  const reason =
-    verdict.verdict === "REQUIRE_APPROVE"
+  if (isAsk && askMode(input, payload) === "ask") return { ...ask(verdict.reason), stderr: notes, firstSeen };
+  const reason = isAsk
+    ? denyReason(toolName ?? "tool call", GUARD_ASK, verdict.ruleId)
+    : verdict.verdict === "REQUIRE_APPROVE"
       ? `KYA hold: ${toolName} needs approval (${verdict.reasonCode}). No approval request was opened; an operator can review KYA policy at ${config?.baseUrl ?? "the KYA console"}/app/kya/approvals. Do not retry until told.`
       : verdict.reason;
   const d = deny(reason);
@@ -646,6 +728,7 @@ function recordHostedRow(
   response: PolicyEvaluateResponse | undefined,
   shadow: boolean,
   configIgnored: boolean,
+  outcome: TrailOutcome,
 ): boolean {
   if (!homeOk) return true;
   if (verdict.dedupe && payload?.toolUseId && !claimToolUse(payload.toolUseId, payload.sessionId, stateEnv)) {
@@ -666,6 +749,7 @@ function recordHostedRow(
     product: hostToProduct(input.host),
     toolId: response?.toolId ?? toolName,
     verdict: verdict.verdict,
+    outcome,
     reasonCode: verdict.reasonCode,
     mode: input.strict ? ("hold" as const) : ("observe" as const),
     neverEvent: isNeverCode(verdict.reasonCode),

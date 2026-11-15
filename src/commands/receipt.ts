@@ -10,7 +10,9 @@ import {
   renderReceiptMarkdown,
 } from "../receipt/render-receipt.js";
 import { ensureReceiptDaemon } from "../receipt/daemon.js";
-import { receiptsDir } from "../trail.js";
+import { readGlobalTrail, receiptsDir } from "../trail.js";
+import { eventIdOf, formatCard, pickNearMiss, writeCardSvg, type CardInput } from "../card.js";
+import { renderCardPng } from "../card-png.js";
 import { ensureOutDir, writeOutFile } from "../fs-atomic.js";
 import {
   buildSharePayload,
@@ -171,4 +173,26 @@ export function openPath(target: string): void {
     process.stderr.write(`failed to open browser: ${err.message}\n`);
   });
   child.unref();
+}
+
+export type ReceiptCardResult =
+  | { readonly ok: true; readonly id: string; readonly svgPath: string; readonly pngPath?: string; readonly input: CardInput; readonly text: string }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * `kya receipt --card [--id <id>]`: the near-miss card for the newest denied call (or the one with that id).
+ * Writes `<home>/.kya/cards/*.svg`, and a PNG when a renderer is already on the machine. Local only: no network, no upload.
+ */
+export function runReceiptCard(env: NodeJS.ProcessEnv, input: { id?: string }): ReceiptCardResult {
+  const pick = pickNearMiss(readGlobalTrail(env), input.id?.trim() || undefined);
+  if (!pick.ok) return { ok: false, message: pick.message };
+  const { svgPath, input: card } = writeCardSvg(env, pick.event);
+  const png = svgPath.replace(/\.svg$/, ".png");
+  const renderer = renderCardPng(svgPath, png, env);
+  const id = eventIdOf(pick.event);
+  const text = formatCard({
+    svgPath, input: card, id,
+    ...(renderer ? { pngPath: png } : { pngNote: "No renderer found (install rsvg-convert, or Chrome). The SVG is ready to post." }),
+  });
+  return { ok: true, id, svgPath, ...(renderer ? { pngPath: png } : {}), input: card, text };
 }

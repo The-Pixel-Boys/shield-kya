@@ -1,6 +1,11 @@
 /**
  * `kya team init` / `kya team managed-settings`: spread the Claude Code plugin to a team.
  *
+ * `team init --guard` does the same for the kya-guard plugin (one bundled file, no install step): the same marketplace pin,
+ * and enabledPlugins["kya-guard@shield-kya"] = true instead of kya@shield-kya. It prints the exact diff and a README badge,
+ * writes no .kya/policy.json, and refuses when kya@shield-kya is on (both plugins would write a row for every call).
+ * The write is recorded in ~/.kya/manifest.json by the caller (src/cli.ts), so `kya uninstall --project` reverses it.
+ *
  * init merges two keys into the CURRENT PROJECT's `.claude/settings.json` (never the user's):
  *   extraKnownMarketplaces["shield-kya"] = github The-Pixel-Boys/shield-kya at ref v<version>
  *   enabledPlugins["kya@shield-kya"] = true
@@ -11,7 +16,7 @@
  * admin policy document. A prerelease kya refuses both (no public tag to pin). Schema: code.claude.com/docs/en/plugins/org and
  * /docs/en/plugins/marketplace-reference (marketplace `github` source: repo, ref, path; no sha).
  */
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { globalConfigDir } from "../config.js";
@@ -20,9 +25,14 @@ import { atomicWriteSync } from "../fs-atomic.js";
 import { POLICY_FILE, POLICY_SCAFFOLD } from "../project-policy.js";
 import { compareVersions } from "../update-check.js";
 import { CLI_VERSION } from "../version.js";
+import { journalMkdir } from "../write-journal.js";
 
 export const MARKETPLACE = "shield-kya";
 export const PLUGIN_ID = "kya@shield-kya";
+export const GUARD_PLUGIN_ID = "kya-guard@shield-kya";
+export const SCOREBOARD_URL = "https://shield-agent.com/replays";
+/** The line a maintainer pastes into the README: a static badge that reads "agent-guarded" and links to the scoreboard. */
+export const GUARD_BADGE = `[![agent-guarded](https://img.shields.io/badge/agent--guarded-KYA%20Guard-2ea44f)](${SCOREBOARD_URL})`;
 export const PUBLIC_REPO = "The-Pixel-Boys/shield-kya";
 
 /** Public repo release tags are `v<version>` (the `kya-v*` tags live only in the private monorepo). */
@@ -59,6 +69,12 @@ export interface TeamInitResult {
   readonly ref: string;
   /** The existing file was not in canonical JSON.stringify layout, so unrelated lines are re-laid out. */
   readonly reformatted: boolean;
+  /** --guard run: the kya-guard plugin instead of the kya plugin. */
+  readonly guard: boolean;
+  /** Unified diff of the settings file (guard runs; empty otherwise). */
+  readonly diff: string;
+  /** README badge line (guard runs; empty otherwise). */
+  readonly badge: string;
 }
 
 type Obj = Record<string, unknown>;
@@ -110,8 +126,46 @@ function newerThan(a: string, b: string): boolean {
   return tag.test(a) && tag.test(b) && compareVersions(a, b) > 0;
 }
 
-/** Merge our two keys into `settings`; returns change lines. Throws (nothing written) on conflicts. */
-export function mergeTeamSettings(settings: Obj, version: string = CLI_VERSION): string[] {
+/**
+ * Unified diff of two texts, 2 lines of context. Line based (LCS): the settings files are small.
+ * Empty string when the texts are equal.
+ */
+export function unifiedDiff(label: string, before: string, after: string): string {
+  if (before === after) return "";
+  const a = before === "" ? [] : before.replace(/\n$/, "").split("\n");
+  const b = after.replace(/\n$/, "").split("\n");
+  const n = a.length;
+  const m = b.length;
+  const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) lcs[i]![j] = a[i] === b[j] ? lcs[i + 1]![j + 1]! + 1 : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!);
+  const ops: Array<[" " | "-" | "+", string]> = [];
+  let i = 0;
+  let j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) ops.push([" ", a[i++]!]), j++;
+    else if (i < n && (j === m || lcs[i + 1]![j]! >= lcs[i]![j + 1]!)) ops.push(["-", a[i++]!]); // a removal first, as diff does
+    else ops.push(["+", b[j++]!]);
+  }
+  const keep = ops.map(([k], x) => k !== " " || ops.slice(Math.max(0, x - 2), x + 3).some(([c]) => c !== " "));
+  const out = [`--- ${before === "" ? "/dev/null" : `a/${label}`}`, `+++ b/${label}`];
+  let x = 0;
+  while (x < ops.length) {
+    if (!keep[x]) { x++; continue; }
+    let end = x;
+    while (end < ops.length && keep[end]) end++;
+    const hunk = ops.slice(x, end);
+    const startA = ops.slice(0, x).filter(([k]) => k !== "+").length + 1;
+    const startB = ops.slice(0, x).filter(([k]) => k !== "-").length + 1;
+    out.push(`@@ -${startA},${hunk.filter(([k]) => k !== "+").length} +${startB},${hunk.filter(([k]) => k !== "-").length} @@`);
+    for (const [k, line] of hunk) out.push(`${k}${line}`);
+    x = end;
+  }
+  return out.join("\n");
+}
+
+/** Merge our two keys into `settings`; returns change lines. Throws (nothing written) on conflicts. `guard` swaps kya for kya-guard. */
+export function mergeTeamSettings(settings: Obj, version: string = CLI_VERSION, guard = false): string[] {
+  const pluginId = guard ? GUARD_PLUGIN_ID : PLUGIN_ID;
   const changes: string[] = [];
   const want = marketplaceSource(version);
 
@@ -144,12 +198,15 @@ export function mergeTeamSettings(settings: Obj, version: string = CLI_VERSION):
 
   const enabled = settings.enabledPlugins ?? {};
   if (!isObj(enabled)) throw refuse("enabledPlugins is not an object; fix it by hand first");
-  if (enabled[PLUGIN_ID] === false) {
-    throw refuse(`enabledPlugins["${PLUGIN_ID}"] is false (someone turned it off); change it by hand if you want it on`);
+  if (enabled[pluginId] === false) {
+    throw refuse(`enabledPlugins["${pluginId}"] is false (someone turned it off); change it by hand if you want it on`);
   }
-  if (enabled[PLUGIN_ID] !== true) {
-    enabled[PLUGIN_ID] = true;
-    changes.push(`+ enabledPlugins["${PLUGIN_ID}"] = true`);
+  if (guard && enabled[PLUGIN_ID] === true) {
+    throw refuse(`enabledPlugins["${PLUGIN_ID}"] is on: kya and kya-guard together write two rows for every call; turn one off by hand first`);
+  }
+  if (enabled[pluginId] !== true) {
+    enabled[pluginId] = true;
+    changes.push(`+ enabledPlugins["${pluginId}"] = true`);
   }
   settings.enabledPlugins = enabled;
   return changes;
@@ -160,7 +217,10 @@ export function runTeamInit(opts: {
   readonly env?: NodeJS.ProcessEnv;
   readonly dryRun?: boolean;
   readonly version?: string;
+  /** Enable the kya-guard plugin instead of the kya plugin. */
+  readonly guard?: boolean;
 }): TeamInitResult {
+  const guard = opts.guard === true;
   const { dir, file, policyDir, policyFile } = guardPaths(opts.cwd, opts.env ?? process.env);
   const before = existsSync(file) ? readFileSync(file, "utf8") : undefined;
   let settings: unknown = {};
@@ -172,17 +232,21 @@ export function runTeamInit(opts: {
     }
   }
   if (!isObj(settings)) throw refuse(`${file} is not a JSON object; nothing was written`);
-  const settingsChanges = mergeTeamSettings(settings, opts.version);
+  const settingsChanges = mergeTeamSettings(settings, opts.version, guard);
   const indent = before ? detectIndent(before) : 2;
   // ponytail: re-serializes the whole file; a surgical text insert would keep a hand-made layout.
   const reformatted = !!before?.trim() && `${JSON.stringify(JSON.parse(before), null, indent)}\n` !== before;
   const content = `${JSON.stringify(settings, null, indent)}\n`;
   // The policy file is created once and never rewritten: a team's rules belong to the team, not to kya.
-  const policyChanges = existsSync(policyFile) ? [] : [`+ ${POLICY_FILE} = empty policy (no rules yet; add tool ids to deny or requireApprove)`];
+  const policyChanges = guard || existsSync(policyFile) ? [] : [`+ ${POLICY_FILE} = empty policy (no rules yet; add tool ids to deny or requireApprove)`];
   const changes = [...settingsChanges, ...policyChanges];
-  const base = { path: file, dryRun: opts.dryRun === true, changes, content, ref: releaseRef(opts.version), reformatted };
+  const diff = guard ? unifiedDiff(".claude/settings.json", before ?? "", content) : "";
+  const base = {
+    path: file, dryRun: opts.dryRun === true, changes, content, ref: releaseRef(opts.version), reformatted, guard, diff,
+    badge: guard ? GUARD_BADGE : "",
+  };
   if (base.dryRun || changes.length === 0) return { ...base, written: false };
-  if (!existsSync(dir) && settingsChanges.length > 0) mkdirSync(dir);
+  if (!existsSync(dir) && settingsChanges.length > 0) journalMkdir(dir); // journaled: `kya uninstall --project` removes it again
   // Re-check right before the rename that .claude and settings.json are still not symlinks and still the
   // project's. Residual: a same-user process can still swap them between this check and the rename (TOCTOU);
   // a planted temp file or symlink cannot be followed, since atomicWriteSync creates its temp with O_EXCL.
@@ -192,13 +256,37 @@ export function runTeamInit(opts: {
   };
   if (settingsChanges.length > 0) atomicWriteSync(file, content, recheck);
   if (policyChanges.length > 0) {
-    if (!existsSync(policyDir)) mkdirSync(policyDir);
+    if (!existsSync(policyDir)) journalMkdir(policyDir);
     atomicWriteSync(policyFile, POLICY_SCAFFOLD, recheck);
   }
   return { ...base, written: true };
 }
 
+function formatGuardHuman(r: TeamInitResult): string {
+  const lines: string[] = [];
+  if (r.changes.length === 0) lines.push(`${r.path} already enables ${GUARD_PLUGIN_ID} at ${r.ref}; nothing to do.`);
+  else lines.push(`${r.dryRun ? "Would write" : "Wrote"} ${r.path}:`, ...r.changes.map((c) => `  ${c}`), "", "Diff:", r.diff);
+  if (r.changes.length > 0 && r.reformatted) {
+    lines.push("Note: the existing file's layout is normalized to standard JSON (keys and values unchanged).");
+  }
+  lines.push(
+    "",
+    "README badge (paste it near the top of your README):",
+    r.badge,
+    "",
+    "Next: commit .claude/settings.json. Teammates see Claude Code's folder trust prompt once;",
+    `after they accept it, the ${MARKETPLACE} marketplace is added and ${GUARD_PLUGIN_ID} installs at the next session.`,
+    `Pinned to tag ${r.ref} of ${PUBLIC_REPO}. Rerun kya team init --guard after upgrading kya to move the pin.`,
+    `Verify the tag exists and ships the plugin (git ls-remote https://github.com/${PUBLIC_REPO} refs/tags/${r.ref}; the folder plugins/kya-guard must be in it);`,
+    "if it is not, teammates will see the plugin skipped, not an error.",
+    "The guard needs Node.js 22 or later on PATH. It checks every tool call locally, makes no network call, and fails open.",
+    "Remove: kya uninstall --project (reverses this write), or delete the two keys by hand.",
+  );
+  return lines.join("\n");
+}
+
 export function formatTeamInitHuman(r: TeamInitResult): string {
+  if (r.guard) return formatGuardHuman(r);
   const lines: string[] = [];
   if (r.changes.length === 0) lines.push(`${r.path} already enables ${PLUGIN_ID} at ${r.ref}; nothing to do.`);
   else lines.push(`${r.dryRun ? "Would write" : "Wrote"} ${r.path}:`, ...r.changes.map((c) => `  ${c}`));

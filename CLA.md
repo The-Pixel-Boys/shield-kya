@@ -8,8 +8,8 @@ Read this agreement. Then post this exact sentence as a comment on your pull req
 
 > I have read the KYA Contributor License Agreement version 1.0 and I agree to its terms.
 
-You sign once. Your signature covers your later contributions too. A maintainer records your
-signature privately. See
+You sign once. Your signature covers your later contributions too. A GitHub Actions check (`cla`)
+reads your comment and records your signature on your pull request. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for the full contribution flow.
 
 ## The agreement

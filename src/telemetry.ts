@@ -57,6 +57,8 @@ export interface TelemetryPayload {
   readonly hostId: string;
   readonly gateMode: string;
   readonly hostedLinked: boolean;
+  /** Present (true) only when a maintainer sets KYA_TELEMETRY_INTERNAL=1; absent for everyone else. */
+  readonly internal?: true;
 }
 
 export type FetchLike = (
@@ -150,10 +152,55 @@ function eraseEndpoint(env: NodeJS.ProcessEnv): string {
 // Payload
 // ---------------------------------------------------------------------------------------------
 
-/** Host registry slug from the session id `kya connect` writes (`mcp:<host>`), else "unknown". */
-export function telemetryHostId(env: NodeJS.ProcessEnv): string {
+/**
+ * Fixed allow-list of host names the beacon may report. `claude`..`droid` match the `kya connect`
+ * registry, so hook pings, connected MCP sessions and clientInfo-detected sessions share one slug.
+ */
+const CLIENT_HOSTS: ReadonlyArray<readonly [needle: string, host: string]> = [
+  ["claude", "claude"], // clientInfo "claude-code", "claude-ai"
+  ["cursor", "cursor"],
+  ["codex", "codex"],
+  ["copilot", "copilot"],
+  ["visual studio code", "vscode"],
+  ["vscode", "vscode"],
+  ["windsurf", "windsurf"],
+  ["gemini", "gemini"],
+  ["grok", "grok"],
+  ["opencode", "opencode"],
+  ["kilo", "kilo"],
+  ["kiro", "kiro"],
+  ["qwen", "qwen"],
+  ["kimi", "kimi"],
+  ["mastracode", "mastracode"],
+  ["amp", "amp"],
+  ["cline", "cline"],
+  ["droid", "droid"],
+  ["zed", "zed"],
+];
+
+/**
+ * Maps the MCP `initialize` clientInfo.name to the allow-list. An unknown name becomes "other":
+ * the raw string never reaches the payload (a custom client name could identify a person or a company).
+ */
+export function mapClientName(name: string): string {
+  const n = name.slice(0, 64).trim().toLowerCase();
+  // Whole words only: "amp" must not match "example".
+  const words = new Set(n.split(/[^a-z0-9]+/));
+  return CLIENT_HOSTS.find(([needle]) => words.has(needle) || n === needle)?.[1] ?? "other";
+}
+
+/**
+ * Host slug, in order: the session id `kya connect` writes (`mcp:<host>`); the MCP client's
+ * `initialize` name via {@link mapClientName}; the CLAUDECODE marker Claude Code sets (presence only,
+ * the value is never read); else "unknown".
+ */
+export function telemetryHostId(env: NodeJS.ProcessEnv, clientName?: string): string {
   const match = /^mcp:([a-z][a-z0-9-]{0,31})$/.exec(env["KYA_SESSION_ID"] ?? "");
-  return match?.[1] ?? "unknown";
+  if (match?.[1] !== undefined) return match[1];
+  const mapped = clientName === undefined ? undefined : mapClientName(clientName);
+  if (mapped !== undefined && mapped !== "other") return mapped;
+  if (truthy(env["CLAUDECODE"])) return "claude";
+  return mapped ?? "unknown";
 }
 
 /**
@@ -167,6 +214,8 @@ export function buildPayload(input: {
   readonly surface: TelemetrySurface;
   readonly env: NodeJS.ProcessEnv;
   readonly cwd: string;
+  /** Raw MCP clientInfo.name; mapped to the allow-list here, never sent as is. */
+  readonly clientName?: string;
 }): TelemetryPayload {
   return {
     schema: 1,
@@ -178,9 +227,15 @@ export function buildPayload(input: {
     os: process.platform,
     arch: process.arch,
     nodeMajor: Number.parseInt(process.versions.node, 10),
-    hostId: telemetryHostId(input.env),
+    hostId: telemetryHostId(input.env, input.clientName),
     gateMode: resolveGateMode({ cwd: input.cwd, env: input.env }),
-    hostedLinked: (input.env["KYA_API_KEY"] ?? "").trim() !== "",
+    // KYA_HOSTED_LINKED=1 is a presence flag (never a key): the Claude plugin shim sets it before it
+    // removes the key from the environment, so plugin users still count as hosted-linked.
+    hostedLinked:
+      (input.env["KYA_API_KEY"] ?? input.env["SHIELD_API_KEY"] ?? "").trim() !== "" ||
+      truthy(input.env["KYA_HOSTED_LINKED"]),
+    // Maintainers only: lets the public KPIs leave their own machines out.
+    ...(truthy(input.env["KYA_TELEMETRY_INTERNAL"]) ? { internal: true as const } : {}),
   };
 }
 
@@ -218,9 +273,11 @@ export async function postTelemetry(
 export interface SessionBeacon {
   /** Sends `end` (bounded by the send timeout) and stops the heartbeat. Idempotent. */
   stop(): Promise<void>;
+  /** Hands over the MCP client's `initialize` name; later events carry the mapped host. First call wins. */
+  setClient(name: string): void;
 }
 
-const NOOP_BEACON: SessionBeacon = { stop: async () => {} };
+const NOOP_BEACON: SessionBeacon = { stop: async () => {}, setClient: () => {} };
 
 function heartbeatMs(env: NodeJS.ProcessEnv, override: number | undefined): number {
   if (override !== undefined) return override;
@@ -249,12 +306,13 @@ export function startSessionBeacon(
   const fetchImpl = deps.fetchImpl ?? fetch;
   let failures = 0;
   let stopped = false;
+  let clientName: string | undefined;
 
   const send = async (event: TelemetryEventKind): Promise<void> => {
     if (failures >= MAX_CONSECUTIVE_FAILURES) return;
     const ok = await postTelemetry(
       url,
-      buildPayload({ installId, sessionId, event, surface, env: deps.env, cwd: deps.cwd }),
+      buildPayload({ installId, sessionId, event, surface, env: deps.env, cwd: deps.cwd, clientName }),
       fetchImpl,
     );
     failures = ok ? 0 : failures + 1;
@@ -267,6 +325,12 @@ export function startSessionBeacon(
   timer.unref();
 
   return {
+    setClient(name: string): void {
+      if (clientName !== undefined || stopped) return;
+      clientName = name;
+      // `start` went out before the client said who it is; the server keeps the latest host per session.
+      if (telemetryHostId(deps.env, name) !== telemetryHostId(deps.env)) void send("heartbeat");
+    },
     async stop(): Promise<void> {
       if (stopped) return;
       stopped = true;

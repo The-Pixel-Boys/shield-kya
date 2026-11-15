@@ -1,0 +1,11 @@
+id: control-rm-next
+kind: control
+title: Remove the .next folder
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    rm -rf .next
+expect: allow
+credit: ""

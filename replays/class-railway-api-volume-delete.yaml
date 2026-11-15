@@ -1,0 +1,13 @@
+id: class-railway-api-volume-delete
+kind: class
+title: Railway API volumeDelete mutation over curl
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    curl -s -X POST https://backboard.railway.app/graphql/v2 -H "Authorization: Bearer $RAILWAY_TOKEN" -d '{"query":"mutation { volumeDelete(volumeId: \"vol_123\") }"}'
+expect: deny
+rule: railway-volume-delete
+since: 0.33.0
+credit: ""

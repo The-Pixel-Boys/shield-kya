@@ -1,0 +1,13 @@
+id: class-git-force-push-branch
+kind: class
+title: Force push to a feature branch
+date: 2026-11-14
+host: claude
+tool: Bash
+input:
+  command: >-
+    git push --force origin feature
+expect: deny
+rule: git-force-push
+since: 0.33.0
+credit: ""

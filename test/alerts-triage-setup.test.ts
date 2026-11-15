@@ -470,7 +470,7 @@ for p in linux darwin win32; do mkdir -p "$prefix/node_modules/onnxruntime-node/
     const proj = join(dir, "proj");
     mkdirSync(proj, { recursive: true });
     return new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [cliJs, "start", "--no-open", "--no-gate"], {
+      const child = spawn(process.execPath, [cliJs, "start", "--yes", "--no-open", "--no-gate"], {
         cwd: proj,
         env: {
           ...process.env,
@@ -504,10 +504,11 @@ for p in linux darwin win32; do mkdir -p "$prefix/node_modules/onnxruntime-node/
     return { url: `http://127.0.0.1:${(server!.address() as AddressInfo).port}/kya-triage-v1.bin`, hits: () => n };
   }
 
-  it("no terminal: start exits 0, installs nothing, prints one hint line", async () => {
+  it("no terminal: start exits 0, installs nothing, prints no hint (kya doctor prints it, see help-surface-e2e)", async () => {
     const r = await run({});
     expect(r.code).toBe(0);
-    expect(r.stderr).toContain("Security alerts are off. Turn them on: KYA_ALERTS=on kya start");
+    expect(r.stderr).not.toContain("Security alerts are off");
+    expect(r.stdout).not.toContain("Security alerts are off");
     expect(existsSync(join(dir, "npm-args.txt"))).toBe(false);
     expect(triageRuntimeInstalled({ KYA_HOME: dir })).toBe(false);
   }, 30_000);

@@ -18,8 +18,8 @@ Turn on security alerts? [Y/n]
 
 - **Yes** (or Enter): installs the runtime and downloads the model once, turns `alerts.enabled` on in `~/.kya/config.json`, and sends one test alert (a desktop notification and every webhook that receives incidents).
 - **No**: remembered in `~/.kya/alerts-choice.json`. `kya start` never asks again. It prints `Turn it on later: KYA_ALERTS=on kya start`.
-- `KYA_ALERTS=on kya start` installs without asking (scripts, images). `KYA_ALERTS=off` never asks.
-- Without a terminal `kya start` asks nothing and prints one hint line.
+- `KYA_ALERTS=on kya start --yes` installs without asking (scripts, images; off a terminal `kya start` applies only with `--yes`). `KYA_ALERTS=off` never asks.
+- Without a terminal `kya start` asks nothing and prints nothing about alerts. `kya doctor` prints the line `Security alerts are off. Turn them on: ...` while alerts are off and you did not choose.
 - If the install fails, `kya start` still works. It prints the manual command, and alerts are on with the detector severity only. Run `KYA_ALERTS=on kya start` later to add the model.
 - `kya alerts on` (no download) turns alerts on without the model. `kya alerts status` shows whether the model is installed.
 

@@ -1,0 +1,175 @@
+Shield KYA light CLI - Know Your Agent (provider-agnostic)
+
+Usage:
+  kya <command> [options]
+
+Commands:
+  version           Print the package version (same as --version)
+  start             ONE LINER: wire local MCP + open live report. Prints a plan first
+                    (each file, created or merged, exact keys) and asks "Apply? [Y/n]".
+                    --yes or KYA_YES=1 skips the question; off a terminal or in CI it
+                    applies only with --yes. --dry-run prints the plan, writes nothing.
+                    Wires only hosts found on this machine. Report runs in the
+                    background - returns your terminal. Auto-bootstraps the gateway for
+                    third-party MCP servers found in host configs (--no-gate or
+                    KYA_GATE=off skips)
+  uninstall         Undo kya start / kya connect from ~/.kya/manifest.json: removes only
+                    the keys KYA added, deletes files KYA created if unchanged, prints
+                    what it left alone (--project: this directory only, --dry-run)
+  stop              Stop the background report server started by kya start
+                    (--all also stops orphaned report daemons from other
+                    directories or older installs)
+  connect <host>    Wire KYA MCP into a coding host config
+                    ({{HOSTS}}; --project for project scope, --force to overwrite)
+                    --hooks also wires the host's PreToolUse hook (claude|grok|kimi)
+                    --hooks --hosted --plane-config <abs path> wires the hosted hook (claude, preview)
+                    --gate points the host at the local kya gateway (kya gate run)
+  gate              Local MCP gateway: govern + audit tool calls to any MCP server
+                    (init | setup | doctor | status | run | stop)
+  init              Scaffold .kya/ config + sample tools + .env.example
+  team init         Enable the Claude Code plugin for everyone who opens this repo:
+                    merges a tag-pinned marketplace + enabledPlugins into the project's
+                    .claude/settings.json (--dry-run shows the change, writes nothing).
+                    --guard enables the kya-guard plugin instead: prints the diff and a README badge,
+                    kya uninstall --project reverses it
+  team managed-settings  Print the managed-settings JSON an admin deploys
+  login             Link this machine to the hosted console (device code). Saves a 0600
+                    key in ~/.kya/hosted-credentials.json. --base-url <url> or KYA_BASE_URL
+  logout            Delete the saved hosted key (the key stays active until you revoke it)
+  update            Self-update to the latest npm version (kya start warns when
+                    a newer release exists; --no-update-check / KYA_UPDATE_CHECK=0 opts out)
+  register-agent    POST /api/v1/kya/agents (human mint; server applies allow/break-glass/approve)
+  eval-tool         Policy evaluate (HTTP plane or --offline sample)
+  wrap              Evaluate + record trail. With --tool-id it never executes.
+                    wrap [--offline] -- <cmd...>: gate the command as a shell call, run it
+                    only if allowed (exit = the command's; 1 denied, 4 Hold pending).
+                    Default observe: no Hold ticket (no second approve). --hold / KYA_HOLD=1 for org Hold.
+  hook              PreToolUse interception for native-hook hosts (claude|grok|kimi|…)
+                    Reads the hook payload from stdin; exit 2 blocks. --strict denies advisory.
+                    --fail-closed (hosted): internal error, malformed payload or async
+                    evaluate timeout exits 2 instead of failing open; the host's own
+                    timeout needs onFailure=block in the plugin hooks.json.
+                    Records once per tool_use_id (dual-hook safe). Never-list DENY
+                    blocks in both modes.
+                    Guard pack (local, default on, exit 2, rule id in the message):
+                      NEVER_SHELL        rm of home/root, terraform destroy, SQL drops, force
+                                         push, delete main, docker volumes, kubectl delete ns,
+                                         cloud deletes, git hard reset plus git clean
+                      NEVER_SECRET_READ  ssh/cloud/kube/docker/railway credentials, .env
+                      NEVER_SECRET_WRITE AWS/GitHub/Slack/Stripe keys, private key headers
+                      NEVER_EXFIL        env or credential files sent to a non-loopback host
+                    Config in ~/.kya/config.json only: shellNeverList, secretsGuard,
+                    exfilGuard (default true), guardAllow [{rule, path|command}].
+                    A project .kya/config.json cannot lift a deny. docs/guard-pack.md.
+                    --plane-config <abs path> (preview): evaluate on the hosted plane,
+                    fail closed; key/URL/agent come only from that 0600 file.
+                    --plane-shadow records hosted verdicts without blocking;
+                    --plane-budget-ms <n> total plane budget (default 3000, max 4000).
+  receipt           Activity report HTML/JSON/MD (default: last 3 days, all tools; --open)
+                    --q pre-fills feed search · --share publishes a redacted summary (see --share-url)
+  map               Map of agent actions: device, agent, tool and target graph with KYA verdicts (local only)
+                    --days <n> window (default 3) · --json · --html <file> · --session <id>
+  export            Local trail as an agent-flow JSONL event log (classes only, no args; local only)
+                    --format agent-flow · --days <n> (default 3) · --session <id> · --out <file>
+  invoke            Authorize on the plane after Allow or APPROVED. Never runs the write here.
+  approve           Human APPROVE an approval id (kya.approve scope)
+  reject            Human REJECT an approval id (kya.approve scope)
+  agents            List registered agents
+  agent             Show one agent (--id)
+  passport          Observational passport JSON (--id)
+  kill              Pause an agent (--id)
+  approvals         List the human queue
+  sessions          List observed sessions
+  shrink            Drop session clearance (--id --to BUILD|READ|DEPLOY)
+  serve-mcp         Local MCP gate (HTTP default; --stdio for hosts)
+  telemetry         Opt-in anonymous usage stats, OFF by default
+                    (status | on | off [--purge] | show | reset) - see docs/telemetry.md
+  orr run           Read-only ORR board (reporting only - not a second PEP)
+                    Optional: --producer harness.agentshield [--agentshield-json <file>]
+  dash              Terminal desk (FREE panes; actions on a TTY, --once for CI)
+  doctor            Local checks. doctor --iocs scans this machine now for known supply-chain
+                    indicators (advisory; read-only, offline). --json for scripts. Last result: kya dash/receipt
+                    Background daily scan (from kya hook) is off with KYA_IOC=0 or ioc.enabled=false in ~/.kya/config.json
+  posture           Developer posture report, OFF by default. status | on [--yes] | off |
+                    send [--dry-run --json] | label NAME. "on" prints the exact report first.
+                    Sent once a day only when the local toggle AND the workspace allow it.
+  sandbox           Opt-in Firecracker wrap (spawn|exec|kill|status). Not MCP.
+                    Requires KYA_SANDBOX=mock|firecracker. MCP still never execs.
+  certify           Agent Trust Baseline gap report from local evidence
+                    (JSON/MD/HTML to .kya/certify/; exit 1 on gaps, exit 2 usage)
+                    --attest REQ-ID --text "…" records a local attestation
+                    --sign also writes an ed25519-signed evidence-bundle.json
+                    (self-signed: integrity + key continuity, NOT identity)
+  import            Import foreign traces into the local trail so the receipt
+                    and certify see them (--from langsmith|langfuse|phoenix|otel|adr-sensor|openshell
+                    <file>, or --from agt [--file <path>] for the AGT audit log)
+  investigate       Deterministic trail analysis: detectors, grouped incidents,
+                    markdown fix briefs for coding agents (--json)
+  alerts            Security alerts for detected incidents, optional local triage model, off by default, advisory
+                    (status [--json] | test | on | off) - see docs/alerts.md
+  discover          Scan this endpoint for AI agents, IDEs, runtimes, and MCP servers
+                    (--json, --diff <snapshot>, --push)
+
+Options (shared):
+  --base-url <url>  Control plane origin (or KYA_BASE_URL)
+  --api-key <key>   API key (or KYA_API_KEY) - required for network commands
+  --host <ide|runtime>  Dual-plane host (or KYA_HOST, default ide)
+  --offline         Sample evaluate / dash without network
+  --hold            wrap: open Hold ticket on REQUIRE_APPROVE (org path; default off)
+  --open            receipt/certify: open HTML in the browser
+  --days <n>        receipt: history window (default 3)
+  --session <id>    receipt: single session only (optional)
+  --q <query>       receipt: pre-fill the activity-feed search
+  --card            receipt: make a near-miss card (image, no private data) for the last denied call; --id <id> picks another
+  --share           receipt: publish a redacted summary, print the public URL
+  --share-url <url> receipt: share endpoint base (or KYA_SHARE_URL; default https://shield-agent.com)
+  --share-retries <n> receipt: retry --share on 429/5xx/network with backoff (max 3; default 0 = single attempt)
+  --once            dash: print one frame and exit (CI / pipes)
+  --window <n>      certify: report window in days (default 30)
+  --fail-on <m>     certify: gap (default, exit 1 on gaps) | never
+  --pane <name>     dash pane (home|policy|agents|approvals|sessions|orr|mcp|dashboard|…)
+  --from <source>   import: trace format (langsmith|langfuse|phoenix|otel|agt|adr-sensor|openshell)
+  --file <path>     import: input file (agt defaults to ~/.claude/agt/audit-log.json)
+  --json            Machine-readable output
+  --help, -h        Show help
+  --version, -v     Print the package version and exit (also: kya version)
+
+Examples:
+  kya start
+  kya start --dry-run
+  kya start --yes
+  kya uninstall
+  kya connect qwen
+  kya connect opencode --project
+  npx @shield-agent/kya init --base-url http://127.0.0.1:8090 --host ide
+  npx @shield-agent/kya eval-tool --offline --tool-id org.sample.never.event --irreversible
+  npx @shield-agent/kya eval-tool --offline --tool-id org.sample.data.write --irreversible
+  npx @shield-agent/kya register-agent --name solo-builder --version-hash dev-local
+  npx @shield-agent/kya register-agent --name ops --version-hash dev --break-glass-reason "prod hotfix"
+  npx @shield-agent/kya eval-tool --offline --tool-id kya.agent.register --irreversible
+  npx @shield-agent/kya serve-mcp --stdio
+  npx @shield-agent/kya orr run --path . --out ./orr-report --skip-optional-producers
+  npx @shield-agent/kya orr run --path . --producer harness.agentshield --agentshield-json ./agentshield-report.json
+  npx @shield-agent/kya certify --open
+  npx @shield-agent/kya certify --sign --json-stdout
+  npx @shield-agent/kya certify --attest SOC-01 --text "AUP: https://example.com/aup"
+  npx @shield-agent/kya wrap --offline --tool-id org.sample.data.write --irreversible
+  npx @shield-agent/kya invoke --tool-id org.sample.data.write --args-hash <hash>
+  npx @shield-agent/kya approve --id <approval-id>
+  npx @shield-agent/kya agents
+  npx @shield-agent/kya kill --id <agent-id>
+  npx @shield-agent/kya shrink --id <session-id> --to BUILD
+  npx @shield-agent/kya dash --once --offline
+  npx @shield-agent/kya dash --once --pane policy
+  npx @shield-agent/kya import --from langfuse ./langfuse-export.json
+  npx @shield-agent/kya import --from adr-sensor ./adr-sensor-events.jsonl
+  npx @shield-agent/kya import --from openshell ./openshell-events.jsonl
+  npx @shield-agent/kya investigate
+  npx @shield-agent/kya discover
+  npx @shield-agent/kya discover --json
+  npx @shield-agent/kya discover --diff ~/.kya/discovery/latest.json
+  npx @shield-agent/kya discover --push
+
+Docs: https://shield-agent.com/install · docs/guides/kya-light-install.md
+Doctrine: sole PEP is Shield; DENY is hard; missing APPROVED ⇒ no irreversible side effect.
+
