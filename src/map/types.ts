@@ -22,6 +22,8 @@ export interface TrailEventLike {
   verdict: string;
   reasonCode: string;
   mode: string;
+  /** What happened to the call (trail.ts outcomeOf reads it). Absent on old rows. */
+  outcome?: string;
   neverEvent?: boolean;
   neverRule?: string;
   summary?: string;

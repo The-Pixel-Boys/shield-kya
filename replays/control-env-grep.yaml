@@ -1,0 +1,11 @@
+id: control-env-grep
+kind: control
+title: Filter the environment for one variable
+date: 2026-11-15
+host: claude
+tool: Bash
+input:
+  command: >-
+    env | grep NODE_ENV
+expect: allow
+credit: ""

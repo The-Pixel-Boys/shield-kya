@@ -1,0 +1,11 @@
+id: control-curl-api-get
+kind: control
+title: Fetch a public API with curl
+date: 2026-11-15
+host: claude
+tool: Bash
+input:
+  command: >-
+    curl -s https://api.github.com/repos/The-Pixel-Boys/shield-kya
+expect: allow
+credit: ""

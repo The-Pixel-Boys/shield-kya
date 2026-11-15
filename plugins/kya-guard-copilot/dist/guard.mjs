@@ -486,6 +486,11 @@ function hasCommand(sh, pred) {
 var TOP_LEVEL = /^\/(bin|boot|etc|home|lib|lib64|opt|root|sbin|srv|usr|var|System|Library|Applications|private|Users)(\/\*)?$/;
 var ROOT_SET = /* @__PURE__ */ new Set(["/", "/*", "~", "~/*", "~/.*", "~/."]);
 var USER_HOME = /^\/(home|Users)\/[^/]+(\/\*|\/\.\*)?$/;
+function normalizeHome(home) {
+  if (!home || !home.startsWith("/")) return home;
+  const n = resolveDots(home.replace(/\/{2,}/g, "/"));
+  return n.length > 1 ? n.replace(/\/+$/, "") : n;
+}
 function expandHome(p, home) {
   if (home && (p === "~" || p.startsWith("~/"))) return home + p.slice(1);
   return p;
@@ -500,7 +505,8 @@ function resolveDots(p) {
   }
   return "/" + out.join("/");
 }
-function normalizePath(w, home) {
+function normalizePath(w, rawHome) {
+  const home = normalizeHome(rawHome);
   let p = w.replace(/\/{2,}/g, "/").replace(/\/\.(?=\/|$)/g, "");
   if (p === "") p = "/";
   const named2 = /^~([A-Za-z0-9._-]+)(\/.*)?$/.exec(p);
@@ -524,7 +530,7 @@ function aboveCwd(word, cwd) {
   return target !== root && (target === "/" || root.startsWith(`${target}/`));
 }
 function isProtected(word, sh) {
-  const home = sh.home;
+  const home = normalizeHome(sh.home);
   const p = normalizePath(word, home);
   if (ROOT_SET.has(p) || TOP_LEVEL.test(p) || USER_HOME.test(p)) return true;
   if (home !== void 0 && (p === home || p === `${home}/*` || p === `${home}/.*`)) return true;
@@ -1493,7 +1499,7 @@ function providerValueDenied(value) {
 }
 function sshCodeLoadingDenied(c) {
   const shape = sshShape(c);
-  if (shape.libs.some(providerValueDenied)) return true;
+  if (c.name === "ssh" && shape.libs.some(providerValueDenied)) return true;
   return shape.opts.some((v) => {
     const kv = sshOptionKeyValue(v);
     return kv !== void 0 && CODE_PROVIDER_KEYS.has(kv.key) && providerValueDenied(kv.value);
@@ -1721,7 +1727,7 @@ function fullCommandText(f) {
 function safeHome() {
   try {
     const h = homedir2();
-    return h && h.startsWith("/") ? h : void 0;
+    return h && h.startsWith("/") ? normalizeHome(h) : void 0;
   } catch {
     return void 0;
   }
@@ -1791,7 +1797,7 @@ function guardContextFrom(cwd, env = process.env) {
     } catch {
     }
   }
-  return { cwd, home, projectRoot: cwd, env };
+  return { cwd, home: normalizeHome(home), projectRoot: cwd.startsWith("/") ? normalizePath(cwd, void 0) : cwd, env };
 }
 var isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 function readGuardConfig(home) {
@@ -1916,7 +1922,7 @@ function rmTargetHit(word, ctx, assigned) {
   let p = absPath(word, ctx);
   p = p.replace(/\/(\.\*|\*)$/, "") || "/";
   const root = ctx.projectRoot ?? ctx.cwd;
-  const home = ctx.home;
+  const home = normalizeHome(ctx.home);
   if (p === "/") return "/";
   if (home && (p === home || home.startsWith(`${p}/`))) return p;
   if (p !== root && root.startsWith(`${p}/`)) return p;

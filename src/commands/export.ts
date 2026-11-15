@@ -1,7 +1,7 @@
 /**
  * `kya export --format agent-flow`: the local trail as an agent-flow JSONL event log. Local only. Never changes a verdict.
  * Each line is `{"time": <s since the first row>, "type": ..., "payload": {...}}`. The payload holds only a hashed session,
- * the tool id, the verdict, the reason code, the target class, the device id and the mode. No args, hashes or paths.
+ * the tool id, the verdict (policy opinion), the outcome (what happened, when the row has one), the reason code, the target class, the device id and the mode. No args, hashes or paths.
  */
 import { createHash, randomBytes } from "node:crypto";
 import { dirname, resolve } from "node:path";
@@ -14,7 +14,7 @@ import { sessionHash, targetOf } from "../map/build.js";
 import { loadTrailEvents } from "../map/load.js";
 import { scanMapOutput } from "../map/page.js";
 import type { TrailEventLike } from "../map/types.js";
-import { trailPath } from "../trail.js";
+import { outcomeOf, trailPath } from "../trail.js";
 import { daysFromArgs } from "./map.js";
 
 export const EXPORT_FORMATS = ["agent-flow"] as const;
@@ -91,6 +91,8 @@ export function toAgentFlow(events: readonly TrailEventLike[], salt: string): Ag
       sessionId: agent,
       tool: toolLabel(e.toolId),
       verdict: e.verdict,
+      // Old rows have no outcome: the key is left out, never guessed from the verdict.
+      ...(outcomeOf(e) ? { outcome: outcomeOf(e)! } : {}),
       reasonCode: e.reasonCode,
       targetClass: targetOf(e).cls,
       mode: e.mode,

@@ -98,7 +98,7 @@ An incident alerts once. It alerts again only when its severity rises, or when a
 ## When the check runs
 
 - After a DENY or REQUIRE_APPROVE, the detached `kya notify-flush` helper runs the check. The hook never waits for it and a failure never changes the verdict.
-- The live report (`kya start`) runs the check when the trail changes, at most once a minute.
+- The live report (`kya start`) runs the check when the trail changes, at most once a minute. It also runs the check at start and once a minute as a safety net, because file watching can miss a change. A repeat check sends no second alert for the same incident, except the retry of a failed delivery.
 
 ## Commands
 

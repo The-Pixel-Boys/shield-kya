@@ -2,7 +2,7 @@
   "name": "shield-kya",
   "displayName": "Shield KYA",
   "description": "Stops your coding agent from deleting, leaking or dropping things. Records everything else. See kya verdicts for every coding agent tool call in your editor. Advisory: blocks the never-list and the guard pack, fails open.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "shield-agent",
   "license": "MIT",
   "icon": "media/icon.png",

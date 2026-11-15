@@ -279,20 +279,9 @@ const fixtures = [
 
 mkdirSync(outDir, { recursive: true });
 
-const hiddenZones = [
-  "#overview", "#activity", "#changes", "#certify",
-  "#gateway-home", "#gateway-listeners", "#gateway-routes", "#gateway-backends", "#gateway-policies", "#gateway-playground",
-  "#system",
-].join(", ");
-
-const zoneStyle = (zone) => `
-<style>
-  ${hiddenZones} { display: none !important; }
-  #${zone} { display: block !important; }
-</style>`;
-
 const screenshots = [];
-// KYA_SHOT_ONLY=blocked,overview and KYA_SHOT_THEMES=light limit the run; KYA_SHOT_HEIGHT=900 forces the window height.
+// KYA_SHOT_ONLY=blocked,overview and KYA_SHOT_THEMES=light limit the run; KYA_SHOT_HEIGHT=900 forces the window height;
+// KYA_SHOT_SCALE=2 sets the device scale factor (the gateway listing pictures are 2880 px wide).
 const only = process.env.KYA_SHOT_ONLY?.split(",").filter(Boolean);
 const themes = (process.env.KYA_SHOT_THEMES ?? "dark,light").split(",");
 for (const { name, model, zone, height: fixtureHeight } of fixtures) {
@@ -301,10 +290,12 @@ for (const { name, model, zone, height: fixtureHeight } of fixtures) {
   const html = renderReceiptHtml(model);
   for (const theme of themes) {
     let themed = html.replace("<html lang=\"en\">", `<html lang="en" data-theme="${theme}">`);
-    themed = themed.replace("</head>", `${zoneStyle(zone)}\n</head>`);
+    // A huge scroll margin keeps the browser at the top of the page when it jumps to the tab anchor.
+    themed = themed.replace("</head>", "<style>.zone { scroll-margin-top: 100000px !important; }</style>\n</head>");
     const file = join(outDir, `${name}-${theme}.html`);
     writeFileSync(file, themed);
-    const url = `file://${file}`;
+    // The real nav picks the tab: the report switches zones with :target, and the More menu opens for a tab inside it.
+    const url = `file://${file}#${zone}`;
     const shot = join(outDir, `${name}-${theme}.png`);
     screenshots.push({ url, shot, name: `${name}-${theme}`, height });
   }
@@ -317,6 +308,7 @@ async function screenshot({ url, shot, name, height }) {
       "--disable-gpu",
       "--hide-scrollbars",
       `--window-size=1440,${height ?? 900}`,
+      `--force-device-scale-factor=${process.env.KYA_SHOT_SCALE || 1}`,
       `--screenshot=${shot}`,
       url,
     ], { stdio: "ignore" });

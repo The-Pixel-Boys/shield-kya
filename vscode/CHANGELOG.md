@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3
+
+The Verdicts feed and the status bar show the `outcome` of each call (RAN, BLOCKED, HELD, ERROR) when the row has one. A call that ran no longer shows as REVIEW because policy said `REQUIRE_APPROVE`. Rows with no `outcome` keep the old labels.
+
 ## 0.1.2
 
 Listing text now opens with the kya promise: "Stops your coding agent from deleting, leaking or dropping things. Records everything else." The README opens with the same line.

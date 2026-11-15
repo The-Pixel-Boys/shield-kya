@@ -42,7 +42,7 @@ Rows written before this field existed have no `outcome`. They keep their old la
 
 `kya map` draws a graph of what KYA recorded: the device, the agent sessions, the tools and the target classes. Edges are coloured by verdict. Two heat views show when and where the activity happened. The page is local and offline. It shows what was recorded, not what was enforced. The live report has a Map tab. See [docs/map.md](map.md).
 
-`kya export --format agent-flow` writes the same trail as a JSONL event log for the agent-flow viewer (`--out FILE` writes a new 0600 file; `--force` replaces one). Each line holds the hashed session, the tool, the verdict, the reason code, the target class, the device id and the mode. It holds no arguments, paths or command text. See [docs/map.md](map.md#export).
+`kya export --format agent-flow` writes the same trail as a JSONL event log for the agent-flow viewer (`--out FILE` writes a new 0600 file; `--force` replaces one). Each line holds the hashed session, the tool, the verdict, the outcome (when the row has one), the reason code, the target class, the device id and the mode. It holds no arguments, paths or command text. See [docs/map.md](map.md#export).
 
 ### Sharing a report
 

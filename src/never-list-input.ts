@@ -232,6 +232,16 @@ const ROOT_SET = new Set(["/", "/*", "~", "~/*", "~/.*", "~/."]);
 /** Another user's home directory on Linux or macOS, with optional contents glob. */
 const USER_HOME = /^\/(home|Users)\/[^/]+(\/\*|\/\.\*)?$/;
 
+/**
+ * Canonical home: `//` and `/./` collapse, `..` resolves, no trailing slash. A home with an odd spelling
+ * (`HOME=/data//u`) must still equal the target path, which `normalizePath` always cleans.
+ */
+export function normalizeHome(home: string | undefined): string | undefined {
+  if (!home || !home.startsWith("/")) return home;
+  const n = resolveDots(home.replace(/\/{2,}/g, "/"));
+  return n.length > 1 ? n.replace(/\/+$/, "") : n;
+}
+
 /** Expand a leading `~` to the home directory when it is known. */
 function expandHome(p: string, home: string | undefined): string {
   if (home && (p === "~" || p.startsWith("~/"))) return home + p.slice(1);
@@ -254,7 +264,8 @@ function resolveDots(p: string): string {
  * Canonical form for matching. Repeated slashes and `/.` go, `~`, `~user` and
  * `$HOME` are expanded when the home directory is known, and `..` is resolved.
  */
-export function normalizePath(w: string, home: string | undefined): string {
+export function normalizePath(w: string, rawHome: string | undefined): string {
+  const home = normalizeHome(rawHome);
   let p = w.replace(/\/{2,}/g, "/").replace(/\/\.(?=\/|$)/g, "");
   if (p === "") p = "/";
   const named = /^~([A-Za-z0-9._-]+)(\/.*)?$/.exec(p);
@@ -286,7 +297,7 @@ function aboveCwd(word: string, cwd: string | undefined): boolean {
 
 /** Root, home, home contents, a top-level system directory (with optional `/*`), or a path above the working directory. */
 function isProtected(word: string, sh: Shell): boolean {
-  const home = sh.home;
+  const home = normalizeHome(sh.home);
   const p = normalizePath(word, home);
   if (ROOT_SET.has(p) || TOP_LEVEL.test(p) || USER_HOME.test(p)) return true;
   if (home !== undefined && (p === home || p === `${home}/*` || p === `${home}/.*`)) return true;
@@ -1432,7 +1443,8 @@ function providerValueDenied(value: string): boolean {
 }
 function sshCodeLoadingDenied(c: Cmd): boolean {
   const shape = sshShape(c);
-  if (shape.libs.some(providerValueDenied)) return true;
+  // -I names a PKCS#11 library only for ssh; for other tools it means something else (python3 -I is isolated mode).
+  if (c.name === "ssh" && shape.libs.some(providerValueDenied)) return true;
   return shape.opts.some((v) => {
     const kv = sshOptionKeyValue(v);
     return kv !== undefined && CODE_PROVIDER_KEYS.has(kv.key) && providerValueDenied(kv.value);
@@ -1730,7 +1742,7 @@ function fullCommandText(f: Record<string, unknown>): string | undefined {
 function safeHome(): string | undefined {
   try {
     const h = homedir();
-    return h && h.startsWith("/") ? h : undefined;
+    return h && h.startsWith("/") ? normalizeHome(h) : undefined;
   } catch {
     return undefined;
   }

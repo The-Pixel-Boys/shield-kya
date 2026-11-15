@@ -474,7 +474,8 @@
         "docs/map.md"
       ],
       "tests": [
-        "test/export-command.test.ts"
+        "test/export-command.test.ts",
+        "test/outcome-readers-e2e.test.ts"
       ],
       "status": "beta",
       "plan": "oss"
@@ -1013,7 +1014,8 @@
       "tests": [
         "test/alerts-e2e.test.ts",
         "test/alerts-incident.test.ts",
-        "test/alerts-report.test.ts"
+        "test/alerts-report.test.ts",
+        "test/alerts-scan-trigger.test.ts"
       ],
       "status": "beta",
       "plan": "oss"

