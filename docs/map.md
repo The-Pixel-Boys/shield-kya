@@ -52,7 +52,7 @@ kya export --format agent-flow --out flow.jsonl --force   # replace that file
 - **Memory.** The command holds the whole window in memory. Keep `--days` short on a large trail.
 - **Output file.** `--out` writes a new file with mode 0600 (owner read and write only). It never replaces an existing file or symlink (exclusive create). Add `--force` to replace it with an atomic rename.
 - **Line shape.** Each line is `{"time": <seconds since the first event>, "type": <type>, "payload": {...}}`. Each session gets one `agent_spawn` line at its first event. Each event gets one `tool_call_start` and one `tool_call_end` line at the same time.
-- **Payload.** Only these keys: `name` or `agent` (the session hash), `sessionId` (the same session hash), `tool`, `verdict`, `reasonCode`, `targetClass`, `deviceId` and `mode`.
+- **Payload.** Only these keys: `name` or `agent` (the session hash), `sessionId` (the same session hash), `tool`, `verdict`, `outcome`, `reasonCode`, `targetClass`, `deviceId` and `mode`. `verdict` is the policy opinion. `outcome` (`ran`, `blocked`, `held` or `error`) is what happened to the call. A row written before outcomes existed has no `outcome` key.
 - **Not in the payload.** No arguments, no `argsHash`, no paths, no command text, no file content, no working folder and no raw session id.
 - **Same session hash as the map.** The session id is hashed with the salt that stays on this machine. The hash is the `sessionHash` that `kya map --json` prints.
 - **Stable output.** Lines are in time order, then in file order. The same trail and the same salt give the same bytes.

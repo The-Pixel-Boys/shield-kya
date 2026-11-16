@@ -23,7 +23,7 @@ const QUERY = ["to", "ken=", "zzq-query-secret"].join("");
 /** Raw session ids. The export hashes them. OTLP kya.session_id sends the raw id today (unchanged here). */
 const RAW_LIVE = "sess-raw-live-7f3a";
 const RAW_LEGACY = "sess-raw-legacy-9c1d";
-const ALLOWED_KEYS = new Set(["name", "agent", "sessionId", "tool", "verdict", "reasonCode", "targetClass", "deviceId", "mode"]);
+const ALLOWED_KEYS = new Set(["name", "agent", "sessionId", "tool", "verdict", "outcome", "reasonCode", "targetClass", "deviceId", "mode"]);
 
 let root: string;
 let home: string;

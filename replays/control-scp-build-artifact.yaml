@@ -1,0 +1,11 @@
+id: control-scp-build-artifact
+kind: control
+title: Copy a build artifact to a staging host
+date: 2026-11-15
+host: claude
+tool: Bash
+input:
+  command: >-
+    scp dist/app.tar.gz deploy@staging.example.test:/srv/app/
+expect: allow
+credit: ""

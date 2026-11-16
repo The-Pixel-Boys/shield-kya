@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { runHook } from "../src/commands/hook.js";
 import { ASK_RULES, GUARD_DEFAULTS, GUARD_SHELL_RULES, guardContextFrom, guardPackMatch } from "../src/guard-pack.js";
 import { NEVER_LIST_INPUT_RULES } from "../src/never-list-input.js";
-import { SEED_CLASSES, SINCE_0_35_RULES } from "./replay-seed.js";
+import { SECRET_EXFIL_RULES, SEED_CLASSES, SINCE_0_35_RULES } from "./replay-seed.js";
 // @ts-expect-error plain .mjs script, no type declarations
 import { buildScoreboard, loadReplays, parseReplay, renderPage, validateReplay } from "../scripts/lib/replays.mjs";
 // @ts-expect-error plain .mjs script, no type declarations
@@ -114,8 +114,18 @@ describe("replay files", () => {
   });
 
   it("every deny or ask replay names a rule that exists (guard shell rule or never-list input rule)", () => {
-    const known = new Set<string>([...GUARD_SHELL_RULES, ...NEVER_LIST_INPUT_RULES.map((r) => r.id)]);
+    const known = new Set<string>([...GUARD_SHELL_RULES, ...NEVER_LIST_INPUT_RULES.map((r) => r.id), ...SECRET_EXFIL_RULES]);
     expect(replays.filter((r) => r.expect !== "allow" && r.status !== "gap" && !known.has(r.rule ?? "")).map((r) => `${r.id}: ${r.rule}`)).toEqual([]);
+  });
+
+  it("every secret-read, secret-write and exfil rule has a class replay that stops it", () => {
+    // The guard pack builds these ids at run time, so the list is read from docs/guard-pack.md (tables and the exfil sink list).
+    const doc = readFileSync(join(PKG, "docs", "guard-pack.md"), "utf8");
+    const documented = [...doc.matchAll(/`(secret-(?:read|write)-[a-z-]+)`/g)].map((m) => m[1]);
+    expect(documented.filter((id) => !SECRET_EXFIL_RULES.includes(id))).toEqual([]);
+    expect(SECRET_EXFIL_RULES.filter((id) => id.startsWith("secret-") && !NEVER_LIST_INPUT_RULES.some((r) => r.id === id) && !documented.includes(id))).toEqual([]);
+    const stopping = new Set(replays.filter((r) => r.kind === "class" && r.expect !== "allow" && r.status !== "gap").map((r) => r.rule));
+    expect([...SECRET_EXFIL_RULES].filter((id) => !stopping.has(id))).toEqual([]);
   });
 
   it("holds placeholders only: no file matches a secret shape the guard knows", () => {

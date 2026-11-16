@@ -30,57 +30,57 @@
     },
     {
       "file": "assets/report-activity.png",
-      "sha256": "84ed0ffe538bcb56e27bb87b74e7a0958eb701dac62f75170ffb64db49966d19",
+      "sha256": "81aa5be19669cb926237e8326d8fb11dc06ed5643ab79ce399015cc50abd1602",
       "alt": "Activity tab - filterable agent tool-call feed with verdicts"
     },
     {
       "file": "assets/report-blocked.png",
-      "sha256": "fff589119dcaf584922d74b3423bef6367a6e6e6063c583e8d5faedf40277068",
+      "sha256": "f129dd8d88be86c53c294533e41303bffde08127254ce4917dfa60c47d3eaa36",
       "alt": "Blocked panel - the first thing the KYA report shows: calls the guard stopped, or a labelled demo before the first one"
     },
     {
       "file": "assets/report-certify.png",
-      "sha256": "02417f890809738ee3d335ed8af171f64693dcb937b1511bed5e756865d05102",
+      "sha256": "33072ecb7004c2abfb5ea5a8b56a227719b79dfc0f6c2b14698ccbfd4e17739a",
       "alt": "Certify tab - Agent Trust Baseline result and full requirement table with evidence"
     },
     {
       "file": "assets/report-changes.png",
-      "sha256": "03fd327d13410e5da32d9e40f740dc542e88441aef652f8510a7973436d923bd",
+      "sha256": "270bf03d8cd52e4c24dc9f14d3b3e2caa98ea8f7f6a145ee0877200c9ddfee1c",
       "alt": "Changes tab - what actually changed per session: files touched with redacted diff previews"
     },
     {
       "file": "assets/report-gateway-backends.png",
-      "sha256": "af07e8c8fcfdb10fb7adef4a82cd97c8e789280539e2057562561006c9ad89b7",
+      "sha256": "8d45948de6545a86caa4468d013e95401684848276f0d3b748aa29202f43de98",
       "alt": "Gateway backends - MCP servers the local gate routes to"
     },
     {
       "file": "assets/report-gateway-listeners.png",
-      "sha256": "08803a753effd05aa002a96b9648f8b337062a5c88867259d6a9a53974c79d9a",
+      "sha256": "8894f7f3f922a9dbace51726ba9e8efde70730801b6a293a5086bf85b47a2370",
       "alt": "Gateway listeners - local MCP gate endpoints"
     },
     {
       "file": "assets/report-gateway-playground.png",
-      "sha256": "d1352a4740dc7f9c214e15c9862aa5e166935f96b22e250b5e7e1838337e046e",
+      "sha256": "a9b05f5d1feffdb42e72b916c33c1ccc829f5dc2e224c0466fcd3942404feb58",
       "alt": "Gateway playground - dry-run a tool call against the local policy"
     },
     {
       "file": "assets/report-gateway-policies.png",
-      "sha256": "f34cafd08f19cde8c7e6cc5074fc4ba08139d1e11534ab0aa9cb391d7f3fc6fc",
+      "sha256": "5b4529a8b7ffbeef072f01993948936c2c63f4540521a9c742754963137a10cc",
       "alt": "Gateway policies - local gate policy rules"
     },
     {
       "file": "assets/report-gateway-routes.png",
-      "sha256": "7eeca63c89b648254ccb3fbf4541210df4e52b06876a880ece0fd810fffe2c6a",
+      "sha256": "55ff7d9004ef2f79ecf90a7c627bc549a01305ac186a158a74e4cbd0807ab2bb",
       "alt": "Gateway routes - which tools route to which backend"
     },
     {
       "file": "assets/report-gateway.png",
-      "sha256": "f035253cb5ad1b0a5b7d9fad5180bf22265705c37553b1504a8c9508d1e6db93",
+      "sha256": "c41821c4787e14f5fe2fbdf15e3afb3defac1540e2a6a9b201d0e419c30e74b6",
       "alt": "Gateway section - local MCP gate with listeners, routes, backends, policies, and a dry-run playground"
     },
     {
       "file": "assets/report-overview.png",
-      "sha256": "e49b84823b10f5f1c07d67994d225cfca006c58aa04e47373269a475059e4373",
+      "sha256": "4337c8f5bf31b5684e6bb9df6d90bffa98f7eedf5f7362812d135444527666f0",
       "alt": "KYA report - live dashboard: the Blocked panel first, then verdicts and analytics"
     }
   ]

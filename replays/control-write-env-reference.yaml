@@ -1,0 +1,12 @@
+id: control-write-env-reference
+kind: control
+title: Write code that reads a key from the environment
+date: 2026-11-15
+host: claude
+tool: Write
+input:
+  file_path: >-
+    src/config.ts
+  content: "export const key = process.env.AWS_ACCESS_KEY_ID;\n"
+expect: allow
+credit: ""

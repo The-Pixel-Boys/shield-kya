@@ -151,10 +151,19 @@ function stripSubst(t: string): { plain: string; ok: boolean } {
   return { plain: out, ok: depth === 0 && !/[()'"`]/.test(out) };
 }
 
-/** The last path part of a command word, with substitutions removed (`/bin$(:)/rm` is `rm`). */
+/**
+ * The last path part of a command word, with substitutions removed (`/bin$(:)/rm` is `rm`) and a trailing
+ * `.exe` of any case dropped (`ssh.exe`, `SSH.EXE`, both `ssh`): Windows agents (Git Bash, WSL interop, PowerShell) call
+ * the same commands under that name. A word that is only `.exe` keeps its name. Only deny rules read the name, so
+ * this can match more commands, never fewer.
+ */
 function wordName(t: string): string {
   const plain = stripSubst(t).plain;
-  return plain.slice(plain.lastIndexOf("/") + 1);
+  // A single-quoted Windows path (`'C:\Windows\System32\OpenSSH\ssh.exe'`) ends at the last backslash too.
+  // shortcut: the tokenizer drops backslashes inside double quotes, so a double-quoted Windows path is not seen here.
+  const base = plain.slice(Math.max(plain.lastIndexOf("/"), plain.lastIndexOf("\\")) + 1);
+  // Windows names are case-insensitive, so a `.exe` name is also lower-cased (`SSH.EXE` is `ssh`).
+  return /.\.exe$/i.test(base) ? base.slice(0, -4).toLowerCase() : base;
 }
 
 /** `coproc NAME`: the word after `coproc` is a name when it is a plain identifier. */
@@ -232,6 +241,16 @@ const ROOT_SET = new Set(["/", "/*", "~", "~/*", "~/.*", "~/."]);
 /** Another user's home directory on Linux or macOS, with optional contents glob. */
 const USER_HOME = /^\/(home|Users)\/[^/]+(\/\*|\/\.\*)?$/;
 
+/**
+ * Canonical home: `//` and `/./` collapse, `..` resolves, no trailing slash. A home with an odd spelling
+ * (`HOME=/data//u`) must still equal the target path, which `normalizePath` always cleans.
+ */
+export function normalizeHome(home: string | undefined): string | undefined {
+  if (!home || !home.startsWith("/")) return home;
+  // resolveDots drops empty and "." segments, so it also collapses "//" and the trailing slash (no regex: CodeQL js/polynomial-redos).
+  return resolveDots(home);
+}
+
 /** Expand a leading `~` to the home directory when it is known. */
 function expandHome(p: string, home: string | undefined): string {
   if (home && (p === "~" || p.startsWith("~/"))) return home + p.slice(1);
@@ -254,7 +273,8 @@ function resolveDots(p: string): string {
  * Canonical form for matching. Repeated slashes and `/.` go, `~`, `~user` and
  * `$HOME` are expanded when the home directory is known, and `..` is resolved.
  */
-export function normalizePath(w: string, home: string | undefined): string {
+export function normalizePath(w: string, rawHome: string | undefined): string {
+  const home = normalizeHome(rawHome);
   let p = w.replace(/\/{2,}/g, "/").replace(/\/\.(?=\/|$)/g, "");
   if (p === "") p = "/";
   const named = /^~([A-Za-z0-9._-]+)(\/.*)?$/.exec(p);
@@ -286,7 +306,7 @@ function aboveCwd(word: string, cwd: string | undefined): boolean {
 
 /** Root, home, home contents, a top-level system directory (with optional `/*`), or a path above the working directory. */
 function isProtected(word: string, sh: Shell): boolean {
-  const home = sh.home;
+  const home = normalizeHome(sh.home);
   const p = normalizePath(word, home);
   if (ROOT_SET.has(p) || TOP_LEVEL.test(p) || USER_HOME.test(p)) return true;
   if (home !== undefined && (p === home || p === `${home}/*` || p === `${home}/.*`)) return true;
@@ -1432,7 +1452,8 @@ function providerValueDenied(value: string): boolean {
 }
 function sshCodeLoadingDenied(c: Cmd): boolean {
   const shape = sshShape(c);
-  if (shape.libs.some(providerValueDenied)) return true;
+  // -I names a PKCS#11 library only for ssh; for other tools it means something else (python3 -I is isolated mode).
+  if (c.name === "ssh" && shape.libs.some(providerValueDenied)) return true;
   return shape.opts.some((v) => {
     const kv = sshOptionKeyValue(v);
     return kv !== undefined && CODE_PROVIDER_KEYS.has(kv.key) && providerValueDenied(kv.value);
@@ -1730,7 +1751,7 @@ function fullCommandText(f: Record<string, unknown>): string | undefined {
 function safeHome(): string | undefined {
   try {
     const h = homedir();
-    return h && h.startsWith("/") ? h : undefined;
+    return h && h.startsWith("/") ? normalizeHome(h) : undefined;
   } catch {
     return undefined;
   }

