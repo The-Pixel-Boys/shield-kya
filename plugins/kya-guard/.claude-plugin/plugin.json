@@ -9,6 +9,10 @@
     "url": "https://shield-agent.com"
   },
   "homepage": "https://shield-agent.com/install",
+  "documentationUrl": "https://shield-agent.com/docs",
+  "supportUrl": "https://shield-agent.com/support",
+  "privacyPolicyUrl": "https://shield-agent.com/privacy",
+  "termsOfServiceUrl": "https://shield-agent.com/terms",
   "repository": "https://github.com/The-Pixel-Boys/shield-kya",
   "license": "MIT",
   "keywords": [
