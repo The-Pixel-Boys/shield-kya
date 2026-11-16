@@ -16,3 +16,15 @@ export const SINCE_0_35_RULES: readonly string[] = [
   "fly-destroy", "gh-repo-delete", "mongo-drop-database", "prisma-accept-data-loss", "prisma-migrate-reset", "redis-flush",
   "rm-git-dir", "rm-project-wipe", "sql-delete-all", "supabase-reset-linked", "vercel-remove",
 ];
+
+/**
+ * The secret-read, secret-write and exfil rule ids: the never-list pair plus the guard pack kinds and network sinks.
+ * The guard pack builds these ids at run time (`secret-read-${kind}`), so they are listed here. Each needs a class replay.
+ */
+export const SECRET_EXFIL_RULES: readonly string[] = [
+  "secret-read-shell", "secret-read-file",
+  "secret-read-railway", "secret-read-docker", "secret-read-kube", "secret-read-pypirc", "secret-read-gh", "secret-read-azure",
+  "secret-read-gcloud", "secret-read-key", "secret-read-environ",
+  "secret-write-aws", "secret-write-privkey", "secret-write-github", "secret-write-github-pat", "secret-write-slack", "secret-write-stripe",
+  "exfil-curl", "exfil-wget", "exfil-nc", "exfil-ncat", "exfil-socat", "exfil-scp", "exfil-rsync",
+];

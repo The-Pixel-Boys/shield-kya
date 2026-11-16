@@ -152,7 +152,7 @@ test("countRows windows by time and counts never-list", () => {
     core.parseTrailLine(row({ ts: new Date(now - 2 * 86400_000).toISOString() })),
     core.parseTrailLine(row({ ts: "garbage" })),
   ];
-  assert.deepEqual(core.countRows(rows, now - 86400_000), { allow: 1, review: 1, hold: 1, deny: 1, never: 1 });
+  assert.deepEqual(core.countRows(rows, now - 86400_000), { allow: 1, review: 1, hold: 1, deny: 1, never: 1, ran: 0, blocked: 0, held: 0, error: 0 });
 });
 
 test("gate mode comes from hook commands, not trail rows", () => {
@@ -391,4 +391,52 @@ test("NEW-3: env assignments with very long names are still redacted, and stay c
   core.display("A" + "KEY".repeat(30000), 480);
   core.display(("A".repeat(63) + "_").repeat(40), 480);
   assert.ok(Date.now() - t < 100, `took ${Date.now() - t} ms`);
+});
+
+// ---------- outcome (spec F3 follow-up) ----------
+
+test("outcome decides the label, count and look; old rows keep the verdict labels", () => {
+  // Policy said REQUIRE_APPROVE, the hook let the call run: the old code showed REVIEW with a warning eye.
+  const ran = core.parseTrailLine(row({ verdict: "REQUIRE_APPROVE", outcome: "ran" }));
+  assert.equal(ran.outcome, "ran");
+  assert.equal(core.rowTag(ran), "RAN");
+  assert.match(core.rowNote(ran), /strict mode would hold it/);
+  assert.deepEqual(core.rowLook(ran), { color: "testing.iconPassed", icon: "pass" });
+  // A hook error row: the verdict is ALLOW, the outcome is error.
+  const err = core.parseTrailLine(row({ verdict: "ALLOW", outcome: "error", reasonCode: "HOOK_ERROR" }));
+  assert.equal(core.rowTag(err), "ERROR");
+  const held = core.parseTrailLine(row({ verdict: "REQUIRE_APPROVE", outcome: "held", mode: "hold" }));
+  assert.equal(core.rowTag(held), "HELD");
+  assert.equal(core.rowLook(held).icon, "debug-pause");
+  const blocked = core.parseTrailLine(row({ verdict: "DENY", outcome: "blocked", neverEvent: true }));
+  assert.equal(core.rowTag(blocked), "BLOCKED never-list");
+  // A shadow row: policy said DENY, the call ran.
+  const shadow = core.parseTrailLine(row({ verdict: "DENY", outcome: "ran", shadow: true }));
+  assert.equal(core.rowTag(shadow), "RAN");
+  assert.equal(core.rowLook(shadow).color, "testing.iconPassed");
+  // Hosted shadow mode: the plane answered NEVER_EVENT, the hook did not block, the call ran. It must not read BLOCKED.
+  const shadowNever = core.parseTrailLine(row({ verdict: "DENY", outcome: "ran", neverEvent: true, shadow: true }));
+  assert.equal(core.rowTag(shadowNever), "RAN never-list");
+  assert.deepEqual(core.rowLook(shadowNever), { color: "editorWarning.foreground", icon: "pass" });
+  assert.equal(core.rowLook(blocked).color, "errorForeground");
+  assert.equal(core.rowLook(blocked).icon, "error");
+  const rows = [ran, err, held, blocked, shadow];
+  const c = core.countRows(rows, 0);
+  assert.deepEqual([c.ran, c.blocked, c.held, c.error, c.allow, c.review, c.hold, c.deny], [2, 1, 1, 1, 0, 0, 0, 0]);
+  assert.equal(core.countsText(c), "2 ran 1 blocked 1 held 1 error");
+});
+
+test("a row with no outcome, or a bad outcome, keeps the old verdict reading", () => {
+  const old = core.parseTrailLine(row({ verdict: "REQUIRE_APPROVE" }));
+  assert.equal(old.outcome, undefined);
+  assert.equal(core.rowTag(old), "REVIEW");
+  assert.match(core.rowNote(old), /^REVIEW = /);
+  assert.equal(core.rowLook(old).icon, "eye");
+  const bad = core.parseTrailLine(row({ verdict: "DENY", outcome: "bogus" }));
+  assert.equal(bad.outcome, undefined);
+  assert.equal(core.rowTag(bad), "DENY");
+  assert.equal(core.countsText(core.countRows([old, bad], 0)), "0 allow 1 review 1 deny");
+  // Mixed record: outcomes first, old rows on their own segment.
+  const mixed = core.countRows([core.parseTrailLine(row({ outcome: "ran" })), old], 0);
+  assert.equal(core.countsText(mixed), "1 ran 0 blocked 0 held | earlier: 0 allow 1 review 0 deny");
 });

@@ -5,7 +5,7 @@ import { execFile } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
-  type Approval, countRows, detectGateMode, type FeedRow, findExecutable, type GateMode, HostedClient,
+  type Approval, countRows, countsText, rowLook, rowNote, rowTag, detectGateMode, type FeedRow, findExecutable, type GateMode, HostedClient,
   childEnv, isMachineKey, kyaCliJs, trustedFor, MAX_ROWS, safePath, TrailTailer, userPath, validateBaseUrl,
 } from "./core";
 
@@ -97,8 +97,6 @@ function runKya(rt: KyaRuntime, args: string[], cwd: string): Promise<{ code: nu
 
 // ---------- views ----------
 
-const VERDICT_LABEL: Record<FeedRow["verdict"], string> = { ALLOW: "ALLOW", REVIEW: "REVIEW", HOLD: "HOLD", DENY: "DENY", OTHER: "?" };
-
 class FeedProvider implements vscode.TreeDataProvider<FeedRow> {
   rows: FeedRow[] = [];
   private readonly changed = new vscode.EventEmitter<void>();
@@ -106,15 +104,11 @@ class FeedProvider implements vscode.TreeDataProvider<FeedRow> {
   fire() { this.changed.fire(); }
   getChildren(el?: FeedRow) { return el ? [] : [...this.rows].reverse(); }
   getTreeItem(r: FeedRow): vscode.TreeItem {
-    const tag = r.neverEvent ? "DENY never-list" : VERDICT_LABEL[r.verdict];
+    const tag = rowTag(r);
     // Plain strings only: trail text never becomes markdown or a command link.
     const item = new vscode.TreeItem(`${tag}  ${r.toolId}`);
     item.description = [r.summary ?? r.targetPath, r.product, r.ts.slice(11, 19)].filter(Boolean).join("  ");
-    const review = r.verdict === "REVIEW"
-      ? "REVIEW = kya recorded REQUIRE_APPROVE with no Hold path armed. Advisory hooks let the call run; a local --strict hook denied it (its rows look the same)."
-      : r.verdict === "HOLD"
-        ? "HOLD = kya recorded REQUIRE_APPROVE with a Hold/strict path armed (hosted strict hook or kya wrap --hold): the call was held or denied pending a human, not run on an advisory pass."
-        : undefined;
+    const review = rowNote(r);
     item.tooltip = [
       `${r.rawVerdict} ${r.reasonCode}`, `tool: ${r.toolId}`, `time: ${r.ts}`, `mode: ${r.mode}`,
       r.product && `host: ${r.product}`, r.project && `project: ${r.project}`,
@@ -124,10 +118,7 @@ class FeedProvider implements vscode.TreeDataProvider<FeedRow> {
       r.targetPath && `path: ${r.targetPath}`, r.summary && `change: ${r.summary}`,
       r.diffPreview && `preview (redacted):\n${r.diffPreview}`, review,
     ].filter(Boolean).join("\n");
-    const color = r.neverEvent || r.verdict === "DENY" ? "errorForeground"
-      : r.verdict === "REVIEW" || r.verdict === "HOLD" ? "editorWarning.foreground" : "testing.iconPassed";
-    const icon = r.neverEvent ? "error" : r.verdict === "DENY" ? "circle-slash" : r.verdict === "HOLD" ? "debug-pause"
-      : r.verdict === "REVIEW" ? "eye" : "pass";
+    const { color, icon } = rowLook(r);
     item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
     return item;
   }
@@ -193,7 +184,7 @@ export function activate(ctx: vscode.ExtensionContext): TestApi | undefined {
     const mode = gate.mode === "none" ? (recent ? "unknown" : "no hook") : gate.mode;
     status.text = trailError
       ? `$(warning) KYA ${mode}  trail unreadable (${trailError})`
-      : `$(shield) KYA ${mode}${hosted ? " +hosted" : ""}  ${c.allow} allow ${c.review} review ${c.hold ? `${c.hold} hold ` : ""}${c.deny} deny`;
+      : `$(shield) KYA ${mode}${hosted ? " +hosted" : ""}  ${countsText(c)}`;
     status.tooltip = [
       `Gate mode: ${mode} (from ${gate.hooks} user-level kya hook(s) or Claude Code plugin(s); Codex/Gemini plugins and project-level wiring are not inspected${mode === "unknown" ? ", but the trail has recent rows" : ""}).`,
       "Advisory: kya records every call and blocks the never-list and the guard pack; it fails open. Strict/hosted hooks deny REQUIRE_APPROVE.",

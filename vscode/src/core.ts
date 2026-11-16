@@ -7,10 +7,18 @@ import { basename, delimiter, dirname, isAbsolute, join, relative, sep } from "n
 
 export type Verdict = "ALLOW" | "REVIEW" | "HOLD" | "DENY" | "OTHER";
 
+/** What happened to the call (kya trail.ts TrailOutcome). A row written before outcomes existed has none. */
+export type Outcome = "ran" | "blocked" | "held" | "error";
+// The extension ships alone, so it cannot import kya's outcomeOf. test/outcome-readers-e2e.test.ts in sdks/kya checks both lists match.
+const OUTCOMES: readonly unknown[] = ["ran", "blocked", "held", "error"];
+const OUTCOME_WORD: Record<Outcome, string> = { ran: "RAN", blocked: "BLOCKED", held: "HELD", error: "ERROR" };
+
 export interface FeedRow {
   readonly ts: string;
   readonly toolId: string;
   readonly verdict: Verdict;
+  /** The recorded outcome. Absent on old rows: those keep the verdict labels. */
+  readonly outcome?: Outcome;
   readonly rawVerdict: string;
   readonly reasonCode: string;
   readonly mode: string;
@@ -78,6 +86,7 @@ export function parseTrailLine(line: string): FeedRow | undefined {
     ts: display(e.ts, 40),
     toolId: display(e.toolId, 120),
     verdict,
+    ...(OUTCOMES.includes(e.outcome) ? { outcome: e.outcome as Outcome } : {}),
     rawVerdict: display(v, 40),
     reasonCode: display(e.reasonCode, 80),
     mode: e.mode,
@@ -238,21 +247,70 @@ function readRange(path: string, start: number, length: number): Buffer {
   }
 }
 
-export interface Counts { allow: number; review: number; hold: number; deny: number; never: number }
+/** `ran`..`error` count rows with an outcome. `allow`..`deny` count only old rows with no outcome. */
+export interface Counts { allow: number; review: number; hold: number; deny: number; never: number; ran: number; blocked: number; held: number; error: number }
 
 /** Counts over rows newer than `sinceMs`. The status bar passes the rows it holds (the last MAX_ROWS). */
 export function countRows(rows: readonly FeedRow[], sinceMs: number): Counts {
-  const c: Counts = { allow: 0, review: 0, hold: 0, deny: 0, never: 0 };
+  const c: Counts = { allow: 0, review: 0, hold: 0, deny: 0, never: 0, ran: 0, blocked: 0, held: 0, error: 0 };
   for (const r of rows) {
     const t = Date.parse(r.ts);
     if (Number.isNaN(t) || t < sinceMs) continue;
-    if (r.verdict === "ALLOW") c.allow++;
+    if (r.outcome) c[r.outcome]++;
+    else if (r.verdict === "ALLOW") c.allow++;
     else if (r.verdict === "REVIEW") c.review++;
     else if (r.verdict === "HOLD") c.hold++;
     else if (r.verdict === "DENY") c.deny++;
     if (r.neverEvent) c.never++;
   }
   return c;
+}
+
+/** Status bar counts. By outcome when rows have one; old rows (no outcome) follow on their own segment. */
+export function countsText(c: Counts): string {
+  const old = `${c.allow} allow ${c.review} review ${c.hold ? `${c.hold} hold ` : ""}${c.deny} deny`;
+  if (c.ran + c.blocked + c.held + c.error === 0) return old;
+  const now = `${c.ran} ran ${c.blocked} blocked ${c.held} held${c.error ? ` ${c.error} error` : ""}`;
+  return c.allow + c.review + c.hold + c.deny === 0 ? now : `${now} | earlier: ${old}`;
+}
+
+/** Row tag in the feed: the outcome word when the row has one, else the verdict word as before. */
+export function rowTag(r: FeedRow): string {
+  const word = r.outcome ? OUTCOME_WORD[r.outcome] : r.verdict === "OTHER" ? "?" : r.verdict;
+  // A never-list row that was not blocked (hosted shadow mode records outcome "ran") keeps its own outcome word.
+  return r.neverEvent ? (r.outcome ? `${word} never-list` : "DENY never-list") : word;
+}
+
+/** Tooltip note that explains the tag. */
+export function rowNote(r: FeedRow): string | undefined {
+  if (r.outcome) {
+    return r.outcome === "ran" && r.rawVerdict === "REQUIRE_APPROVE"
+      ? "RAN = the hook let the call go on. Policy said REQUIRE_APPROVE: strict mode would hold it."
+      : r.outcome === "ran" && r.rawVerdict === "DENY" ? "RAN = the hook let the call go on. Policy said DENY (shadow mode: recorded, not enforced)."
+      : undefined;
+  }
+  return r.verdict === "REVIEW"
+    ? "REVIEW = kya recorded REQUIRE_APPROVE with no Hold path armed. Advisory hooks let the call run; a local --strict hook denied it (its rows look the same)."
+    : r.verdict === "HOLD"
+      ? "HOLD = kya recorded REQUIRE_APPROVE with a Hold/strict path armed (hosted strict hook or kya wrap --hold): the call was held or denied pending a human, not run on an advisory pass."
+      : undefined;
+}
+
+/** Theme colour and icon id for a feed row. */
+export function rowLook(r: FeedRow): { color: string; icon: string } {
+  if (r.outcome) {
+    const blocked = r.outcome === "blocked";
+    return {
+      color: blocked ? "errorForeground" : r.outcome === "ran" && !r.neverEvent ? "testing.iconPassed" : "editorWarning.foreground",
+      icon: r.neverEvent && blocked ? "error" : { ran: "pass", blocked: "circle-slash", held: "debug-pause", error: "warning" }[r.outcome],
+    };
+  }
+  return {
+    color: r.neverEvent || r.verdict === "DENY" ? "errorForeground"
+      : r.verdict === "REVIEW" || r.verdict === "HOLD" ? "editorWarning.foreground" : "testing.iconPassed",
+    icon: r.neverEvent ? "error" : r.verdict === "DENY" ? "circle-slash" : r.verdict === "HOLD" ? "debug-pause"
+      : r.verdict === "REVIEW" ? "eye" : "pass",
+  };
 }
 
 // ---------- gate mode (from the wired hook commands, never from trail rows) ----------

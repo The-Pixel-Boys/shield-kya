@@ -504,26 +504,32 @@ export function startLiveReceiptServer(
 
   // Incident alerts: when the trail changes, run the detectors at most once per minute (off unless alerts are on).
   // The scan never throws and never touches the page; a new alert only triggers a refresh.
+  // fs.watch is not a reliable trigger: events can be missed (macOS FSEvents start-up gap, a busy machine), and a
+  // scan can end with nothing done (state lock busy, webhook down). So one scan runs at start, and one timer
+  // rescans every interval as a safety net. A rescan is cheap and the alert state dedupes it.
   let lastAlertScan = 0;
   let alertScanRunning = false;
   // A trail change that arrives during a scan must not be lost: scan again once the running scan ends.
   let alertRescan = false;
   let alertTimer: ReturnType<typeof setTimeout> | undefined;
+  const armAlertTimer = (ms: number): void => {
+    if (alertTimer || closed) return;
+    alertTimer = setTimeout(() => {
+      alertTimer = undefined;
+      maybeScanAlerts();
+    }, ms);
+    alertTimer.unref?.();
+  };
   const maybeScanAlerts = (): void => {
     if (closed || !resolveAlertsConfig(process.env).enabled) return;
     if (alertScanRunning) {
       alertRescan = true;
       return;
     }
-    const wait = lastAlertScan + (options.alertScanMinMs ?? ALERT_SCAN_MIN_MS) - Date.now();
+    const minMs = options.alertScanMinMs ?? ALERT_SCAN_MIN_MS;
+    const wait = lastAlertScan + minMs - Date.now();
     if (wait > 0) {
-      if (!alertTimer) {
-        alertTimer = setTimeout(() => {
-          alertTimer = undefined;
-          maybeScanAlerts();
-        }, wait);
-        alertTimer.unref?.();
-      }
+      armAlertTimer(wait);
       return;
     }
     lastAlertScan = Date.now();
@@ -538,6 +544,8 @@ export function startLiveReceiptServer(
         if (alertRescan) {
           alertRescan = false;
           maybeScanAlerts();
+        } else {
+          armAlertTimer(minMs);
         }
       });
   };
@@ -1135,6 +1143,8 @@ export function startLiveReceiptServer(
       } catch {
         /* still serve; live reload may be degraded */
       }
+      // Cover events written before the watcher was live; this also starts the safety timer.
+      maybeScanAlerts();
 
       // Embeddings are warmed lazily on the first search (see ensureEmbeddingsWarming
       // in POST /feed). Eager startup warming competes with query embeddings and can

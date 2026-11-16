@@ -17,7 +17,7 @@ import { homedir } from "node:os";
 import { posix } from "node:path";
 import {
   Cmd, commandStrings, fieldsOf, gitSubInfo, hasCommand, isSecretPath, isShellTool, isWriteLike,
-  normalizePath, parseShell, pathStrings, windowsOf, type Shell,
+  normalizeHome, normalizePath, parseShell, pathStrings, windowsOf, type Shell,
 } from "./never-list-input.js";
 
 /** GUARD_ASK is the second outcome: the human decides (see ASK_RULES). It is not a NEVER_ code, so it is not counted as a block. */
@@ -80,7 +80,8 @@ export function guardContextFrom(cwd: string, env: NodeJS.ProcessEnv = process.e
       home = o && o.startsWith("/") ? o : undefined;
     } catch { /* no home */ }
   }
-  return { cwd, home, projectRoot: cwd, env };
+  // Same canonical form as the paths it is compared with (`normalizePath` always cleans `//`, `/./`, trailing `/`).
+  return { cwd, home: normalizeHome(home), projectRoot: cwd.startsWith("/") ? normalizePath(cwd, undefined) : cwd, env };
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -247,7 +248,7 @@ function rmTargetHit(word: string, ctx: GuardContext, assigned: ReadonlySet<stri
   let p = absPath(word, ctx);
   p = p.replace(/\/(\.\*|\*)$/, "") || "/";
   const root = ctx.projectRoot ?? ctx.cwd;
-  const home = ctx.home;
+  const home = normalizeHome(ctx.home);
   if (p === "/") return "/";
   if (home && (p === home || home.startsWith(`${p}/`))) return p;
   if (p !== root && root.startsWith(`${p}/`)) return p;
