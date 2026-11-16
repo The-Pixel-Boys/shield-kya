@@ -163,7 +163,7 @@ jobs:
     if: github.repository == 'The-Pixel-Boys/shield-kya'
     runs-on: ubuntu-latest
     environment: npm
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
@@ -298,7 +298,7 @@ jobs:
           echo "Check commands:"
           echo "  curl -s $PKG_URL/$VERSION | jq '._npmUser.trustedPublisher, .dist.attestations'"
           echo "  curl -s https://registry.npmjs.org/-/npm/v1/attestations/@shield-agent%2fkya@$VERSION | jq '.attestations[].predicateType'"
-          for _ in $(seq 1 20); do
+          for _ in $(seq 1 60); do
             if curl -fsS "$PKG_URL/$VERSION" -o "$RUNNER_TEMP/meta.json" 2>/dev/null; then
               if jq -e '._npmUser.trustedPublisher != null and .dist.attestations != null' "$RUNNER_TEMP/meta.json" >/dev/null; then
                 jq '._npmUser, .dist.attestations' "$RUNNER_TEMP/meta.json"
@@ -311,7 +311,7 @@ jobs:
             fi
             sleep 15
           done
-          echo "::error::npm does not serve $VERSION after 5 minutes. A re-run (while main has not moved) is safe: it skips the publish when npm serves the version."
+          echo "::error::npm does not serve $VERSION after 15 minutes (kya-v0.35.3 and kya-v0.35.6 took more than 5). A re-run (while main has not moved) is safe: it skips the publish when npm serves the version."
           exit 1
 
       # After a stable publish, move dist-tag `next` up to it, so `npm i @shield-agent/kya@next` never installs an
