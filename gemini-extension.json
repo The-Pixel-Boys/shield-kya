@@ -1,5 +1,5 @@
 {
   "name": "shield-kya",
-  "version": "0.35.5",
+  "version": "0.35.6",
   "description": "Stops your coding agent from deleting, leaking or dropping things. Records everything else. Advisory: blocks the never-list and the guard pack, fails open."
 }

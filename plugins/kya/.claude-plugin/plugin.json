@@ -1,7 +1,7 @@
 {
   "name": "kya",
   "displayName": "Shield KYA",
-  "version": "0.35.5",
+  "version": "0.35.6",
   "description": "Stops your coding agent from deleting, leaking or dropping things. Records everything else. Advisory: blocks the never-list and the guard pack, fails open.",
   "author": {
     "name": "MFR Limited (Shield KYA)",
@@ -9,6 +9,10 @@
     "url": "https://shield-agent.com"
   },
   "homepage": "https://shield-agent.com/install",
+  "documentationUrl": "https://shield-agent.com/docs",
+  "supportUrl": "https://shield-agent.com/support",
+  "privacyPolicyUrl": "https://shield-agent.com/privacy",
+  "termsOfServiceUrl": "https://shield-agent.com/terms",
   "repository": "https://github.com/The-Pixel-Boys/shield-kya",
   "license": "MIT",
   "keywords": [

@@ -61,6 +61,17 @@ describe("marketplace structure and pins", () => {
     expect(read("docs/hosts/claude-plugin.md")).toMatch(/notify webhook/);
   });
 
+  it("both Claude manifests name the docs, support, privacy and terms pages (directory listing links)", () => {
+    for (const f of ["plugins/kya/.claude-plugin/plugin.json", "plugins/kya-guard/.claude-plugin/plugin.json"]) {
+      expect(json(f), f).toMatchObject({
+        documentationUrl: "https://shield-agent.com/docs",
+        supportUrl: "https://shield-agent.com/support",
+        privacyPolicyUrl: "https://shield-agent.com/privacy",
+        termsOfServiceUrl: "https://shield-agent.com/terms",
+      });
+    }
+  });
+
   it("manifest version and every pin follow package.json", () => {
     expect(json("plugins/kya/.claude-plugin/plugin.json").version).toBe(version);
     // The Claude hooks carry no package spec: bootstrap.mjs takes the pin from the manifest above.
