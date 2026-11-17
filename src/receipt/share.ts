@@ -29,13 +29,14 @@ export interface ShareStats {
   readonly deny: number;
   readonly never: number;
   /**
-   * Counts by outcome (what happened to each call). Present when any row records one. `allow`, `review` and `deny`
-   * then count ran, held and blocked rows, so `review` is never a call that already ran.
+   * Counts by outcome (what happened to each call). Always present, zeros when the window is empty or has no outcome
+   * recorded. `allow`, `review` and `deny` count ran, held and blocked rows plus rows written before outcomes existed,
+   * so `review` is never a call that already ran. The hosted page shows the rows left over as "Earlier".
    */
-  readonly ran?: number;
-  readonly blocked?: number;
-  readonly held?: number;
-  readonly error?: number;
+  readonly ran: number;
+  readonly blocked: number;
+  readonly held: number;
+  readonly error: number;
   /** Distinct sessions in the window - a count, never ids. */
   readonly sessions: number;
 }
@@ -102,7 +103,10 @@ export function buildSharePayload(model: ReceiptModel): SharePayload {
       review,
       deny,
       never,
-      ...(oc.recorded > 0 ? { ran: oc.ran, blocked: oc.blocked, held: oc.held, error: oc.error } : {}),
+      ran: oc.ran,
+      blocked: oc.blocked,
+      held: oc.held,
+      error: oc.error,
       sessions: sessions.size,
     },
     products: agg.products.slice(0, 6).map(({ label, count }) => ({ label, count })),

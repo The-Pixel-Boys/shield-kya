@@ -10,4 +10,9 @@ input:
 expect: ask
 rule: prisma-accept-data-loss
 since: 0.35.0
+vendor: prisma
+fix: >-
+  Run prisma migrate dev --create-only to write the migration file without applying it, read the
+  SQL for DROP statements, and then apply it. Keep the production DATABASE_URL out of the agent
+  environment, and give the agent a throwaway database.
 credit: ""

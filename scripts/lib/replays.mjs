@@ -15,7 +15,7 @@ export const OUTCOMES = ["deny", "ask", "allow"];
 /** Public page that explains each gap. A gap row links here until the owner opens a real issue. */
 export const GAP_ANCHOR = "https://github.com/The-Pixel-Boys/shield-kya/blob/main/docs/replays.md#gap-tracking";
 
-const KEYS = new Set(["id", "kind", "title", "date", "sources", "reconstructed", "host", "tool", "input", "expect", "rule", "since", "credit", "status", "issue", "target"]);
+const KEYS = new Set(["id", "kind", "title", "date", "sources", "reconstructed", "host", "tool", "input", "expect", "rule", "since", "credit", "status", "issue", "target", "vendor", "fix", "label"]);
 const KEBAB = /^[a-z0-9][a-z0-9-]*$/;
 const HTTPS = /^https:\/\/[^\s]+$/;
 /** A GitHub handle without the @: letters, digits and single dashes inside, up to 39 characters. */
@@ -103,6 +103,21 @@ export function validateReplay(r, file) {
   if (r.kind === "incident" && (!Array.isArray(sources) || sources.length === 0)) e.push("an incident needs at least one source link");
   if (r.kind !== "incident" && r.reconstructed === true) e.push("only an incident can be reconstructed");
   if (r.credit !== undefined && r.credit !== "" && !HANDLE.test(r.credit)) e.push("credit must be a GitHub handle without the @, or empty");
+  if (r.kind === "control") {
+    if (r.vendor !== undefined || r.fix !== undefined || r.label !== undefined) e.push("vendor, fix and label are for incidents and classes, not controls");
+  } else {
+    need("vendor");
+    need("fix");
+    if (r.vendor !== undefined && r.vendor !== "" && (typeof r.vendor !== "string" || (!r.vendor.includes("TODO") && !KEBAB.test(r.vendor)))) e.push("vendor must be lower-case words joined by dashes");
+    if (r.fix !== undefined && typeof r.fix !== "string") e.push("fix must be text");
+    if (typeof r.fix === "string" && r.fix !== "") {
+      if (r.fix.length < 40 || r.fix.length > 420) e.push("fix must be 40 to 420 characters");
+      if (r.fix.split(/[.!?](?:\s|$)/).filter(Boolean).length > 2) e.push("fix must be one or two sentences");
+      if (/[A-Za-z0-9]- /.test(r.fix)) e.push("fix has a hyphen followed by a space: a folded line broke a word or a command flag (reflow the lines)");
+      if (/\b(kya|shield)\b/i.test(r.fix)) e.push("fix must not name KYA or Shield: it is the way to prevent the incident without us");
+    }
+  }
+  if (r.label !== undefined && r.kind !== "control" && (typeof r.label !== "string" || !/^[a-z][^.!?]{2,79}$/.test(r.label))) e.push("label must be 3 to 80 characters of plain lower-case words with no full stop (what the call tries to do)");
   if (JSON.stringify(r).includes("TODO")) e.push("a TODO placeholder is left in the file (pnpm new-rule writes them: replace each one)");
   const gap = r.status === "gap";
   if (r.status !== undefined && !gap) e.push("status can only be gap");
@@ -233,13 +248,18 @@ export function renderPage(board) {
     "",
     `${t.control.listed} everyday commands (for example \`npm test\`, \`git status\`, \`prisma migrate dev\`) are in the [\`replays/\`](../replays) folder as files named \`control-*.yaml\`. Their results are in [\`replays/scoreboard.json\`](../replays/scoreboard.json).`,
     "",
+    "## Replay pages",
+    "",
+    "Each incident and class has a public page at `shield-agent.com/replays/<id>`, built from its replay file by `pnpm sync:replay-pages` into [`replays/pages/`](../replays/pages). A page shows what happens, the call, the fix that needs no extra tool, then what KYA does, the install lines and related replays. There is also a hub for each vendor (`/replays/vendor/<vendor>`) and for each host recipe (`/replays/agent/<host>`). Every replay ran on Claude Code only, and the agent pages say so. Do not edit the generated files: `pnpm check:replay-pages` fails when a page is stale or has no replay.",
+    "",
     "## Add a replay",
     "",
     "1. Copy a file in `replays/` and change the fields. The file name must be the `id` plus `.yaml`.",
     "2. Use placeholder tokens and hosts. The test rejects a file that holds a real secret shape.",
     "3. An incident needs at least one source link that opens. Set `reconstructed: true` when the exact call was not published.",
-    "4. Put your GitHub handle (no @) in `credit`. The scoreboard shows it in the Credit column and links it to your profile. Leave it empty for no credit.",
-    "5. Run `pnpm test -- replays` and `pnpm sync:replays`. Commit the files that change.",
+    "4. An incident or a class needs two more fields. `vendor` is the product or service involved, in lower case (for example `aws`, `git`, `postgres`). `fix` is one or two sentences on how to prevent the incident with no third-party tool: a native deny rule, a scoped token, a read-only role, soft delete or backups. Name no product of ours in `fix`. A control has neither field. Where the label of the rule does not say what this call does, add `label`: what the call tries to do, in plain lower-case words (for example `wipe the root folder`).",
+    "5. Put your GitHub handle (no @) in `credit`. The scoreboard shows it in the Credit column and links it to your profile. Leave it empty for no credit.",
+    "6. Run `pnpm test -- replays`, `pnpm sync:replays`, `pnpm sync:replay-pages` and `pnpm sync:features`. Commit the files that change.",
     "",
     "To add a whole guard rule (rule, tests and replay file together), run `pnpm new-rule <id>`. See [CONTRIBUTING.md](../CONTRIBUTING.md#add-a-rule).",
     "",

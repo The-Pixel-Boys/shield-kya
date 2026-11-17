@@ -349,7 +349,8 @@
         "test/guard-first-e2e.test.ts",
         "test/guard-first-render.test.ts",
         "test/honest-verdicts.test.ts",
-        "test/honest-verdicts-e2e.test.ts"
+        "test/honest-verdicts-e2e.test.ts",
+        "test/report-labels-e2e.test.ts"
       ],
       "status": "stable",
       "plan": "oss"

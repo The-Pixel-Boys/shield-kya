@@ -4,6 +4,7 @@
  */
 import { deriveTargetPath, deriveTrailSummary, redactTrailText } from "./trail-summary.js";
 import { assertNoSecrets } from "./dash/render.js";
+import { hasPemBlock } from "./pem.js";
 
 export const DIFF_MAX_LINES = 8;
 export const DIFF_MAX_LINE_CHARS = 72;
@@ -77,9 +78,7 @@ function takeInput(s: string): string {
 }
 
 function containsPem(blob: string): boolean {
-  return /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/i.test(
-    blob,
-  );
+  return hasPemBlock(blob);
 }
 
 function prepareLines(rawLines: string[]): string {

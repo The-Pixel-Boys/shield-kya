@@ -338,7 +338,7 @@ describe("dashboard HTML", () => {
     expect(html).toContain('<section class="panel" id="dashboard"');
     expect(html.indexOf('id="dashboard"')).toBeGreaterThan(html.indexOf('class="alert"'));
     expect(html.indexOf('id="dashboard"')).toBeLessThan(html.indexOf('id="feed"'));
-    for (const title of ["Verdict mix", "Activity", "Top tools", "Risk hotspots"]) {
+    for (const title of ["Outcome mix", "Activity", "Top tools", "Risk hotspots"]) {
       expect(html).toContain(title);
     }
   });

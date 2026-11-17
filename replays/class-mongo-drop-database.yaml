@@ -10,4 +10,8 @@ input:
 expect: deny
 rule: mongo-drop-database
 since: 0.35.0
+vendor: mongodb
+fix: >-
+  Give the agent a database user with the read role, or readWrite on one non-production database,
+  and not dbOwner, root or another admin role. Take regular backups and test a restore.
 credit: ""

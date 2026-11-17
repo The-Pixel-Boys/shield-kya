@@ -10,4 +10,10 @@ input:
 expect: deny
 rule: cloud-delete
 since: 0.33.0
+vendor: gcloud
+fix: >-
+  Turn on deletion protection for the Cloud SQL instance (gcloud sql instances patch INSTANCE
+  --deletion-protection), so a delete fails until a person turns it off. Give the agent an IAM
+  role that has neither cloudsql.instances.delete nor cloudsql.instances.update (the Cloud SQL
+  Editor role has update), because update can turn the protection off.
 credit: ""

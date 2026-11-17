@@ -10,4 +10,9 @@ input:
 expect: deny
 rule: git-delete-default-branch
 since: 0.33.0
+vendor: git
+fix: >-
+  Protect the default branch on the server (a GitHub branch protection rule or ruleset) and leave
+  branch deletion and force pushes off. Administrators and bypass actors can skip these rules
+  unless you enforce them for administrators, so the agent's token must not belong to either.
 credit: ""

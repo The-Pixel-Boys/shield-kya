@@ -10,4 +10,10 @@ input:
 expect: deny
 rule: exfil-curl
 since: 0.33.0
+vendor: network
+fix: >-
+  Turn on the Claude Code sandbox network allowlist, or run the agent in a container whose
+  outbound traffic is limited to listed hosts, and keep production credentials out of its
+  environment. A deny rule such as Bash(curl *) does not stop another tool, or a call by full
+  path.
 credit: ""

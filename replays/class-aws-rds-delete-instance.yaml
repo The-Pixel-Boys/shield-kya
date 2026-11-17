@@ -10,4 +10,11 @@ input:
 expect: deny
 rule: cloud-delete
 since: 0.33.0
+vendor: aws
+fix: >-
+  Turn on deletion protection for the instance with aws rds modify-db-instance
+  --db-instance-identifier NAME --deletion-protection (for Aurora, modify the cluster), so a
+  delete fails until a person turns it off. Give the agent an IAM role that allows neither
+  rds:DeleteDBInstance nor rds:ModifyDBInstance, which can turn the protection off, and keep
+  manual snapshots, which RDS does not delete with the instance.
 credit: ""

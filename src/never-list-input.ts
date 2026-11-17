@@ -10,6 +10,7 @@
  * shell parser. Fails open: unknown shapes and parse trouble are not matches.
  * Work is linear in the input size, with bounded nesting.
  */
+import { readlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { findHostToolTier } from "./host-tools.js";
 import { mcpToolTier, parseMcpToolId } from "./mcp-servers.js";
@@ -75,7 +76,7 @@ export interface NeverListInputRule {
   /** Checks a shell command. Only shell-like tools reach it. */
   readonly shell?: (sh: Shell) => boolean;
   /** Checks a file path. Only tools that are not write-like reach it. */
-  readonly file?: (path: string, home: string | undefined) => boolean;
+  readonly file?: (path: string, home: string | undefined, cwd?: string) => boolean;
   /** Checks a file path that a write-like tool writes (Write, Edit, apply_patch). Only write-like tools reach it. */
   readonly writeFile?: (path: string, home: string | undefined) => boolean;
   /**
@@ -153,17 +154,19 @@ function stripSubst(t: string): { plain: string; ok: boolean } {
 
 /**
  * The last path part of a command word, with substitutions removed (`/bin$(:)/rm` is `rm`) and a trailing
- * `.exe` of any case dropped (`ssh.exe`, `SSH.EXE`, both `ssh`): Windows agents (Git Bash, WSL interop, PowerShell) call
- * the same commands under that name. A word that is only `.exe` keeps its name. Only deny rules read the name, so
- * this can match more commands, never fewer.
+ * `.exe`, `.cmd`, `.bat` or `.com` of any case dropped (`ssh.exe`, `SSH.COM`, both `ssh`): Windows agents (Git Bash,
+ * WSL interop, PowerShell) call the same commands under that name. A word that is only the extension (`.exe`) keeps
+ * its name. On darwin and win32 the name is lower-cased too (`RM`, `/BIN/RM`). Only deny rules read the name, so this
+ * can match more commands, never fewer.
  */
 function wordName(t: string): string {
   const plain = stripSubst(t).plain;
-  // A single-quoted Windows path (`'C:\Windows\System32\OpenSSH\ssh.exe'`) ends at the last backslash too.
-  // shortcut: the tokenizer drops backslashes inside double quotes, so a double-quoted Windows path is not seen here.
+  // A quoted Windows path (`'C:\Windows\System32\OpenSSH\ssh.exe'`, also double-quoted) ends at the last backslash too.
   const base = plain.slice(Math.max(plain.lastIndexOf("/"), plain.lastIndexOf("\\")) + 1);
-  // Windows names are case-insensitive, so a `.exe` name is also lower-cased (`SSH.EXE` is `ssh`).
-  return /.\.exe$/i.test(base) ? base.slice(0, -4).toLowerCase() : base;
+  // Windows names are case-insensitive, so such a name is also lower-cased (`SSH.EXE` is `ssh`).
+  const name = /.\.(exe|cmd|bat|com)$/i.test(base) ? base.slice(0, -4).toLowerCase() : base;
+  // macOS (APFS) and Windows run `RM`, `/BIN/RM` and `Ssh -I` as `rm` and `ssh`: those hosts read a name without case.
+  return platform === "darwin" || platform === "win32" ? name.toLowerCase() : name;
 }
 
 /** `coproc NAME`: the word after `coproc` is a name when it is a plain identifier. */
@@ -237,9 +240,12 @@ export function hasCommand(sh: Shell, pred: (c: Cmd, sh: Shell) => boolean): boo
 }
 
 const TOP_LEVEL = /^\/(bin|boot|etc|home|lib|lib64|opt|root|sbin|srv|usr|var|System|Library|Applications|private|Users)(\/\*)?$/;
+/** Case-insensitive forms for a drive-prefixed path (`C:\WINDOWS`); `Windows` is a system folder there. */
+const TOP_LEVEL_CI = new RegExp(TOP_LEVEL.source.replace("Users)", "Users|Windows)"), "i");
 const ROOT_SET = new Set(["/", "/*", "~", "~/*", "~/.*", "~/."]);
 /** Another user's home directory on Linux or macOS, with optional contents glob. */
 const USER_HOME = /^\/(home|Users)\/[^/]+(\/\*|\/\.\*)?$/;
+const USER_HOME_CI = new RegExp(USER_HOME.source, "i");
 
 /**
  * Canonical home: `//` and `/./` collapse, `..` resolves, no trailing slash. A home with an odd spelling
@@ -258,7 +264,7 @@ function expandHome(p: string, home: string | undefined): string {
 }
 
 /** Resolve `.` and `..` in an absolute path. Relative paths are returned as they are. */
-function resolveDots(p: string): string {
+function resolveDots(p: string, drive = ""): string {
   if (!p.startsWith("/")) return p;
   const out: string[] = [];
   for (const seg of p.split("/")) {
@@ -266,7 +272,165 @@ function resolveDots(p: string): string {
     if (seg === "..") out.pop();
     else out.push(seg);
   }
-  return "/" + out.join("/");
+  return drive + "/" + out.join("/");
+}
+
+/**
+ * Windows spelling of a path word. In sh a backslash is a name character, so a word reads in its literal form
+ * (`normalizePath`: `\` kept, `..` runs around it) and, only when the word LOOKS like a Windows path, in a second form
+ * where `\` separates. A deny rule checks every form and denies when any matches: the second form can add a denial,
+ * never remove one. A word is Windows-like when it starts with a drive (`C:\`, `C:/`, `C:..`), `\\` or `//?/` or `//./`
+ * (UNC, extended, device, `\\wsl$\`), `~\` (also `$HOME\`, which becomes `~\`), `$USERPROFILE\`, `%USERPROFILE%\` or
+ * `$HOMEPATH\` (home), or, with a drive HOME, an MSYS, Cygwin or WSL mount (`/c/Users`, `/mnt/c/Users`, `/cygdrive/c`).
+ * A rooted word with one leading `\` (`\Users\me`, `\Windows`, `\`) is read as the root of the current drive for the
+ * delete rules only, because `'\.env'` is far more often a regex. Any other word keeps sh rules, so `s/\.env//` and
+ * `/a\b\c/../..` are read as sh reads them.
+ * Windows names ignore case and drop trailing dots and spaces, so a Windows form is lower-cased, loses the drive and
+ * trailing `.` and space of every name (`C:\Windows.`, `C:\app\.env `), and is matched with the case-insensitive rule
+ * forms (`ci`; `home` is cut the same way). A UNC share root, `\\?\Volume{...}` and `\\?\GLOBALROOT` are as protected as `/`.
+ */
+interface PathForm {
+  readonly p: string;
+  readonly home: string | undefined;
+  readonly ci: boolean;
+}
+const DRIVE = /^[A-Za-z]:(?=\/|$)/;
+const HOME_ENV = /^(\$\{?(?:USERPROFILE|HOMEPATH)\}?|%(?:USERPROFILE|HOMEPATH)%)(?=[\\/]|$)/;
+const WIN_WORD = /^([A-Za-z]:|\\\\|~\\|\/\/[?.]\/|\$\{?(?:USERPROFILE|HOMEPATH)\}?(?:[\\/]|$)|%(?:USERPROFILE|HOMEPATH)%(?:[\\/]|$))/;
+const ROOTED_WORD = /^\\(?!\\)/;
+const MSYS_WORD = /^\/(mnt\/|cygdrive\/)?([A-Za-z])(?=\/|$)/i;
+const isDriveHome = (h: string | undefined): boolean => h !== undefined && /^[A-Za-z]:/.test(h);
+/** The word as a `/` path, plus whether it is a POSIX (WSL) path, a protected root, or a rooted word of the current drive. */
+function winSource(w: string, rawHome: string | undefined): { src: string; posix: boolean; root: boolean; rooted: boolean } {
+  const some = (src: string): { src: string; posix: boolean; root: boolean; rooted: boolean } => ({ src, posix: false, root: false, rooted: false });
+  const env = HOME_ENV.exec(w);
+  if (env) return some("~" + w.slice(env[0].length));
+  if (w.startsWith("\\\\") || /^\/\/[?.]\//.test(w)) {
+    let parts = w.replace(/\\/g, "/").replace(/^\/+/, "").split(/\/+/);
+    if (parts[0] === "?" || parts[0] === ".") {
+      if (parts[1]?.toUpperCase() !== "UNC") {
+        const rest = parts.slice(1).join("/");
+        // `\\?\C:\...` is a drive path; `\\?\Volume{...}` and `\\?\GLOBALROOT\...` name a whole volume or the object root.
+        return /^[A-Za-z]:/.test(rest) ? some(rest) : { ...some("/"), root: true };
+      }
+      parts = parts.slice(2);
+    }
+    if (/^wsl(\$|\.localhost)$/i.test(parts[0] ?? "")) return { ...some("/" + parts.slice(2).join("/")), posix: true };
+    const admin = /^([A-Za-z])\$$/.exec(parts[1] ?? "");
+    if (admin) return some(`${admin[1]}:/${parts.slice(2).join("/")}`);
+    // server, server\share or server\share\rest: the first two are a share root; the rest is matched under the share.
+    return { ...some("/" + parts.join("/")), root: parts.filter(Boolean).length <= 2 };
+  }
+  const m = MSYS_WORD.exec(w);
+  if (!/^[A-Za-z]:/.test(w) && !w.startsWith("~") && m && isDriveHome(rawHome)) return some(`${m[2]!.toUpperCase()}:${w.slice(m[0].length)}`);
+  // Drive-relative (`C:..`, `C:Users`): read as under the drive root.
+  if (/^[A-Za-z]:[^\\/]/.test(w)) return some(`${w.slice(0, 2)}/${w.slice(2)}`);
+  return { ...some(w), rooted: ROOTED_WORD.test(w) };
+}
+function winForm(w: string, rawHome: string | undefined): PathForm {
+  const slashed = (s: string): string => s.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
+  const drive = (s: string): string => (/^[A-Za-z]:\//.test(s) ? s.slice(0, 2) : "");
+  const { src, posix, root, rooted } = winSource(w, rawHome);
+  if (root) return { p: "/", home: undefined, ci: false };
+  let home = rawHome === undefined ? undefined : slashed(rawHome);
+  if (home !== undefined) {
+    const hd = drive(home);
+    home = home.startsWith("/") || hd ? resolveDots(home.slice(hd.length), hd) : home;
+  }
+  let p = slashed(src).replace(/\/\.(?=\/|$)/g, "");
+  if (p === "") p = "/";
+  if (p === "~" || p.startsWith("~/")) p = expandHome(p, home);
+  const d = drive(p);
+  p = d ? resolveDots(p.slice(2), d) : resolveDots(p);
+  if (posix) {
+    while (p.length > 1 && p.endsWith("/")) p = p.slice(0, -1);
+    return { p, home: normalizeHome(rawHome), ci: false };
+  }
+  // Windows drops trailing dots and spaces of a name and reads `name:stream` and `name::$DATA` as `name` (also in a relative
+  // path); a name that is only dots, spaces or a stream goes. `.` and `..` stay for the project-root check.
+  const driven = DRIVE.test(p);
+  p = p.split("/").map((seg, i) => (seg === "." || seg === ".." || (driven && i === 0) ? seg : seg.replace(/:.*$/, "").replace(/[. ]+$/, ""))).filter((seg, i) => i === 0 || seg !== "").join("/") || "/";
+  while (p.length > 1 && p.endsWith("/")) p = p.slice(0, -1);
+  if (!DRIVE.test(p) && !rooted) return platform === "win32" ? { p: p.toLowerCase(), home: home?.toLowerCase(), ci: true } : { p, home, ci: false };
+  const strip = (x: string): string => x.replace(DRIVE, "").toLowerCase() || "/";
+  return { p: strip(p), home: home !== undefined && DRIVE.test(home) ? strip(home) : home?.toLowerCase(), ci: true };
+}
+/** The host OS the path rules read paths for. Tests set it (`setNeverListPlatform`) to check each OS on any machine. */
+let platform: string = process.platform;
+/** Test hook: read paths as `os` does (`"darwin"`, `"win32"`, `"linux"`). `undefined` restores the real platform. */
+export function setNeverListPlatform(os: string | undefined): void {
+  platform = os ?? process.platform;
+}
+/** A lower-cased darwin path with its aliases resolved: `/private/etc` is `/etc`, a volume root is `/`, `/Volumes` is as protected as `/`. */
+function darwinAlias(p: string): string {
+  if (p === "/volumes") return "/";
+  if (!p.startsWith("/")) return p;
+  // One left-to-right walk over the path segments, so a chain of any length costs one pass:
+  // `/Volumes/Macintosh HD/System/Volumes/Data/private/etc` is `/etc`.
+  const seg = p.split("/");
+  let i = 1;
+  for (;;) {
+    if (seg[i] === "system" && seg[i + 1] === "volumes" && seg[i + 2] === "data") i += 3;
+    // Only the boot volume is the root of `/`: `/Volumes/Backup` is another disk and its mount point is not protected.
+    else if (seg[i] === "volumes" && seg[i + 1] && isBootVolume(seg[i + 1]!)) i += 2;
+    else break;
+  }
+  if (i === 1 && !(seg[1] === "private" && /^(etc|var|tmp)$/.test(seg[2] ?? ""))) return p;
+  if (seg[i] === "private" && /^(etc|var|tmp)$/.test(seg[i + 1] ?? "")) i++;
+  return "/" + seg.slice(i).join("/");
+}
+const defaultReadlink = (p: string): string | undefined => {
+  if (process.platform !== "darwin") return undefined;
+  try {
+    return readlinkSync(p);
+  } catch {
+    return undefined;
+  }
+};
+let readLink: (p: string) => string | undefined = defaultReadlink;
+const BOOT_VOLUME: Map<string, boolean> = new Map();
+/** Test hook: what `readlink /Volumes/<name>` returns. `undefined` restores the real call (made only on a real darwin host). */
+export function setNeverListReadlink(fn: ((path: string) => string | undefined) | undefined): void {
+  readLink = fn ?? defaultReadlink;
+  BOOT_VOLUME.clear();
+}
+/** `/Volumes/Macintosh HD` (any case) or a `/Volumes/<name>` that is a symlink to `/`. The answer is cached per name. */
+function isBootVolume(name: string): boolean {
+  // A glob (`/Volumes/*/Users`, `/Volumes/Mac*`, `/Volumes/{a,b}`) can match the boot volume, so it counts as one.
+  if (name === "macintosh hd" || /[*?[{]/.test(name)) return true;
+  let v = BOOT_VOLUME.get(name);
+  if (v === undefined) {
+    v = readLink(`/Volumes/${name}`) === "/";
+    if (BOOT_VOLUME.size > 256) BOOT_VOLUME.clear();
+    BOOT_VOLUME.set(name, v);
+  }
+  return v;
+}
+/**
+ * Every form of a path word that a deny rule must check: the literal one, plus a second form for these cases:
+ * - a Windows-like word (see `PathForm`), or on win32 any word with a backslash, because Windows APIs read `\` as a
+ *   separator there (`'app\.env'`). On a POSIX host a plain backslash word keeps sh rules, so `sed 's/\.env//'` is allowed.
+ * - on darwin and win32, a case-folded form of every word (the default APFS volume and Windows ignore case: `rm -rf
+ *   /users/me`), and on win32 the separator form of every word, which also drops trailing dots, spaces and streams.
+ * - on darwin, the path with its aliases resolved (`/private/etc`, `/Volumes/<name>`, `/System/Volumes/Data`).
+ * `protect` is true for the delete rules, which also read a rooted `\word` as the root of the current drive.
+ */
+function pathForms(w: string, rawHome: string | undefined, protect = false): readonly PathForm[] {
+  const lit: PathForm = { p: normalizePath(w, rawHome), home: normalizeHome(rawHome), ci: false };
+  const forms: PathForm[] = [lit];
+  const win32 = platform === "win32";
+  if (win32 || WIN_WORD.test(w) || (protect && ROOTED_WORD.test(w)) || (isDriveHome(rawHome) && MSYS_WORD.test(w))) {
+    const win = winForm(w, rawHome);
+    if (!(win.p === lit.p && win.home === lit.home && !win.ci)) forms.push(win);
+  }
+  if (platform === "darwin" || win32) {
+    const low = lit.p.toLowerCase();
+    forms.push({ p: low, home: lit.home?.toLowerCase(), ci: true });
+    // darwin aliases of the same file: /private/etc is /etc; a volume root (/Volumes/x, /System/Volumes/Data) is /.
+    const alias = platform === "darwin" ? darwinAlias(low) : low;
+    if (alias !== low) forms.push({ p: alias, home: lit.home?.toLowerCase(), ci: true });
+  }
+  return forms;
 }
 
 /**
@@ -299,18 +463,29 @@ export function normalizePath(w: string, rawHome: string | undefined): string {
  */
 function aboveCwd(word: string, cwd: string | undefined): boolean {
   if (!cwd || !cwd.startsWith("/") || word.startsWith("/") || word.startsWith("~") || word.includes("$")) return false;
-  const root = cwd.length > 1 ? cwd.replace(/\/+$/, "") : cwd;
+  const root = cwd.length > 1 ? trimTrailingSlashes(cwd) : cwd;
   const target = resolveDots(`${root}/${word}`.replace(/\/{2,}/g, "/")).replace(/\/\.?\*$/, "") || "/";
   return target !== root && (target === "/" || root.startsWith(`${target}/`));
 }
 
 /** Root, home, home contents, a top-level system directory (with optional `/*`), or a path above the working directory. */
 function isProtected(word: string, sh: Shell): boolean {
-  const home = normalizeHome(sh.home);
-  const p = normalizePath(word, home);
-  if (ROOT_SET.has(p) || TOP_LEVEL.test(p) || USER_HOME.test(p)) return true;
-  if (home !== undefined && (p === home || p === `${home}/*` || p === `${home}/.*`)) return true;
-  return aboveCwd(word, sh.cwd);
+  for (const f of pathForms(word, normalizeHome(sh.home), true)) {
+    const { p, home, ci } = f;
+    if (ROOT_SET.has(p) || (ci ? TOP_LEVEL_CI : TOP_LEVEL).test(p) || (ci ? USER_HOME_CI : USER_HOME).test(p)) return true;
+    if (home !== undefined && (p === home || p === `${home}/*` || p === `${home}/.*`)) return true;
+  }
+  return aboveCwd(word, sh.cwd) || (platform === "win32" && aboveCwdWin(word, sh.cwd));
+}
+
+/** `aboveCwd` for win32: a backslash separates (`x\..\..`), a drive cwd (`C:\work\proj`) keeps its drive, and names ignore case. */
+function aboveCwdWin(word: string, cwd: string | undefined): boolean {
+  if (!cwd) return false;
+  const c = cwd.replace(/\\/g, "/");
+  const rest = c.replace(/^[A-Za-z]:(?=\/)/, "");
+  const w = word.replace(/\\/g, "/");
+  if (!rest.startsWith("/") || /^([A-Za-z]:|\/|~)/.test(w)) return false;
+  return aboveCwd(w.toLowerCase(), rest.toLowerCase());
 }
 
 function isRecursive(flags: readonly string[]): boolean {
@@ -421,15 +596,24 @@ const HOME_CREDENTIAL = /^(~|\/Users\/[^/]+|\/home\/[^/]+|\/root)\/\.(npmrc|netr
 const GCLOUD_CREDENTIAL = /(^|\/)\.config\/gcloud\/(application_default_credentials\.json|credentials\.db|access_tokens\.db|legacy_credentials(\/|$))/;
 const BLOCK_DEVICE = /^\/dev\/(sd|hd|vd|xvd|nvme|mmcblk|disk|rdisk|md|dm-|loop|mapper\/)/;
 
-const GLOB_CHARS = /[*?[]/;
+/**
+ * A brace group that is not expanded is read as this character in the secret checks: it matches any name, including a
+ * dot name (`.ssh`), unlike `*`, because the shell would have put some alternative there. Deny checks only.
+ */
+const WILD = "\uE000";
+const GLOB_CHARS = /[*?[\uE000]/;
 /** Secret names that a glob segment is tested against (fixed, short targets). */
 const GLOB_ENV_NAMES = [".env", ".env.local"];
 const GLOB_HOME_NAMES = [".npmrc", ".netrc", ".git-credentials"];
 /** A directory that is a home directory: `~`, `/root`, `/home/<u>` or `/Users/<u>`. */
 const HOME_DIR = /^(~|\/Users\/[^/]+|\/home\/[^/]+|\/root)$/;
+const HOME_DIR_CI = new RegExp(HOME_DIR.source, "i");
+const HOME_CREDENTIAL_CI = new RegExp(HOME_CREDENTIAL.source, "i");
 
 interface GlobTok {
   readonly kind: "lit" | "any" | "star";
+  /** A `star` that also matches a name that starts with a dot (a brace group that was not expanded). */
+  readonly wild?: boolean;
   readonly ch?: string;
   readonly test?: (c: string) => boolean;
 }
@@ -440,8 +624,10 @@ function globTokens(pat: string): GlobTok[] {
   const lastClose = pat.lastIndexOf("]");
   for (let i = 0; i < pat.length; i++) {
     const c = pat[i]!;
-    if (c === "*") {
-      if (out[out.length - 1]?.kind !== "star") out.push({ kind: "star" });
+    if (c === "*" || c === WILD) {
+      const last = out[out.length - 1];
+      if (last?.kind !== "star") out.push(c === WILD ? { kind: "star", wild: true } : { kind: "star" });
+      else if (c === WILD && !last.wild) out[out.length - 1] = { kind: "star", wild: true };
     } else if (c === "?") {
       out.push({ kind: "any", test: () => true });
     } else if (c === "[" && i < lastClose) {
@@ -484,7 +670,7 @@ function globTokens(pat: string): GlobTok[] {
 function globSegMatch(pat: string, name: string): boolean {
   if (!GLOB_CHARS.test(pat)) return pat === name;
   const toks = globTokens(pat);
-  if (name[0] === "." && !(toks[0]?.kind === "lit" && toks[0].ch === ".")) return false;
+  if (name[0] === "." && !(toks[0]?.kind === "lit" && toks[0].ch === ".") && !toks[0]?.wild) return false;
   const n = name.length;
   let reach: boolean[] = new Array<boolean>(n + 1).fill(false);
   reach[0] = true;
@@ -509,13 +695,13 @@ function globSegMatch(pat: string, name: string): boolean {
  * `~/.s?h/id_rsa` and `.a?s/credentials` (key or credentials under a credential directory), and any glob
  * name under `.ssh` or `.aws`, as the literal rule does for `~/.ssh/*`.
  */
-function globSecret(p: string): boolean {
+function globSecret(p: string, ci = false): boolean {
   const cut = p.lastIndexOf("/");
   const dir = cut < 0 ? "" : p.slice(0, cut);
   const base = p.slice(cut + 1);
   const dirName = dir.slice(dir.lastIndexOf("/") + 1);
   if (GLOB_ENV_NAMES.some((name) => globSegMatch(base, name))) return true;
-  if (HOME_DIR.test(dir) && GLOB_HOME_NAMES.some((name) => globSegMatch(base, name))) return true;
+  if ((ci ? HOME_DIR_CI : HOME_DIR).test(dir) && GLOB_HOME_NAMES.some((name) => globSegMatch(base, name))) return true;
   const ssh = globSegMatch(dirName, ".ssh");
   if (!ssh && !globSegMatch(dirName, ".aws")) return false;
   if (GLOB_CHARS.test(base)) return true;
@@ -523,17 +709,312 @@ function globSecret(p: string): boolean {
 }
 
 /** Private key, cloud or package credential, or a real `.env` file (templates are not secret). Globs that could match one count too. */
-export function isSecretPath(raw: string, home: string | undefined): boolean {
-  const p = normalizePath(raw, home);
+export function isSecretPath(raw: string, home: string | undefined, cwd?: string | readonly string[]): boolean {
+  // Braces are expanded on the word first, and every variant is then normalised (`..`, `~`, darwin aliases, case folding), so
+  // `/Users/me/x/{..,y}/.npmrc` is also `/Users/me/.npmrc`. Each expansion is charged to the brace budget.
+  return withCwd(raw, home, cwd).some((w) =>
+    someVariant(w, (v) => pathForms(v, home).some((f) => secretForm(f.p, f.ci) || (underHome(f) && secretForm("~" + f.p.slice(f.home!.length), f.ci)))),
+  );
+}
+/** The alternatives of one `{...}` group as the shell expands it: `a,b`, a character range `j..l` or a small number range `1..3`. Undefined: the group stays literal. */
+function groupAlts(g: string): string[] | undefined {
+  if (g.includes(",")) return g.split(",");
+  const out: string[] = [];
+  const ch = /^([A-Za-z])\.\.([A-Za-z])$/.exec(g);
+  if (ch) {
+    const x = ch[1]!.charCodeAt(0);
+    const y = ch[2]!.charCodeAt(0);
+    for (let c = x; ; c += x <= y ? 1 : -1) {
+      out.push(String.fromCharCode(c));
+      if (c === y) break;
+    }
+    return out;
+  }
+  const num = /^(-?\d{1,4})\.\.(-?\d{1,4})$/.exec(g);
+  if (num && !/^-?0\d/.test(num[1]!) && !/^-?0\d/.test(num[2]!)) {
+    const x = Number(num[1]);
+    const y = Number(num[2]);
+    if (Math.abs(y - x) > 256) return undefined;
+    for (let n = x; ; n += x <= y ? 1 : -1) {
+      out.push(String(n));
+      if (n === y) break;
+    }
+    return out;
+  }
+  return undefined;
+}
+/**
+ * The alternatives of a group for the checks: the expanded ones, or one wildcard for a range the code does not expand (more than
+ * 256 numbers, a step, zero padding, a letter range with a step). A group with no comma and no `..` is not a group: it stays literal.
+ */
+function altsOf(g: string): string[] | undefined {
+  return groupAlts(g) ?? (g.includes("..") ? [WILD] : undefined);
+}
+/** The leftmost innermost `{...}` group of the word that the shell would expand. */
+function firstGroup(w: string): { index: number; len: number; alts: string[] } | undefined {
+  const re = /\{([^{}]*)\}/g;
+  for (let m = re.exec(w); m; m = re.exec(w)) {
+    const alts = altsOf(m[1]!);
+    if (alts) return { index: m.index, len: m[0].length, alts };
+  }
+  return undefined;
+}
+/**
+ * Fail-closed forms of a word with brace groups that was not fully expanded. Each group is read as `*`, as its first
+ * alternative and as its last; and, group by group, one group is expanded to every alternative while the others are
+ * `*`, their first alternative or their last (so `~/{x,.ssh,y}/id_rsa{,1}{,a}` finds `~/.ssh/id_rsa`). Bounded: the first
+ * 16 groups with 8 alternatives each (1 group with 4 alternatives for a word over 8192 characters). Outer groups of a
+ * nested group, and anything left over, become `*`.
+ */
+/** `{...}` groups resolved by `pick`, innermost first and repeated for nested ones; anything left over becomes the wildcard. */
+function resolveGroups(p: string, pick: (g: string) => string): string {
+  let w = p;
+  for (let i = 0; i < 16 && w.includes("{"); i++) {
+    const next = w.replace(/\{([^{}]*)\}/g, (_m, g: string) => pick(g));
+    if (next === w) break; // a pass that changes nothing (loose braces) ends the loop
+    w = next;
+  }
+  return w.replace(/[{}]/g, WILD);
+}
+/** The cheap form of a brace word: every group is the wildcard. One linear pass. */
+function wildForm(p: string): string {
+  return resolveGroups(p, () => WILD);
+}
+/** Brace work left for the command being checked: variants plus forms, over all its words. Reset for each command. */
+let braceBudget = 2048;
+let braceBudgetStart = 2048;
+/** Test hook: the brace budget each command starts with (`undefined` restores 2048). */
+export function setNeverListBraceBudget(n: number | undefined): void {
+  braceBudgetStart = n ?? 2048;
+}
+function resetBraceBudget(): void {
+  braceBudget = braceBudgetStart;
+}
+/** Stands for "brace expansion too large to check": a form with it is a secret read, so the command is denied. */
+const BRACE_OVERFLOW = "\uE001";
+/** How many alternatives a group has, without building them (257 for a range the code does not expand, 1 for a literal group). */
+function groupSize(g: string): number {
+  if (g.includes(",")) return g.split(",").length;
+  if (!g.includes("..")) return 1;
+  const ch = /^([A-Za-z])\.\.([A-Za-z])$/.exec(g);
+  if (ch) return Math.abs(ch[1]!.charCodeAt(0) - ch[2]!.charCodeAt(0)) + 1;
+  const num = /^(-?\d{1,4})\.\.(-?\d{1,4})$/.exec(g);
+  return num && !/^-?0\d/.test(num[1]!) && !/^-?0\d/.test(num[2]!) ? Math.min(257, Math.abs(Number(num[2]) - Number(num[1])) + 1) : 1;
+}
+/** How many words the groups would make, counted up to 257. */
+function variantCount(p: string): number {
+  let n = 1;
+  for (const m of p.matchAll(/\{([^{}]*)\}/g)) {
+    n *= groupSize(m[1]!);
+    if (n > 256) return 257;
+  }
+  return n;
+}
+/** The first (or last) alternative of a group, read without building the others; the wildcard for a range that is not expanded. */
+function edgeAlt(content: string, last: boolean): string {
+  if (content.includes(",")) {
+    const parts = content.split(",");
+    return last ? parts[parts.length - 1]! : parts[0]!;
+  }
+  if (!content.includes("..")) return `{${content}}`;
+  const ch = /^([A-Za-z])\.\.([A-Za-z])$/.exec(content);
+  if (ch) return last ? ch[2]! : ch[1]!;
+  const num = /^(-?\d{1,4})\.\.(-?\d{1,4})$/.exec(content);
+  if (num && !/^-?0\d/.test(num[1]!) && !/^-?0\d/.test(num[2]!) && Math.abs(Number(num[2]) - Number(num[1])) <= 256) return String(Number(num[last ? 2 : 1]));
+  return WILD;
+}
+function braceForms(p: string): string[] {
+  const groups = [...p.matchAll(/\{([^{}]*)\}/g)].map((m) => ({ index: m.index!, len: m[0].length, content: m[1]! }));
+  // One full string per way of reading the other groups (`*`, first alternative, last), with where each group sits in it, so a
+  // form costs one slice and one concatenation, not a pass over all groups.
+  const fills: ((content: string) => string)[] = [() => WILD, (c) => edgeAlt(c, false), (c) => edgeAlt(c, true)];
+  const whole = fills.map((fill) => {
+    let text = "";
+    let at = 0;
+    const where: { start: number; len: number }[] = [];
+    for (const g of groups) {
+      text += p.slice(at, g.index);
+      const r = fill(g.content);
+      where.push({ start: text.length, len: r.length });
+      text += r;
+      at = g.index + g.len;
+    }
+    return { text: text + p.slice(at), where };
+  });
+  const forms = [wildForm(p), resolveGroups(p, (g) => edgeAlt(g, false)), resolveGroups(p, (g) => edgeAlt(g, true))];
+  const long = p.length > 8192;
+  for (let gi = 0; gi < Math.min(groups.length, long ? 1 : 16); gi++) {
+    for (const alt of (altsOf(groups[gi]!.content) ?? [`{${groups[gi]!.content}}`]).slice(0, long ? 4 : 8)) {
+      for (const w of whole) forms.push((w.text.slice(0, w.where[gi]!.start) + alt + w.text.slice(w.where[gi]!.start + w.where[gi]!.len)).replace(/[{}]/g, WILD));
+    }
+  }
+  return [...new Set(forms)];
+}
+/**
+ * The word with each `{a,b}` group (and `{j..l}` or `{1..3}` range) expanded, as the shell does, so `Coo{k,x}ies` is
+ * also `Cookies`. The work is bounded for a whole command (`braceBudget`: 2048 variants and forms over all its words),
+ * so a command made of thousands of brace words stays fast. Fail closed when a bound is hit:
+ * - a word with more than 256 variants, or over 2048 characters, gets the bounded `braceForms`;
+ * - once the budget is gone, a word with a group the shell would expand denies the command.
+ */
+function braceVariants(p: string): string[] {
+  if (!/\{[^{}]*\}/.test(p)) return [p]; // no closed group: nothing to expand, and no cost for a word of loose braces
+  // A literal group (`{}`, `{x}`: no comma, no `..`) is plain text, so an outer group around it still expands: `{.ssh,{x}}`.
+  const masked = p.replace(/\{([^{},]*)\}/g, (m, g: string) => (g.includes("..") ? m : `\uE002${g}\uE003`));
+  return expandBraces(masked).map((w) => w.replace(/\uE002/g, "{").replace(/\uE003/g, "}"));
+}
+/**
+ * One test over every form of a word, for every consumer of the brace expansion: the sentinel that stands for "too large to
+ * check" is a hit for all of them (`isSecretPath`, `isSecretDir`), so one check cannot starve the other.
+ */
+function someVariant(p: string, test: (v: string) => boolean): boolean {
+  if (!p.includes("{")) return test(p); // the common word: no brace work at all
+  return braceVariants(p).some((v) => v.includes(BRACE_OVERFLOW) || test(v));
+}
+function expandBraces(p: string): string[] {
+  if (braceBudget <= 0) {
+    // Fail closed: the budget for the whole command is spent, so this word is not checked. A word with any closed `{...}` pair (the
+    // caller only gets here with one, nested or not) denies the command: "brace expansion too large to check".
+    return [p, BRACE_OVERFLOW];
+  }
+  const big = p.length > 2048 || variantCount(p) > 256;
+  if (big) {
+    const forms = braceForms(p);
+    braceBudget -= forms.length + 1;
+    return [p, ...forms];
+  }
+  let out = [p];
+  let done = false;
+  for (let round = 0; round < 8 && !done; round++) {
+    const next: string[] = [];
+    done = true;
+    for (const w of out) {
+      const g = firstGroup(w);
+      if (!g) {
+        next.push(w);
+        continue;
+      }
+      done = false;
+      for (const alt of g.alts) next.push(w.slice(0, g.index) + alt + w.slice(g.index + g.len));
+    }
+    out = next;
+  }
+  braceBudget -= out.length;
+  return done ? out : [...out, ...braceForms(p)];
+}
+/** A working folder that can hold a credential store (or sits inside one). */
+const STORE_CWD = /library|\.config|\.ssh|\.aws|\.mozilla|appdata|\/snap\/|\.var|\.kube|\.docker|gcloud|keychain|chrome|brave|edge|firefox|opera|vivaldi|\/arc\/|safari|cookies|\/etc/i;
+/** The word, and a relative word joined to each known shell cwd (`cat Library/Keychains/x` with cwd = home). */
+/** A home directory (`/Users/me`, `/home/me`, `/root`), or the known home. */
+const HOME_CWD = /^\/(?:Users\/[^/]+|home\/[^/]+|root|var\/root|private\/var\/root)\/?$/i;
+/** `s` without trailing `/`. A char scan: the regex `/\/+$/` is quadratic on a long run of `/` (CodeQL js/polynomial-redos). */
+export function trimTrailingSlashes(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 47) end--;
+  return s.slice(0, end);
+}
+/** A bare name that can be a credential file in a home directory: a dot name (`.npmrc`, `.ssh`) or a glob. */
+const HOME_NAME = /^\.|[*?[{\uE000]/;
+function withCwd(raw: string, home: string | undefined, cwd: string | readonly string[] | undefined): string[] {
+  if (cwd === undefined || /^([/~$]|[A-Za-z]:|\\)/.test(raw)) return [raw];
+  const out = [raw];
+  // A bare name (`Cookies`) only matters in a working folder that can hold a store, or in a home directory when it is a dot name
+  // or a glob (`.npmrc`, `.n*rc`); a path (`Library/Keychains/x`) always does.
+  const path = raw.includes("/");
+  // A credential name is short. Runs of `*` are one `*` first. A word that is still over 64 characters and has a glob or brace in
+  // a home directory is not worked out: it is a secret read (fail closed), so a long run of stars cannot hide `.n*rc`.
+  const flat = raw.replace(/\*{2,}/g, "*");
+  const homeName = flat.length <= 64 && HOME_NAME.test(flat);
+  const longGlob = !path && flat.length > 64 && /[*?[{\uE000]/.test(flat); // a path is joined and checked as it is
+  for (const c of typeof cwd === "string" ? [cwd] : cwd) {
+    if (!c.startsWith("/")) continue;
+    const inHome = HOME_CWD.test(c) || (home !== undefined && trimTrailingSlashes(c) === trimTrailingSlashes(home));
+    if (longGlob && inHome) out.push(BRACE_OVERFLOW);
+    else if (path || STORE_CWD.test(c) || (homeName && inHome)) out.push(`${c}/${homeName ? flat : raw}`);
+  }
+  return out;
+}
+/** The path is inside the known home, so its `~` spelling is checked too: a home such as `/data/me` or `/var/home/me`. */
+function underHome(f: PathForm): boolean {
+  return f.home !== undefined && f.home.length > 1 && f.p.startsWith(f.home + "/");
+}
+/**
+ * More secret stores, matched without case. Best effort: only real profile locations count, so `cat docs/edge/Cookies`
+ * and `firefox/logins.json` in a project are not secrets. (`~/.kube/config` and `~/.docker/config.json` stay in the
+ * guard pack, where `guardAllow` can allow them.)
+ * - system password hashes: `/etc/shadow`, `/etc/gshadow`, `/etc/master.passwd`
+ * - macOS keychains: `~/Library/Keychains/*`, `/Library/Keychains/*`, Safari and system cookie files
+ * - Chrome, Brave, Edge, Chromium and Vivaldi `Login Data`, `Cookies`, `Local State` (and `-journal`), Firefox `logins.json`,
+ *   `key4.db`, `cookies.sqlite`, under `~/Library/Application Support/<vendor>`, `~/.config/<browser>`, `~/.mozilla/firefox`
+ *   or `AppData\Local|Roaming\<vendor>`.
+ */
+const HOME_ROOT = "(?:~|\\/Users\\/[^/]+|\\/home\\/[^/]+|\\/root|\\/var\\/root|\\/private\\/var\\/root)";
+/** Chromium-family profile folders under a home directory: macOS, Linux, Windows. */
+const CHROMIUM_ROOT = new RegExp(
+  `^${HOME_ROOT}\\/(?:Library\\/Application Support\\/(?:Google\\/Chrome(?: Beta| Canary| Dev)?|BraveSoftware\\/Brave-Browser|Microsoft Edge|Chromium|Vivaldi|Arc\\/User Data|com\\.operasoftware\\.Opera)` +
+    `|\\.config\\/(?:google-chrome[^/]*|chromium|BraveSoftware\\/Brave-Browser|microsoft-edge[^/]*|vivaldi[^/]*|opera[^/]*)` +
+    `|AppData\\/(?:Local|Roaming)\\/(?:Google\\/Chrome(?: Beta| SxS)?|BraveSoftware\\/Brave-Browser|Microsoft\\/Edge|Chromium|Vivaldi|Opera Software\\/[^/]+|Arc\\/User Data))\\/`,
+  "i",
+);
+/** Snap and flatpak keep a profile deeper: `snap/<app>/common/chromium/...`, `.var/app/<id>/config/google-chrome/...`. */
+const SANDBOX_ROOT = new RegExp(`^${HOME_ROOT}\\/(?:snap|\\.var\\/app)\\/[^/]+\\/`, "i");
+const CHROMIUM_MID = /\/(?:chromium|google-chrome[^/]*|BraveSoftware|microsoft-edge[^/]*|vivaldi[^/]*|opera[^/]*)\//i;
+const CHROMIUM_FILE = /^(?:Login Data(?: For Account)?(?:-journal)?|Cookies(?:-journal)?|Local State)$/i;
+const CHROMIUM_NAMES = ["Login Data", "Login Data For Account", "Login Data-journal", "Cookies", "Cookies-journal", "Local State"];
+const FIREFOX_NAMES = ["logins.json", "key4.db", "cert9.db", "cookies.sqlite"];
+const FIREFOX_ROOT = new RegExp(`^${HOME_ROOT}\\/(?:\\.mozilla\\/firefox|Library\\/Application Support\\/Firefox|AppData\\/Roaming\\/Mozilla\\/Firefox)\\/`, "i");
+const FIREFOX_MID = /\/\.mozilla\/firefox\//i;
+const FIREFOX_FILE = /^(?:logins\.json|key4\.db|cert9\.db|cookies\.sqlite)$/i;
+const SAFARI_ROOT = new RegExp(`^${HOME_ROOT}\\/Library\\/(?:Cookies|Safari|Containers\\/com\\.apple\\.Safari\\/Data\\/Library\\/Cookies)\\/`, "i");
+const KEYCHAIN_FILE = new RegExp(`^(?:${HOME_ROOT})?\\/Library\\/Keychains\\/[^/]`, "i");
+/**
+ * More secret stores, matched without case. Best effort: only real profile locations count, so `cat docs/edge/Cookies`
+ * and `firefox/logins.json` in a project are not secrets. (`~/.kube/config` and `~/.docker/config.json` stay in the
+ * guard pack, where `guardAllow` can allow them.)
+ * - system password hashes: `/etc/shadow`, `/etc/gshadow`, `/etc/master.passwd`
+ * - macOS keychains: `~/Library/Keychains/*`, `/Library/Keychains/*` (also with a glob such as `~/Library/K*`), Safari cookies
+ * - Chrome (Beta, Canary), Brave, Edge, Chromium, Vivaldi, Arc and Opera `Login Data`, `Cookies`, `Local State` (and `-journal`),
+ *   Firefox `logins.json`, `key4.db`, `cert9.db`, `cookies.sqlite`, under `~/Library/Application Support/<vendor>`,
+ *   `~/.config/<browser>`, `~/.mozilla/firefox`, `AppData\Local|Roaming\<vendor>`, `~/snap/<app>/...` or `~/.var/app/<id>/...`
+ */
+function storeSecret(p: string): boolean {
+  if (/^\/etc\/(?:g?shadow-?|master\.passwd)$/i.test(p) || KEYCHAIN_FILE.test(p)) return true;
+  const base = p.slice(p.lastIndexOf("/") + 1);
+  if (CHROMIUM_FILE.test(base) && (CHROMIUM_ROOT.test(p) || (SANDBOX_ROOT.test(p) && CHROMIUM_MID.test(p)))) return true;
+  if (FIREFOX_FILE.test(base) && (FIREFOX_ROOT.test(p) || (SANDBOX_ROOT.test(p) && FIREFOX_MID.test(p)))) return true;
+  if (base.toLowerCase() === "cookies.binarycookies" && SAFARI_ROOT.test(p)) return true;
+  // A glob in the file name (`Login*`, `Cook?es`) that can match a credential file of the store the folder belongs to.
+  if (GLOB_CHARS.test(base) && /^\/etc\/[^/]*$/.test(p) && ["shadow", "gshadow", "shadow-", "gshadow-", "master.passwd"].some((n) => globSegMatch(base.toLowerCase(), n))) return true;
+  if (GLOB_CHARS.test(base)) {
+    // The cheap folder test goes first: the glob match is quadratic in the pattern. A run of `*` is one `*`. A name that is
+    // still over 256 characters is not matched: in a store folder it fails closed.
+    const flat = base.replace(/[*\uE000]+/g, (m) => (m.includes(WILD) ? WILD : "*")).toLowerCase();
+    const g = (names: readonly string[]): boolean => flat.length > 256 || names.some((n) => globSegMatch(flat, n.toLowerCase()));
+    if ((CHROMIUM_ROOT.test(p) || (SANDBOX_ROOT.test(p) && CHROMIUM_MID.test(p))) && g(CHROMIUM_NAMES)) return true;
+    if ((FIREFOX_ROOT.test(p) || (SANDBOX_ROOT.test(p) && FIREFOX_MID.test(p))) && g(FIREFOX_NAMES)) return true;
+    if (SAFARI_ROOT.test(p) && g(["Cookies.binarycookies"])) return true;
+  }
+  return keychainGlob(p, false);
+}
+/** A glob segment that can match `library` or `keychains` (`~/Library/Keychain?/x`, `~/Library/K*`). */
+function keychainGlob(p: string, dir: boolean): boolean {
+  if (!GLOB_CHARS.test(p)) return false;
+  const m = new RegExp(`^(?:${HOME_ROOT})?\\/([^/]+)\\/([^/]+)${dir ? "$" : "\\/[^/]"}`, "i").exec(p);
+  if (!m) return false;
+  const seg = (pat: string, name: string): boolean => globSegMatch(pat.toLowerCase(), name);
+  return (GLOB_CHARS.test(m[1]!) || GLOB_CHARS.test(m[2]!)) && seg(m[1]!, "library") && seg(m[2]!, "keychains");
+}
+function secretForm(p: string, ci: boolean): boolean {
+  if (p.includes(BRACE_OVERFLOW) || storeSecret(p)) return true;
   const base = p.slice(p.lastIndexOf("/") + 1);
   if (/(^|\/)\.ssh\/id_/.test(p) && !base.endsWith(".pub")) return true;
-  if (/(^|\/)\.(ssh|aws)\/[^/]*[*?[]/.test(p)) return true;
+  if (/(^|\/)\.(ssh|aws)\/[^/]*[*?[\uE000]/.test(p)) return true;
   if (/(^|\/)\.aws\/credentials$/.test(p)) return true;
   if (GCLOUD_CREDENTIAL.test(p)) return true;
-  if (HOME_CREDENTIAL.test(p)) return true;
+  if ((ci ? HOME_CREDENTIAL_CI : HOME_CREDENTIAL).test(p)) return true;
   if (base === ".env" || (base.startsWith(".env.") && !ENV_TEMPLATE.test(base))) return true;
-  if (base.startsWith(".env") && /[*?[]/.test(base)) return true;
-  if (GLOB_CHARS.test(p) && globSecret(p)) return true;
+  if (base.startsWith(".env") && /[*?[\uE000]/.test(base)) return true;
+  if (GLOB_CHARS.test(p) && globSecret(p, ci)) return true;
   return /\.(pem|key)$/.test(base);
 }
 
@@ -594,9 +1075,14 @@ function gitReadsSecret(c: Cmd, home: string | undefined): boolean {
   return false;
 }
 
+/** The macOS keychain folders: a copy or archive of one carries every keychain in it. */
+const KEYCHAIN_DIR = new RegExp(`^(?:${HOME_ROOT})?\\/Library\\/Keychains$`, "i");
 /** A whole credential directory. Only shell copy or read verbs check it: listing it is not a read of a key. */
-function isSecretDir(raw: string, home: string | undefined): boolean {
-  return /(^|\/)\.(ssh|aws)$/.test(normalizePath(raw, home));
+function isSecretDir(raw: string, home: string | undefined, cwd?: string | readonly string[]): boolean {
+  const dir = (p: string): boolean => p.includes(BRACE_OVERFLOW) || /(^|\/)\.(ssh|aws)$/.test(p) || KEYCHAIN_DIR.test(p) || keychainGlob(p, true);
+  return withCwd(raw, home, cwd).some((w) =>
+    someVariant(w, (v) => pathForms(v, home).some((f) => dir(f.p) || (underHome(f) && dir("~" + f.p.slice(f.home!.length))))),
+  );
 }
 
 /** Verbs that read a file. Copy verbs check the sources only (the last argument is the destination). */
@@ -604,7 +1090,7 @@ const READ_VERBS = new Set([
   "cat", "less", "more", "head", "tail", "cp", "scp", "rsync", "base64", "xxd", "od", "hexdump",
   "strings", "nl", "tac", "bat", "sed", "awk", "grep", "egrep", "cut", "sort", "tar", "zip", "gzip",
   "xz", "openssl", "curl", "wget", "nc", "ncat", "dd", "install", "diff", "cmp", "wc", "file", "jq",
-  "yq", "column", "md5sum", "shasum", "sha256sum",
+  "yq", "column", "md5sum", "shasum", "sha256sum", "sqlite3",
 ]);
 const COPY_VERBS = new Set(["cp", "scp", "rsync", "install"]);
 /** Shell redirection operators, as tokens. */
@@ -618,12 +1104,92 @@ const PATTERN_VERBS = new Set(["grep", "egrep", "fgrep"]);
  */
 const READ_CALL = /\b(open|Path|readFileSync|readFile|read_text|read_bytes|File\.read|IO\.read|file_get_contents|fopen|readfile)\s*\(\s*(['"`]?)([^'"`)\s,]+)/g;
 
+/**
+ * `security find-generic-password -w` (or `-g`), `find-internet-password -w` (or `-g`) and `dump-keychain -d` print
+ * keychain passwords. `export` and `find-key` handle key material and are denied whole; `-i` and `interactive` read
+ * sub-commands from stdin. `find-identity`, `list-keychains`, `unlock-keychain` and `show-keychain-info` are allowed.
+ * The sub-command is found anywhere in the arguments, so `security -v find-generic-password ...` counts.
+ */
+/**
+ * `security [-hilqv] [-p prompt] [command] [command_options]`, read like getopt(3) with the option string `hilp:qv`: options
+ * are scanned character by character, `p` takes the rest of its token or the next token as its value, and the first
+ * word that is not an option (or the word after `--`) is the sub-command. Per `man security`, `-i` and `-p` both start
+ * interactive mode, which reads commands from stdin.
+ */
+function securityArgs(a: readonly string[]): { interactive: boolean; sub: string | undefined; rest: readonly string[] } {
+  let interactive = false;
+  for (let i = 0; i < a.length; i++) {
+    const t = a[i]!;
+    if (t === "--") return { interactive, sub: a[i + 1], rest: a.slice(i + 2) };
+    if (!t.startsWith("-") || t === "-") return { interactive, sub: t, rest: a.slice(i + 1) };
+    for (let k = 1; k < t.length; k++) {
+      const ch = t[k]!;
+      if (ch === "i") interactive = true;
+      else if (ch === "p") {
+        interactive = true;
+        if (k === t.length - 1) i++; // the prompt is the next word
+        break; // otherwise the rest of this word is the prompt
+      }
+    }
+  }
+  return { interactive, sub: undefined, rest: [] };
+}
+/** Sub-commands of `security help` on macOS. A piped or redirected `security` with another word, or none, is not one of these. */
+const SECURITY_COMMANDS = new Set(
+  ("help list-keychains list-smartcards default-keychain login-keychain create-keychain delete-keychain lock-keychain unlock-keychain " +
+    "set-keychain-settings set-keychain-password show-keychain-info dump-keychain create-keypair add-generic-password add-internet-password " +
+    "add-certificates find-generic-password delete-generic-password set-generic-password-partition-list find-internet-password " +
+    "delete-internet-password set-internet-password-partition-list find-key set-key-partition-list find-certificate find-identity " +
+    "delete-certificate delete-identity set-identity-preference get-identity-preference create-db export import export-smartcard cms " +
+    "install-mds add-trusted-cert remove-trusted-cert dump-trust-settings user-trust-settings-enable trust-settings-export " +
+    "trust-settings-import verify-cert authorize authorizationdb execute-with-privileges leaks error create-filevaultmaster-keychain " +
+    "smartcards translocate-policy-check translocate-status-check translocate-original-path requirement-evaluate filevault platformsso interactive").split(" "),
+);
+/**
+ * macOS `security` accepts a unique prefix of a sub-command and the first match in its table otherwise (`security list-k` is
+ * `list-keychains`, `security find-i` is `find-internet-password`). A word that is a full name is that command; any other
+ * word stands for every command it is a prefix of, and a deny check applies to all of them.
+ */
+function securityCandidates(sub: string): string[] {
+  if (SECURITY_COMMANDS.has(sub)) return [sub];
+  // A sub-command built at run time (`$(echo find-generic-password)`, `${S:-export}`, a backtick) could be any of them.
+  if (sub === "") return [];
+  // Fail closed: anything that is not plain lower-case words and dashes (`find-{generic,x}-password`, `find-*-password`, zsh or
+  // extglob forms such as `@(find-generic-password|x)`, upper case) could be any command.
+  if (!/^[a-z][a-z-]*$/.test(sub)) return [...SECURITY_COMMANDS];
+  return sub === "" ? [] : [...SECURITY_COMMANDS].filter((n) => n.startsWith(sub));
+}
+function keychainDump(c: Cmd): boolean {
+  if (c.name !== "security") return false;
+  const { interactive, sub, rest } = securityArgs(operandsOf(c.args));
+  // `-i` and `-p` and `interactive` read commands from stdin; `export` and `find-key` handle key and certificate material.
+  if (interactive) return true;
+  return securityCandidates(sub ?? "").some((name) => {
+    if (name === "interactive" || name === "export" || name === "find-key") return true;
+    if (name !== "find-generic-password" && name !== "find-internet-password" && name !== "dump-keychain") return false;
+    const re = new RegExp(`^-[A-Za-z]*${name === "dump-keychain" ? "d" : "[wg]"}[A-Za-z]*$`);
+    return rest.some((t) => re.test(t));
+  });
+}
+/** `security` with no known sub-command and a piped or redirected stdin runs the commands it reads (`echo ... | security`, `security < file`). */
+function securityFromStdin(sh: Shell): boolean {
+  return sh.segments.some(
+    (seg) =>
+      (seg.pipeIn || seg.tokens.some((t) => t === "<" || t === "<<" || t === "<<<")) &&
+      seg.cmds.some((c) => {
+        if (c.name !== "security") return false;
+        const { sub } = securityArgs(operandsOf(c.args));
+        return sub === undefined || securityCandidates(sub).length === 0;
+      }),
+  );
+}
+
 /** One pass over a shell's segments: redirects, read verbs and git object reads. */
 function secretReadShell(sh: Shell): boolean {
   for (const seg of sh.segments) {
     const toks = seg.tokens;
     for (let i = 0; i + 1 < toks.length; i++) {
-      if (toks[i] === "<" && isSecretPath(toks[i + 1]!, sh.home)) return true;
+      if (toks[i] === "<" && isSecretPath(toks[i + 1]!, sh.home, sh.cwd)) return true;
     }
     for (let k = 0; k < seg.cmds.length; k++) {
       const c = seg.cmds[k]!;
@@ -652,13 +1218,13 @@ function secretReadShell(sh: Shell): boolean {
         }
         const prev = args[i - 1];
         if (c.name === "dd") {
-          if (a.startsWith("if=") && isSecretPath(a.slice(3), sh.home)) return true;
+          if (a.startsWith("if=") && isSecretPath(a.slice(3), sh.home, sh.cwd)) return true;
         } else if (NET_CLIENTS.has(c.name)) {
           // Upload forms only: `-d @file`, `-F f=@file`, `-T file`, `--upload-file file`. Never `-o file`.
           const at = a.indexOf("@");
-          if (at >= 0 && isSecretPath(a.slice(at + 1), sh.home)) return true;
-          if ((prev === "-T" || prev === "--upload-file") && isSecretPath(a, sh.home)) return true;
-        } else if (!a.startsWith("-") && (isSecretPath(a, sh.home) || isSecretDir(a, sh.home))) {
+          if (at >= 0 && isSecretPath(a.slice(at + 1), sh.home, sh.cwd)) return true;
+          if ((prev === "-T" || prev === "--upload-file") && isSecretPath(a, sh.home, sh.cwd)) return true;
+        } else if (!a.startsWith("-") && (isSecretPath(a, sh.home, sh.cwd) || isSecretDir(a, sh.home, sh.cwd))) {
           // Options such as `--include=*.pem` are not file operands.
           return true;
         }
@@ -908,8 +1474,11 @@ function scanInto(text: string, out: RawSeg[], depth: number): void {
       while (j < n && text[j] !== '"') {
         const d = text[j]!;
         if (d === "\\" && j + 1 < n) {
-          // Backslash-newline is a line continuation: nothing is added.
-          if (text[j + 1] !== "\n") word += text[j + 1];
+          // Backslash-newline is a line continuation: nothing is added. Like sh, the backslash escapes only
+          // `$`, a backtick, `"`, `\` and a newline here; before any other character it stays, so a quoted
+          // Windows path (`"C:\Program Files\OpenSSH\ssh.exe"`) keeps its separators for wordName.
+          const e = text[j + 1]!;
+          if (e !== "\n") word += "$`\"\\".includes(e) ? e : d + e;
           j += 2;
         } else if ((d === "$" && text[j + 1] === "(") || d === "`") {
           j = subst(j);
@@ -1067,6 +1636,7 @@ let lastParsed: Shell | undefined;
 
 /** One-entry memo: the never-list rules and the guard pack parse the same command back to back. */
 export function parseShell(cmd: string, home: string | undefined, cwd?: string): Shell {
+  resetBraceBudget();
   if (lastParsed && lastParsed.raw === cmd && lastParsed.home === home && lastParsed.cwd === cwd) return lastParsed;
   return (lastParsed = { raw: cmd, segments: segmentsOf(cmd, new Map(), 0), home, cwd });
 }
@@ -1154,7 +1724,7 @@ function writtenPaths(seg: Segment, out: string[]): void {
 
 /** The last path part of a path, with trailing slashes removed (`~/.ssh/` gives `.ssh`). */
 function baseName(p: string): string {
-  const s = p.replace(/\/+$/, "");
+  const s = trimTrailingSlashes(p);
   return s.slice(s.lastIndexOf("/") + 1);
 }
 
@@ -1318,7 +1888,7 @@ function writtenIn(sh: Shell): string[] {
       if (seg.tokens.length > 0 && (last === ">" || last === ">>")) raw.push(seg.tokens[0]!);
       writtenPaths(seg, raw);
     }
-    out = raw.map((w) => normalizePath(w, sh.home));
+    out = raw.flatMap((w) => pathForms(w, sh.home).map((f) => f.p));
     WRITTEN_CACHE.set(sh, out);
   }
   return out;
@@ -1514,7 +2084,7 @@ function sshProxyExec(c: Cmd): boolean {
 function sshConfigWritten(sh: Shell): boolean {
   const written = writtenIn(sh);
   if (written.length === 0) return false;
-  return hasCandidate(sh, (c) => c.name === "ssh" && sshShape(c).configs.some((f) => written.includes(normalizePath(f, sh.home))));
+  return hasCandidate(sh, (c) => c.name === "ssh" && sshShape(c).configs.some((f) => pathForms(f, sh.home).some((g) => written.includes(g.p))));
 }
 
 const NC_NAMES = new Set(["nc", "ncat", "netcat"]);
@@ -1615,6 +2185,7 @@ export const NEVER_LIST_INPUT_RULES: readonly NeverListInputRule[] = [
   // c. Read or copy of a private key, cloud or package credential, or a real .env file.
   { id: "secret-read-shell", group: "c", label: "read a credentials file", shell: (sh) => secretReadShell(sh) || interpreterReadsSecret(sh) },
   { id: "secret-read-file", group: "c", label: "read a credentials file", file: isSecretPath },
+  { id: "keychain-password-dump", group: "c", label: "dump passwords from the macOS keychain", shell: (sh) => hasCommand(sh, keychainDump) || securityFromStdin(sh) },
   // d. Disk and system destroyers.
   { id: "mkfs", group: "d", label: "format a disk", shell: (sh) => hasCommand(sh, (c) => c.name.startsWith("mkfs")) },
   {
@@ -1632,12 +2203,12 @@ export const NEVER_LIST_INPUT_RULES: readonly NeverListInputRule[] = [
   // e. Network download piped into a shell, or run as code through a substitution (`sh -c "$(curl ...)"`).
   { id: "pipe-network-to-shell", group: "e", label: "run a script piped in from the internet", shell: (sh) => pipeNetworkToShell(sh) || nestedNetExec(sh) },
   // f. Agent-driven persistence (added 2026-10-30). A write rule also runs on Write, Edit and apply_patch paths.
-  { id: "ssh-authorized-keys-write", group: "f", label: "add a key to your SSH authorized keys", shell: (sh) => writesTo(sh, (p) => AUTHORIZED_KEYS.test(p)), writeFile: (p, home) => AUTHORIZED_KEYS.test(normalizePath(p, home)) },
+  { id: "ssh-authorized-keys-write", group: "f", label: "add a key to your SSH authorized keys", shell: (sh) => writesTo(sh, (p) => AUTHORIZED_KEYS.test(p)), writeFile: (p, home) => pathForms(p, home).some((f) => AUTHORIZED_KEYS.test(f.p)) },
   { id: "ssh-copy-id", group: "f", label: "copy an SSH key to another machine", shell: (sh) => hasCandidate(sh, (c) => c.name === "ssh-copy-id") },
-  { id: "persistence-cron", group: "f", label: "install a cron job", shell: (sh) => hasCandidate(sh, cronWrites) || writesTo(sh, (p) => CRON_PATH.test(p)), writeFile: (p, home) => CRON_PATH.test(normalizePath(p, home)) },
+  { id: "persistence-cron", group: "f", label: "install a cron job", shell: (sh) => hasCandidate(sh, cronWrites) || writesTo(sh, (p) => CRON_PATH.test(p)), writeFile: (p, home) => pathForms(p, home).some((f) => CRON_PATH.test(f.p)) },
   { id: "persistence-at-job", group: "f", label: "schedule a job with at", shell: (sh) => hasCandidate(sh, atSchedules) },
-  { id: "persistence-launchd", group: "f", label: "install a launchd startup job", shell: (sh) => hasCandidate(sh, launchLoads) || writesTo(sh, (p) => LAUNCH_PATH.test(p)), writeFile: (p, home) => LAUNCH_PATH.test(normalizePath(p, home)) },
-  { id: "persistence-systemd-user", group: "f", label: "install a systemd startup service", shell: (sh) => hasCandidate(sh, systemdUserEnables) || writesTo(sh, (p) => SYSTEMD_USER_PATH.test(p)), writeFile: (p, home) => SYSTEMD_USER_PATH.test(normalizePath(p, home)) },
+  { id: "persistence-launchd", group: "f", label: "install a launchd startup job", shell: (sh) => hasCandidate(sh, launchLoads) || writesTo(sh, (p) => LAUNCH_PATH.test(p)), writeFile: (p, home) => pathForms(p, home).some((f) => LAUNCH_PATH.test(f.p)) },
+  { id: "persistence-systemd-user", group: "f", label: "install a systemd startup service", shell: (sh) => hasCandidate(sh, systemdUserEnables) || writesTo(sh, (p) => SYSTEMD_USER_PATH.test(p)), writeFile: (p, home) => pathForms(p, home).some((f) => SYSTEMD_USER_PATH.test(f.p)) },
   { id: "persistence-schtasks-create", group: "f", label: "create a Windows scheduled task", shell: (sh) => hasCandidate(sh, (c) => c.name === "schtasks" && c.args.some((a) => a.toLowerCase() === "/create")) },
   // A download (curl, wget) in a command that writes a shell rc file: it runs at every shell start.
   { id: "shell-rc-download-append", group: "f", label: "add a download to your shell startup file", shell: (sh) => NET_WORD.test(sh.raw) && writesTo(sh, (p) => SHELL_RC_PATH.test(p)) },
@@ -1767,6 +2338,7 @@ export function neverListInputMatch(
   home: string | undefined = safeHome(),
   cwd?: string,
 ): { readonly rule: string } | undefined {
+  resetBraceBudget();
   try {
     const f = fieldsOf(toolInput);
     if (!f) return undefined;
@@ -1788,7 +2360,7 @@ export function neverListInputMatch(
       }
     } else {
       for (const p of pathStrings(f, toolId)) {
-        for (const r of NEVER_LIST_INPUT_RULES) if (r.file?.(p, home)) return { rule: r.id };
+        for (const r of NEVER_LIST_INPUT_RULES) if (r.file?.(p, home, cwd)) return { rule: r.id };
       }
     }
   } catch {

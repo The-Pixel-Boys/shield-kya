@@ -224,5 +224,17 @@ describe("G3 hosted fragment and G4 llms.txt renderers", () => {
     expect(txt).not.toContain("A <b>");
     expect(txt).not.toContain("flagged");
     expect(txt).not.toContain("planned");
+    expect(txt).not.toContain("## Replay pages");
+  });
+
+  it("G4 adds a Replay pages section with one escaped line per indexable page, and only when there are pages", () => {
+    const txt = renderLlms(rows, [
+      { path: "/replays/class-a", title: "How to stop [x]\nnow", description: "Line one\nline two" },
+      { path: "/replays/vendor/aws", title: "AWS", description: "Hub" },
+    ]);
+    expect(txt).toContain("## Replay pages");
+    expect(txt).toContain("- [How to stop (x) now](https://shield-agent.com/replays/class-a): Line one line two\n");
+    expect(txt).toContain("- [AWS](https://shield-agent.com/replays/vendor/aws): Hub\n");
+    expect(txt.indexOf("## Replay pages")).toBeGreaterThan(txt.indexOf("## Features"));
   });
 });

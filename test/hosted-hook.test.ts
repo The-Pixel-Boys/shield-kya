@@ -559,6 +559,15 @@ describe("hosted hook: retry and backoff schedule (injected clock + seeded RNG)"
     expect(w.calls).toHaveLength(1);
   });
 
+  it("a TLS certificate failure is PLANE_UNREACHABLE at once and is not retried", async () => {
+    for (const code of ["DEPTH_ZERO_SELF_SIGNED_CERT", "CERT_HAS_EXPIRED", "ERR_TLS_CERT_ALTNAME_INVALID", "UNABLE_TO_VERIFY_LEAF_SIGNATURE"]) {
+      const w = wire(Object.assign(new Error("tls"), { code }), verdict("ALLOW", "ALLOW"));
+      const err = await evaluateHosted({ config: cfg, toolName: "Read", args: {}, product: "claude", strict: false, env: {}, budgetMs: 3000, fetch: w.fetch }).catch((e) => e);
+      expect(err.code, code).toBe("PLANE_UNREACHABLE");
+      expect(w.calls, code).toHaveLength(1);
+    }
+  });
+
   it("a stalled first attempt is retried inside the budget (real timers)", async () => {
     const w = wire("hang", verdict("ALLOW", "ALLOW"));
     const t0 = Date.now();

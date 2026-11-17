@@ -1,6 +1,6 @@
 {
   "name": "kya",
-  "version": "0.35.6",
+  "version": "0.35.7",
   "description": "Stops your coding agent from deleting, leaking or dropping things. Records everything else. Advisory: blocks the never-list and the guard pack, fails open.",
   "author": {
     "name": "MFR Limited (Shield KYA)",

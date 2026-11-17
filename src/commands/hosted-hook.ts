@@ -488,6 +488,13 @@ export interface HostedEvaluateInput {
   readonly withholdChange?: boolean;
 }
 
+/**
+ * Certificate verification failures (node/OpenSSL codes). A bad certificate does not heal inside the budget,
+ * so these are not retried: a retry only spends the budget, and the last attempt cut by the deadline would
+ * turn the real cause into PLANE_TIMEOUT (flaky self-signed test, main pipeline 6040).
+ */
+const TLS_CERT_FAILURE = /CERT|HOSTNAME_MISMATCH|UNABLE_TO_VERIFY|UNABLE_TO_GET_ISSUER/;
+
 export const BACKOFF_BASE_MS = 200;
 export const BACKOFF_CAP_MS = 1600;
 
@@ -623,6 +630,10 @@ export async function evaluateHosted(input: HostedEvaluateInput): Promise<Policy
       }
     } catch (e) {
       if (e instanceof PlaneError) throw e;
+      const netCode = (e as { code?: unknown })?.code;
+      if (typeof netCode === "string" && TLS_CERT_FAILURE.test(netCode)) {
+        throw new PlaneError("PLANE_UNREACHABLE", "hosted plane TLS certificate rejected");
+      }
       // The code names what happened, not when it was noticed: only an abort at the budget is a timeout.
       // A refused connection that arrives after the deadline (a slow host, a closed port that used the whole
       // budget in retries) is still PLANE_UNREACHABLE. Both fail closed; only the reason text differs.

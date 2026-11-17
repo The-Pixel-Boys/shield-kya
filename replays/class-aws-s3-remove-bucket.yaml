@@ -10,4 +10,11 @@ input:
 expect: deny
 rule: cloud-delete
 since: 0.33.0
+vendor: aws
+fix: >-
+  Turn on S3 Versioning, so a delete leaves earlier versions that you can restore, and use Object
+  Lock in compliance mode only for data you must keep, because nobody can shorten or remove it
+  until the retention ends. Give the agent an IAM role that does not allow s3:DeleteBucket,
+  s3:DeleteObject, s3:DeleteObjectVersion or s3:BypassGovernanceRetention (which overrides
+  governance mode only).
 credit: ""

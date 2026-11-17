@@ -148,10 +148,14 @@ beforeEach(async () => {
   stub = await startStub();
 });
 
+// A detached ping child (kya hook) may still write into home while the test ends: ENOTEMPTY on PR pipeline 6025.
+// rmSync retries ENOTEMPTY/EBUSY/EPERM itself, so the delete waits for the child instead of racing it.
+const rmTree = (p: string) => rmSync(p, { recursive: true, force: true, maxRetries: 20, retryDelay: 150 });
+
 afterEach(async () => {
   await stub.close();
-  rmSync(home, { recursive: true, force: true });
-  rmSync(cwd, { recursive: true, force: true });
+  rmTree(home);
+  rmTree(cwd);
 });
 
 function optIn(): void {
@@ -419,7 +423,7 @@ describe("consent prompt on a real terminal (pseudo-tty)", () => {
         expect(result.output).not.toContain("Share anonymous usage stats");
         expect(existsSync(join(h, ".kya", "telemetry.json"))).toBe(false);
       } finally {
-        rmSync(h, { recursive: true, force: true });
+        rmTree(h);
       }
     }
   }, 120_000);
@@ -471,7 +475,7 @@ describe("setup commands (real process)", () => {
       expect(saved["enabled"]).toBe(false);
       expect(saved["installId"]).toBeUndefined();
     } finally {
-      rmSync(otherHome, { recursive: true, force: true });
+      rmTree(otherHome);
     }
   }, 40_000);
 });

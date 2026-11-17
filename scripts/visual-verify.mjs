@@ -261,8 +261,8 @@ const emptyGatePage = {
 
 const fixtures = [
   { name: "empty", model: buildWindowReceiptModel([], 3), zone: "overview", height: 900 },
-  // README and listing picture of the first screen: no activity yet, so the Blocked panel shows the labelled demo.
-  { name: "blocked", model: buildWindowReceiptModel([], 3), zone: "overview", height: 900 },
+  // README and listing picture of the first screen: calls ran, none blocked yet, so the Blocked panel shows the labelled demo.
+  { name: "blocked", model: buildWindowReceiptModel(events.filter((e) => e.outcome === "ran").slice(0, 6), 3), zone: "overview", height: 900 },
   { name: "overview", model: modelWith({ gate: gatePage, showback }), zone: "overview", height: 1500 },
   { name: "activity", model: modelWith({}), zone: "activity", height: 1700 },
   { name: "changes", model: modelWith({}), zone: "changes", height: 750 },
@@ -279,15 +279,28 @@ const fixtures = [
 
 mkdirSync(outDir, { recursive: true });
 
+// Every fixture renders the Decisions card, and it must show the current outcome labels (Ran/Blocked/Held), never the old
+// Allow/Deny/Review ones. The check runs before any picture is taken, for every fixture, even with KYA_SHOT_ONLY.
+function assertCurrentLabels(name, html) {
+  const card = html.match(/<section class="panel" aria-label="Verdicts">[\s\S]*?<\/section>/)?.[0] ?? "";
+  for (const label of ["Ran", "Blocked", "Held"]) {
+    if (!card.includes(`<span class="mix-lab">${label}</span>`)) throw new Error(`${name}: Decisions card has no "${label}" row`);
+  }
+  for (const old of ["Allow", "Deny", "Review"]) {
+    if (card.includes(`<span class="mix-lab">${old}</span>`)) throw new Error(`${name}: Decisions card still shows the old label "${old}"`);
+  }
+}
+
 const screenshots = [];
 // KYA_SHOT_ONLY=blocked,overview and KYA_SHOT_THEMES=light limit the run; KYA_SHOT_HEIGHT=900 forces the window height;
 // KYA_SHOT_SCALE=2 sets the device scale factor (the gateway listing pictures are 2880 px wide).
 const only = process.env.KYA_SHOT_ONLY?.split(",").filter(Boolean);
 const themes = (process.env.KYA_SHOT_THEMES ?? "dark,light").split(",");
 for (const { name, model, zone, height: fixtureHeight } of fixtures) {
+  const html = renderReceiptHtml(model);
+  assertCurrentLabels(name, html);
   if (only && !only.includes(name)) continue;
   const height = Number(process.env.KYA_SHOT_HEIGHT) || fixtureHeight;
-  const html = renderReceiptHtml(model);
   for (const theme of themes) {
     let themed = html.replace("<html lang=\"en\">", `<html lang="en" data-theme="${theme}">`);
     // A huge scroll margin keeps the browser at the top of the page when it jumps to the tab anchor.

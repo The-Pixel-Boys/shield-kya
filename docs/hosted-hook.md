@@ -44,7 +44,7 @@ The plane call has one total budget: 3000 ms by default, set with `--plane-budge
 - **Retried:** 429, any 5xx, network errors (refused, reset, DNS) and a stalled attempt. Each attempt is capped at half the budget, so one stall still leaves room for a retry.
 - **Backoff:** exponential with jitter. Attempt n waits a random time between d/2 and d, where d is 200 ms times 2 to the power n, capped at 1600 ms.
 - **Retry-After:** on a 429 it is honoured (never shorter than the backoff, so `Retry-After: 0` cannot cause a tight loop). If it does not fit in the remaining budget, the hook denies straight away rather than sleeping.
-- **Not retried:** 401, 403 and every other 4xx.
+- **Not retried:** 401, 403, every other 4xx, and a TLS certificate failure (self-signed, expired or wrong host). The hook denies at once with `PLANE_UNREACHABLE`.
 - **When the budget runs out:** the call is denied with the code of the last failure.
 
 ## The config file

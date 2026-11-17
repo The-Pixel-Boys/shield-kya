@@ -10,4 +10,10 @@ input:
 expect: deny
 rule: terraform-destroy
 since: 0.33.0
+vendor: terraform
+fix: >-
+  Set lifecycle { prevent_destroy = true } on the resources you cannot lose, so a plan that
+  destroys them fails, and keep changes to .tf files under review, because removing the resource
+  block removes the protection. Give the agent plan-only cloud credentials, and run apply in CI
+  after a person approves the plan.
 credit: ""

@@ -10,4 +10,10 @@ input:
 expect: deny
 rule: k8s-delete-ns
 since: 0.33.0
+vendor: kubernetes
+fix: >-
+  Namespaces are cluster-scoped, so do not bind the agent to a ClusterRole that allows delete on
+  namespaces (check the ClusterRoleBindings too), or give it a kubeconfig for a development
+  cluster only. Check the result with kubectl auth can-i delete namespaces
+  --as=system:serviceaccount:NAMESPACE:NAME.
 credit: ""

@@ -26,6 +26,7 @@ import { homedir as homedir3 } from "node:os";
 import { posix } from "node:path";
 
 // src/never-list-input.ts
+import { readlinkSync } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 
 // src/host-tools.ts
@@ -434,7 +435,8 @@ function stripSubst(t) {
 function wordName(t) {
   const plain = stripSubst(t).plain;
   const base = plain.slice(Math.max(plain.lastIndexOf("/"), plain.lastIndexOf("\\")) + 1);
-  return /.\.exe$/i.test(base) ? base.slice(0, -4).toLowerCase() : base;
+  const name = /.\.(exe|cmd|bat|com)$/i.test(base) ? base.slice(0, -4).toLowerCase() : base;
+  return platform === "darwin" || platform === "win32" ? name.toLowerCase() : name;
 }
 var COPROC_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 var COPROC_BODY = /* @__PURE__ */ new Set(["{", "if", "while", "until", "for", "case", "select"]);
@@ -485,8 +487,10 @@ function hasCommand(sh, pred) {
   return false;
 }
 var TOP_LEVEL = /^\/(bin|boot|etc|home|lib|lib64|opt|root|sbin|srv|usr|var|System|Library|Applications|private|Users)(\/\*)?$/;
+var TOP_LEVEL_CI = new RegExp(TOP_LEVEL.source.replace("Users)", "Users|Windows)"), "i");
 var ROOT_SET = /* @__PURE__ */ new Set(["/", "/*", "~", "~/*", "~/.*", "~/."]);
 var USER_HOME = /^\/(home|Users)\/[^/]+(\/\*|\/\.\*)?$/;
+var USER_HOME_CI = new RegExp(USER_HOME.source, "i");
 function normalizeHome(home) {
   if (!home || !home.startsWith("/")) return home;
   return resolveDots(home);
@@ -495,7 +499,7 @@ function expandHome(p, home) {
   if (home && (p === "~" || p.startsWith("~/"))) return home + p.slice(1);
   return p;
 }
-function resolveDots(p) {
+function resolveDots(p, drive = "") {
   if (!p.startsWith("/")) return p;
   const out = [];
   for (const seg of p.split("/")) {
@@ -503,7 +507,113 @@ function resolveDots(p) {
     if (seg === "..") out.pop();
     else out.push(seg);
   }
-  return "/" + out.join("/");
+  return drive + "/" + out.join("/");
+}
+var DRIVE = /^[A-Za-z]:(?=\/|$)/;
+var HOME_ENV = /^(\$\{?(?:USERPROFILE|HOMEPATH)\}?|%(?:USERPROFILE|HOMEPATH)%)(?=[\\/]|$)/;
+var WIN_WORD = /^([A-Za-z]:|\\\\|~\\|\/\/[?.]\/|\$\{?(?:USERPROFILE|HOMEPATH)\}?(?:[\\/]|$)|%(?:USERPROFILE|HOMEPATH)%(?:[\\/]|$))/;
+var ROOTED_WORD = /^\\(?!\\)/;
+var MSYS_WORD = /^\/(mnt\/|cygdrive\/)?([A-Za-z])(?=\/|$)/i;
+var isDriveHome = (h) => h !== void 0 && /^[A-Za-z]:/.test(h);
+function winSource(w, rawHome) {
+  const some = (src) => ({ src, posix: false, root: false, rooted: false });
+  const env = HOME_ENV.exec(w);
+  if (env) return some("~" + w.slice(env[0].length));
+  if (w.startsWith("\\\\") || /^\/\/[?.]\//.test(w)) {
+    let parts = w.replace(/\\/g, "/").replace(/^\/+/, "").split(/\/+/);
+    if (parts[0] === "?" || parts[0] === ".") {
+      if (parts[1]?.toUpperCase() !== "UNC") {
+        const rest = parts.slice(1).join("/");
+        return /^[A-Za-z]:/.test(rest) ? some(rest) : { ...some("/"), root: true };
+      }
+      parts = parts.slice(2);
+    }
+    if (/^wsl(\$|\.localhost)$/i.test(parts[0] ?? "")) return { ...some("/" + parts.slice(2).join("/")), posix: true };
+    const admin = /^([A-Za-z])\$$/.exec(parts[1] ?? "");
+    if (admin) return some(`${admin[1]}:/${parts.slice(2).join("/")}`);
+    return { ...some("/" + parts.join("/")), root: parts.filter(Boolean).length <= 2 };
+  }
+  const m = MSYS_WORD.exec(w);
+  if (!/^[A-Za-z]:/.test(w) && !w.startsWith("~") && m && isDriveHome(rawHome)) return some(`${m[2].toUpperCase()}:${w.slice(m[0].length)}`);
+  if (/^[A-Za-z]:[^\\/]/.test(w)) return some(`${w.slice(0, 2)}/${w.slice(2)}`);
+  return { ...some(w), rooted: ROOTED_WORD.test(w) };
+}
+function winForm(w, rawHome) {
+  const slashed = (s) => s.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
+  const drive = (s) => /^[A-Za-z]:\//.test(s) ? s.slice(0, 2) : "";
+  const { src, posix: posix2, root, rooted } = winSource(w, rawHome);
+  if (root) return { p: "/", home: void 0, ci: false };
+  let home = rawHome === void 0 ? void 0 : slashed(rawHome);
+  if (home !== void 0) {
+    const hd = drive(home);
+    home = home.startsWith("/") || hd ? resolveDots(home.slice(hd.length), hd) : home;
+  }
+  let p = slashed(src).replace(/\/\.(?=\/|$)/g, "");
+  if (p === "") p = "/";
+  if (p === "~" || p.startsWith("~/")) p = expandHome(p, home);
+  const d = drive(p);
+  p = d ? resolveDots(p.slice(2), d) : resolveDots(p);
+  if (posix2) {
+    while (p.length > 1 && p.endsWith("/")) p = p.slice(0, -1);
+    return { p, home: normalizeHome(rawHome), ci: false };
+  }
+  const driven = DRIVE.test(p);
+  p = p.split("/").map((seg, i) => seg === "." || seg === ".." || driven && i === 0 ? seg : seg.replace(/:.*$/, "").replace(/[. ]+$/, "")).filter((seg, i) => i === 0 || seg !== "").join("/") || "/";
+  while (p.length > 1 && p.endsWith("/")) p = p.slice(0, -1);
+  if (!DRIVE.test(p) && !rooted) return platform === "win32" ? { p: p.toLowerCase(), home: home?.toLowerCase(), ci: true } : { p, home, ci: false };
+  const strip = (x) => x.replace(DRIVE, "").toLowerCase() || "/";
+  return { p: strip(p), home: home !== void 0 && DRIVE.test(home) ? strip(home) : home?.toLowerCase(), ci: true };
+}
+var platform = process.platform;
+function darwinAlias(p) {
+  if (p === "/volumes") return "/";
+  if (!p.startsWith("/")) return p;
+  const seg = p.split("/");
+  let i = 1;
+  for (; ; ) {
+    if (seg[i] === "system" && seg[i + 1] === "volumes" && seg[i + 2] === "data") i += 3;
+    else if (seg[i] === "volumes" && seg[i + 1] && isBootVolume(seg[i + 1])) i += 2;
+    else break;
+  }
+  if (i === 1 && !(seg[1] === "private" && /^(etc|var|tmp)$/.test(seg[2] ?? ""))) return p;
+  if (seg[i] === "private" && /^(etc|var|tmp)$/.test(seg[i + 1] ?? "")) i++;
+  return "/" + seg.slice(i).join("/");
+}
+var defaultReadlink = (p) => {
+  if (process.platform !== "darwin") return void 0;
+  try {
+    return readlinkSync(p);
+  } catch {
+    return void 0;
+  }
+};
+var readLink = defaultReadlink;
+var BOOT_VOLUME = /* @__PURE__ */ new Map();
+function isBootVolume(name) {
+  if (name === "macintosh hd" || /[*?[{]/.test(name)) return true;
+  let v = BOOT_VOLUME.get(name);
+  if (v === void 0) {
+    v = readLink(`/Volumes/${name}`) === "/";
+    if (BOOT_VOLUME.size > 256) BOOT_VOLUME.clear();
+    BOOT_VOLUME.set(name, v);
+  }
+  return v;
+}
+function pathForms(w, rawHome, protect = false) {
+  const lit = { p: normalizePath(w, rawHome), home: normalizeHome(rawHome), ci: false };
+  const forms = [lit];
+  const win32 = platform === "win32";
+  if (win32 || WIN_WORD.test(w) || protect && ROOTED_WORD.test(w) || isDriveHome(rawHome) && MSYS_WORD.test(w)) {
+    const win = winForm(w, rawHome);
+    if (!(win.p === lit.p && win.home === lit.home && !win.ci)) forms.push(win);
+  }
+  if (platform === "darwin" || win32) {
+    const low = lit.p.toLowerCase();
+    forms.push({ p: low, home: lit.home?.toLowerCase(), ci: true });
+    const alias = platform === "darwin" ? darwinAlias(low) : low;
+    if (alias !== low) forms.push({ p: alias, home: lit.home?.toLowerCase(), ci: true });
+  }
+  return forms;
 }
 function normalizePath(w, rawHome) {
   const home = normalizeHome(rawHome);
@@ -525,16 +635,25 @@ function normalizePath(w, rawHome) {
 }
 function aboveCwd(word, cwd) {
   if (!cwd || !cwd.startsWith("/") || word.startsWith("/") || word.startsWith("~") || word.includes("$")) return false;
-  const root = cwd.length > 1 ? cwd.replace(/\/+$/, "") : cwd;
+  const root = cwd.length > 1 ? trimTrailingSlashes(cwd) : cwd;
   const target = resolveDots(`${root}/${word}`.replace(/\/{2,}/g, "/")).replace(/\/\.?\*$/, "") || "/";
   return target !== root && (target === "/" || root.startsWith(`${target}/`));
 }
 function isProtected(word, sh) {
-  const home = normalizeHome(sh.home);
-  const p = normalizePath(word, home);
-  if (ROOT_SET.has(p) || TOP_LEVEL.test(p) || USER_HOME.test(p)) return true;
-  if (home !== void 0 && (p === home || p === `${home}/*` || p === `${home}/.*`)) return true;
-  return aboveCwd(word, sh.cwd);
+  for (const f of pathForms(word, normalizeHome(sh.home), true)) {
+    const { p, home, ci } = f;
+    if (ROOT_SET.has(p) || (ci ? TOP_LEVEL_CI : TOP_LEVEL).test(p) || (ci ? USER_HOME_CI : USER_HOME).test(p)) return true;
+    if (home !== void 0 && (p === home || p === `${home}/*` || p === `${home}/.*`)) return true;
+  }
+  return aboveCwd(word, sh.cwd) || platform === "win32" && aboveCwdWin(word, sh.cwd);
+}
+function aboveCwdWin(word, cwd) {
+  if (!cwd) return false;
+  const c = cwd.replace(/\\/g, "/");
+  const rest = c.replace(/^[A-Za-z]:(?=\/)/, "");
+  const w = word.replace(/\\/g, "/");
+  if (!rest.startsWith("/") || /^([A-Za-z]:|\/|~)/.test(w)) return false;
+  return aboveCwd(w.toLowerCase(), rest.toLowerCase());
 }
 function isRecursive(flags) {
   return flags.some((f) => f === "--recursive" || /^-[A-Za-z]+$/.test(f) && /[rR]/.test(f));
@@ -641,17 +760,22 @@ var ENV_TEMPLATE = /\.(example|sample|template)$/;
 var HOME_CREDENTIAL = /^(~|\/Users\/[^/]+|\/home\/[^/]+|\/root)\/\.(npmrc|netrc|git-credentials)$/;
 var GCLOUD_CREDENTIAL = /(^|\/)\.config\/gcloud\/(application_default_credentials\.json|credentials\.db|access_tokens\.db|legacy_credentials(\/|$))/;
 var BLOCK_DEVICE = /^\/dev\/(sd|hd|vd|xvd|nvme|mmcblk|disk|rdisk|md|dm-|loop|mapper\/)/;
-var GLOB_CHARS = /[*?[]/;
+var WILD = "\uE000";
+var GLOB_CHARS = /[*?[\uE000]/;
 var GLOB_ENV_NAMES = [".env", ".env.local"];
 var GLOB_HOME_NAMES = [".npmrc", ".netrc", ".git-credentials"];
 var HOME_DIR = /^(~|\/Users\/[^/]+|\/home\/[^/]+|\/root)$/;
+var HOME_DIR_CI = new RegExp(HOME_DIR.source, "i");
+var HOME_CREDENTIAL_CI = new RegExp(HOME_CREDENTIAL.source, "i");
 function globTokens(pat) {
   const out = [];
   const lastClose = pat.lastIndexOf("]");
   for (let i = 0; i < pat.length; i++) {
     const c = pat[i];
-    if (c === "*") {
-      if (out[out.length - 1]?.kind !== "star") out.push({ kind: "star" });
+    if (c === "*" || c === WILD) {
+      const last = out[out.length - 1];
+      if (last?.kind !== "star") out.push(c === WILD ? { kind: "star", wild: true } : { kind: "star" });
+      else if (c === WILD && !last.wild) out[out.length - 1] = { kind: "star", wild: true };
     } else if (c === "?") {
       out.push({ kind: "any", test: () => true });
     } else if (c === "[" && i < lastClose) {
@@ -688,7 +812,7 @@ function globTokens(pat) {
 function globSegMatch(pat, name) {
   if (!GLOB_CHARS.test(pat)) return pat === name;
   const toks = globTokens(pat);
-  if (name[0] === "." && !(toks[0]?.kind === "lit" && toks[0].ch === ".")) return false;
+  if (name[0] === "." && !(toks[0]?.kind === "lit" && toks[0].ch === ".") && !toks[0]?.wild) return false;
   const n = name.length;
   let reach = new Array(n + 1).fill(false);
   reach[0] = true;
@@ -706,29 +830,244 @@ function globSegMatch(pat, name) {
   }
   return reach[n];
 }
-function globSecret(p) {
+function globSecret(p, ci = false) {
   const cut = p.lastIndexOf("/");
   const dir = cut < 0 ? "" : p.slice(0, cut);
   const base = p.slice(cut + 1);
   const dirName = dir.slice(dir.lastIndexOf("/") + 1);
   if (GLOB_ENV_NAMES.some((name) => globSegMatch(base, name))) return true;
-  if (HOME_DIR.test(dir) && GLOB_HOME_NAMES.some((name) => globSegMatch(base, name))) return true;
+  if ((ci ? HOME_DIR_CI : HOME_DIR).test(dir) && GLOB_HOME_NAMES.some((name) => globSegMatch(base, name))) return true;
   const ssh = globSegMatch(dirName, ".ssh");
   if (!ssh && !globSegMatch(dirName, ".aws")) return false;
   if (GLOB_CHARS.test(base)) return true;
   return ssh ? base.startsWith("id_") && !base.endsWith(".pub") : base === "credentials";
 }
-function isSecretPath(raw, home) {
-  const p = normalizePath(raw, home);
+function isSecretPath(raw, home, cwd) {
+  return withCwd(raw, home, cwd).some(
+    (w) => someVariant(w, (v) => pathForms(v, home).some((f) => secretForm(f.p, f.ci) || underHome(f) && secretForm("~" + f.p.slice(f.home.length), f.ci)))
+  );
+}
+function groupAlts(g) {
+  if (g.includes(",")) return g.split(",");
+  const out = [];
+  const ch = /^([A-Za-z])\.\.([A-Za-z])$/.exec(g);
+  if (ch) {
+    const x = ch[1].charCodeAt(0);
+    const y = ch[2].charCodeAt(0);
+    for (let c = x; ; c += x <= y ? 1 : -1) {
+      out.push(String.fromCharCode(c));
+      if (c === y) break;
+    }
+    return out;
+  }
+  const num = /^(-?\d{1,4})\.\.(-?\d{1,4})$/.exec(g);
+  if (num && !/^-?0\d/.test(num[1]) && !/^-?0\d/.test(num[2])) {
+    const x = Number(num[1]);
+    const y = Number(num[2]);
+    if (Math.abs(y - x) > 256) return void 0;
+    for (let n = x; ; n += x <= y ? 1 : -1) {
+      out.push(String(n));
+      if (n === y) break;
+    }
+    return out;
+  }
+  return void 0;
+}
+function altsOf(g) {
+  return groupAlts(g) ?? (g.includes("..") ? [WILD] : void 0);
+}
+function firstGroup(w) {
+  const re = /\{([^{}]*)\}/g;
+  for (let m = re.exec(w); m; m = re.exec(w)) {
+    const alts = altsOf(m[1]);
+    if (alts) return { index: m.index, len: m[0].length, alts };
+  }
+  return void 0;
+}
+function resolveGroups(p, pick) {
+  let w = p;
+  for (let i = 0; i < 16 && w.includes("{"); i++) {
+    const next = w.replace(/\{([^{}]*)\}/g, (_m, g) => pick(g));
+    if (next === w) break;
+    w = next;
+  }
+  return w.replace(/[{}]/g, WILD);
+}
+function wildForm(p) {
+  return resolveGroups(p, () => WILD);
+}
+var braceBudget = 2048;
+var braceBudgetStart = 2048;
+function resetBraceBudget() {
+  braceBudget = braceBudgetStart;
+}
+var BRACE_OVERFLOW = "\uE001";
+function groupSize(g) {
+  if (g.includes(",")) return g.split(",").length;
+  if (!g.includes("..")) return 1;
+  const ch = /^([A-Za-z])\.\.([A-Za-z])$/.exec(g);
+  if (ch) return Math.abs(ch[1].charCodeAt(0) - ch[2].charCodeAt(0)) + 1;
+  const num = /^(-?\d{1,4})\.\.(-?\d{1,4})$/.exec(g);
+  return num && !/^-?0\d/.test(num[1]) && !/^-?0\d/.test(num[2]) ? Math.min(257, Math.abs(Number(num[2]) - Number(num[1])) + 1) : 1;
+}
+function variantCount(p) {
+  let n = 1;
+  for (const m of p.matchAll(/\{([^{}]*)\}/g)) {
+    n *= groupSize(m[1]);
+    if (n > 256) return 257;
+  }
+  return n;
+}
+function edgeAlt(content, last) {
+  if (content.includes(",")) {
+    const parts = content.split(",");
+    return last ? parts[parts.length - 1] : parts[0];
+  }
+  if (!content.includes("..")) return `{${content}}`;
+  const ch = /^([A-Za-z])\.\.([A-Za-z])$/.exec(content);
+  if (ch) return last ? ch[2] : ch[1];
+  const num = /^(-?\d{1,4})\.\.(-?\d{1,4})$/.exec(content);
+  if (num && !/^-?0\d/.test(num[1]) && !/^-?0\d/.test(num[2]) && Math.abs(Number(num[2]) - Number(num[1])) <= 256) return String(Number(num[last ? 2 : 1]));
+  return WILD;
+}
+function braceForms(p) {
+  const groups = [...p.matchAll(/\{([^{}]*)\}/g)].map((m) => ({ index: m.index, len: m[0].length, content: m[1] }));
+  const fills = [() => WILD, (c) => edgeAlt(c, false), (c) => edgeAlt(c, true)];
+  const whole = fills.map((fill) => {
+    let text = "";
+    let at = 0;
+    const where = [];
+    for (const g of groups) {
+      text += p.slice(at, g.index);
+      const r2 = fill(g.content);
+      where.push({ start: text.length, len: r2.length });
+      text += r2;
+      at = g.index + g.len;
+    }
+    return { text: text + p.slice(at), where };
+  });
+  const forms = [wildForm(p), resolveGroups(p, (g) => edgeAlt(g, false)), resolveGroups(p, (g) => edgeAlt(g, true))];
+  const long = p.length > 8192;
+  for (let gi = 0; gi < Math.min(groups.length, long ? 1 : 16); gi++) {
+    for (const alt of (altsOf(groups[gi].content) ?? [`{${groups[gi].content}}`]).slice(0, long ? 4 : 8)) {
+      for (const w of whole) forms.push((w.text.slice(0, w.where[gi].start) + alt + w.text.slice(w.where[gi].start + w.where[gi].len)).replace(/[{}]/g, WILD));
+    }
+  }
+  return [...new Set(forms)];
+}
+function braceVariants(p) {
+  if (!/\{[^{}]*\}/.test(p)) return [p];
+  const masked = p.replace(/\{([^{},]*)\}/g, (m, g) => g.includes("..") ? m : `\uE002${g}\uE003`);
+  return expandBraces(masked).map((w) => w.replace(/\uE002/g, "{").replace(/\uE003/g, "}"));
+}
+function someVariant(p, test) {
+  if (!p.includes("{")) return test(p);
+  return braceVariants(p).some((v) => v.includes(BRACE_OVERFLOW) || test(v));
+}
+function expandBraces(p) {
+  if (braceBudget <= 0) {
+    return [p, BRACE_OVERFLOW];
+  }
+  const big = p.length > 2048 || variantCount(p) > 256;
+  if (big) {
+    const forms = braceForms(p);
+    braceBudget -= forms.length + 1;
+    return [p, ...forms];
+  }
+  let out = [p];
+  let done = false;
+  for (let round = 0; round < 8 && !done; round++) {
+    const next = [];
+    done = true;
+    for (const w of out) {
+      const g = firstGroup(w);
+      if (!g) {
+        next.push(w);
+        continue;
+      }
+      done = false;
+      for (const alt of g.alts) next.push(w.slice(0, g.index) + alt + w.slice(g.index + g.len));
+    }
+    out = next;
+  }
+  braceBudget -= out.length;
+  return done ? out : [...out, ...braceForms(p)];
+}
+var STORE_CWD = /library|\.config|\.ssh|\.aws|\.mozilla|appdata|\/snap\/|\.var|\.kube|\.docker|gcloud|keychain|chrome|brave|edge|firefox|opera|vivaldi|\/arc\/|safari|cookies|\/etc/i;
+var HOME_CWD = /^\/(?:Users\/[^/]+|home\/[^/]+|root|var\/root|private\/var\/root)\/?$/i;
+function trimTrailingSlashes(s) {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 47) end--;
+  return s.slice(0, end);
+}
+var HOME_NAME = /^\.|[*?[{\uE000]/;
+function withCwd(raw, home, cwd) {
+  if (cwd === void 0 || /^([/~$]|[A-Za-z]:|\\)/.test(raw)) return [raw];
+  const out = [raw];
+  const path = raw.includes("/");
+  const flat = raw.replace(/\*{2,}/g, "*");
+  const homeName = flat.length <= 64 && HOME_NAME.test(flat);
+  const longGlob = !path && flat.length > 64 && /[*?[{\uE000]/.test(flat);
+  for (const c of typeof cwd === "string" ? [cwd] : cwd) {
+    if (!c.startsWith("/")) continue;
+    const inHome = HOME_CWD.test(c) || home !== void 0 && trimTrailingSlashes(c) === trimTrailingSlashes(home);
+    if (longGlob && inHome) out.push(BRACE_OVERFLOW);
+    else if (path || STORE_CWD.test(c) || homeName && inHome) out.push(`${c}/${homeName ? flat : raw}`);
+  }
+  return out;
+}
+function underHome(f) {
+  return f.home !== void 0 && f.home.length > 1 && f.p.startsWith(f.home + "/");
+}
+var HOME_ROOT = "(?:~|\\/Users\\/[^/]+|\\/home\\/[^/]+|\\/root|\\/var\\/root|\\/private\\/var\\/root)";
+var CHROMIUM_ROOT = new RegExp(
+  `^${HOME_ROOT}\\/(?:Library\\/Application Support\\/(?:Google\\/Chrome(?: Beta| Canary| Dev)?|BraveSoftware\\/Brave-Browser|Microsoft Edge|Chromium|Vivaldi|Arc\\/User Data|com\\.operasoftware\\.Opera)|\\.config\\/(?:google-chrome[^/]*|chromium|BraveSoftware\\/Brave-Browser|microsoft-edge[^/]*|vivaldi[^/]*|opera[^/]*)|AppData\\/(?:Local|Roaming)\\/(?:Google\\/Chrome(?: Beta| SxS)?|BraveSoftware\\/Brave-Browser|Microsoft\\/Edge|Chromium|Vivaldi|Opera Software\\/[^/]+|Arc\\/User Data))\\/`,
+  "i"
+);
+var SANDBOX_ROOT = new RegExp(`^${HOME_ROOT}\\/(?:snap|\\.var\\/app)\\/[^/]+\\/`, "i");
+var CHROMIUM_MID = /\/(?:chromium|google-chrome[^/]*|BraveSoftware|microsoft-edge[^/]*|vivaldi[^/]*|opera[^/]*)\//i;
+var CHROMIUM_FILE = /^(?:Login Data(?: For Account)?(?:-journal)?|Cookies(?:-journal)?|Local State)$/i;
+var CHROMIUM_NAMES = ["Login Data", "Login Data For Account", "Login Data-journal", "Cookies", "Cookies-journal", "Local State"];
+var FIREFOX_NAMES = ["logins.json", "key4.db", "cert9.db", "cookies.sqlite"];
+var FIREFOX_ROOT = new RegExp(`^${HOME_ROOT}\\/(?:\\.mozilla\\/firefox|Library\\/Application Support\\/Firefox|AppData\\/Roaming\\/Mozilla\\/Firefox)\\/`, "i");
+var FIREFOX_MID = /\/\.mozilla\/firefox\//i;
+var FIREFOX_FILE = /^(?:logins\.json|key4\.db|cert9\.db|cookies\.sqlite)$/i;
+var SAFARI_ROOT = new RegExp(`^${HOME_ROOT}\\/Library\\/(?:Cookies|Safari|Containers\\/com\\.apple\\.Safari\\/Data\\/Library\\/Cookies)\\/`, "i");
+var KEYCHAIN_FILE = new RegExp(`^(?:${HOME_ROOT})?\\/Library\\/Keychains\\/[^/]`, "i");
+function storeSecret(p) {
+  if (/^\/etc\/(?:g?shadow-?|master\.passwd)$/i.test(p) || KEYCHAIN_FILE.test(p)) return true;
+  const base = p.slice(p.lastIndexOf("/") + 1);
+  if (CHROMIUM_FILE.test(base) && (CHROMIUM_ROOT.test(p) || SANDBOX_ROOT.test(p) && CHROMIUM_MID.test(p))) return true;
+  if (FIREFOX_FILE.test(base) && (FIREFOX_ROOT.test(p) || SANDBOX_ROOT.test(p) && FIREFOX_MID.test(p))) return true;
+  if (base.toLowerCase() === "cookies.binarycookies" && SAFARI_ROOT.test(p)) return true;
+  if (GLOB_CHARS.test(base) && /^\/etc\/[^/]*$/.test(p) && ["shadow", "gshadow", "shadow-", "gshadow-", "master.passwd"].some((n) => globSegMatch(base.toLowerCase(), n))) return true;
+  if (GLOB_CHARS.test(base)) {
+    const flat = base.replace(/[*\uE000]+/g, (m) => m.includes(WILD) ? WILD : "*").toLowerCase();
+    const g = (names) => flat.length > 256 || names.some((n) => globSegMatch(flat, n.toLowerCase()));
+    if ((CHROMIUM_ROOT.test(p) || SANDBOX_ROOT.test(p) && CHROMIUM_MID.test(p)) && g(CHROMIUM_NAMES)) return true;
+    if ((FIREFOX_ROOT.test(p) || SANDBOX_ROOT.test(p) && FIREFOX_MID.test(p)) && g(FIREFOX_NAMES)) return true;
+    if (SAFARI_ROOT.test(p) && g(["Cookies.binarycookies"])) return true;
+  }
+  return keychainGlob(p, false);
+}
+function keychainGlob(p, dir) {
+  if (!GLOB_CHARS.test(p)) return false;
+  const m = new RegExp(`^(?:${HOME_ROOT})?\\/([^/]+)\\/([^/]+)${dir ? "$" : "\\/[^/]"}`, "i").exec(p);
+  if (!m) return false;
+  const seg = (pat, name) => globSegMatch(pat.toLowerCase(), name);
+  return (GLOB_CHARS.test(m[1]) || GLOB_CHARS.test(m[2])) && seg(m[1], "library") && seg(m[2], "keychains");
+}
+function secretForm(p, ci) {
+  if (p.includes(BRACE_OVERFLOW) || storeSecret(p)) return true;
   const base = p.slice(p.lastIndexOf("/") + 1);
   if (/(^|\/)\.ssh\/id_/.test(p) && !base.endsWith(".pub")) return true;
-  if (/(^|\/)\.(ssh|aws)\/[^/]*[*?[]/.test(p)) return true;
+  if (/(^|\/)\.(ssh|aws)\/[^/]*[*?[\uE000]/.test(p)) return true;
   if (/(^|\/)\.aws\/credentials$/.test(p)) return true;
   if (GCLOUD_CREDENTIAL.test(p)) return true;
-  if (HOME_CREDENTIAL.test(p)) return true;
+  if ((ci ? HOME_CREDENTIAL_CI : HOME_CREDENTIAL).test(p)) return true;
   if (base === ".env" || base.startsWith(".env.") && !ENV_TEMPLATE.test(base)) return true;
-  if (base.startsWith(".env") && /[*?[]/.test(base)) return true;
-  if (GLOB_CHARS.test(p) && globSecret(p)) return true;
+  if (base.startsWith(".env") && /[*?[\uE000]/.test(base)) return true;
+  if (GLOB_CHARS.test(p) && globSecret(p, ci)) return true;
   return /\.(pem|key)$/.test(base);
 }
 var GIT_TEXT_CLUSTER = /^-[A-Za-z]*[mSG]$/;
@@ -769,8 +1108,12 @@ function gitReadsSecret(c, home) {
   }
   return false;
 }
-function isSecretDir(raw, home) {
-  return /(^|\/)\.(ssh|aws)$/.test(normalizePath(raw, home));
+var KEYCHAIN_DIR = new RegExp(`^(?:${HOME_ROOT})?\\/Library\\/Keychains$`, "i");
+function isSecretDir(raw, home, cwd) {
+  const dir = (p) => p.includes(BRACE_OVERFLOW) || /(^|\/)\.(ssh|aws)$/.test(p) || KEYCHAIN_DIR.test(p) || keychainGlob(p, true);
+  return withCwd(raw, home, cwd).some(
+    (w) => someVariant(w, (v) => pathForms(v, home).some((f) => dir(f.p) || underHome(f) && dir("~" + f.p.slice(f.home.length))))
+  );
 }
 var READ_VERBS = /* @__PURE__ */ new Set([
   "cat",
@@ -815,17 +1158,65 @@ var READ_VERBS = /* @__PURE__ */ new Set([
   "column",
   "md5sum",
   "shasum",
-  "sha256sum"
+  "sha256sum",
+  "sqlite3"
 ]);
 var COPY_VERBS = /* @__PURE__ */ new Set(["cp", "scp", "rsync", "install"]);
 var REDIRECT_OPS = /* @__PURE__ */ new Set(["<", "<<", "<<<", ">", ">>"]);
 var PATTERN_VERBS = /* @__PURE__ */ new Set(["grep", "egrep", "fgrep"]);
 var READ_CALL = /\b(open|Path|readFileSync|readFile|read_text|read_bytes|File\.read|IO\.read|file_get_contents|fopen|readfile)\s*\(\s*(['"`]?)([^'"`)\s,]+)/g;
+function securityArgs(a) {
+  let interactive = false;
+  for (let i = 0; i < a.length; i++) {
+    const t = a[i];
+    if (t === "--") return { interactive, sub: a[i + 1], rest: a.slice(i + 2) };
+    if (!t.startsWith("-") || t === "-") return { interactive, sub: t, rest: a.slice(i + 1) };
+    for (let k = 1; k < t.length; k++) {
+      const ch = t[k];
+      if (ch === "i") interactive = true;
+      else if (ch === "p") {
+        interactive = true;
+        if (k === t.length - 1) i++;
+        break;
+      }
+    }
+  }
+  return { interactive, sub: void 0, rest: [] };
+}
+var SECURITY_COMMANDS = new Set(
+  "help list-keychains list-smartcards default-keychain login-keychain create-keychain delete-keychain lock-keychain unlock-keychain set-keychain-settings set-keychain-password show-keychain-info dump-keychain create-keypair add-generic-password add-internet-password add-certificates find-generic-password delete-generic-password set-generic-password-partition-list find-internet-password delete-internet-password set-internet-password-partition-list find-key set-key-partition-list find-certificate find-identity delete-certificate delete-identity set-identity-preference get-identity-preference create-db export import export-smartcard cms install-mds add-trusted-cert remove-trusted-cert dump-trust-settings user-trust-settings-enable trust-settings-export trust-settings-import verify-cert authorize authorizationdb execute-with-privileges leaks error create-filevaultmaster-keychain smartcards translocate-policy-check translocate-status-check translocate-original-path requirement-evaluate filevault platformsso interactive".split(" ")
+);
+function securityCandidates(sub) {
+  if (SECURITY_COMMANDS.has(sub)) return [sub];
+  if (sub === "") return [];
+  if (!/^[a-z][a-z-]*$/.test(sub)) return [...SECURITY_COMMANDS];
+  return sub === "" ? [] : [...SECURITY_COMMANDS].filter((n) => n.startsWith(sub));
+}
+function keychainDump(c) {
+  if (c.name !== "security") return false;
+  const { interactive, sub, rest } = securityArgs(operandsOf(c.args));
+  if (interactive) return true;
+  return securityCandidates(sub ?? "").some((name) => {
+    if (name === "interactive" || name === "export" || name === "find-key") return true;
+    if (name !== "find-generic-password" && name !== "find-internet-password" && name !== "dump-keychain") return false;
+    const re = new RegExp(`^-[A-Za-z]*${name === "dump-keychain" ? "d" : "[wg]"}[A-Za-z]*$`);
+    return rest.some((t) => re.test(t));
+  });
+}
+function securityFromStdin(sh) {
+  return sh.segments.some(
+    (seg) => (seg.pipeIn || seg.tokens.some((t) => t === "<" || t === "<<" || t === "<<<")) && seg.cmds.some((c) => {
+      if (c.name !== "security") return false;
+      const { sub } = securityArgs(operandsOf(c.args));
+      return sub === void 0 || securityCandidates(sub).length === 0;
+    })
+  );
+}
 function secretReadShell(sh) {
   for (const seg of sh.segments) {
     const toks = seg.tokens;
     for (let i = 0; i + 1 < toks.length; i++) {
-      if (toks[i] === "<" && isSecretPath(toks[i + 1], sh.home)) return true;
+      if (toks[i] === "<" && isSecretPath(toks[i + 1], sh.home, sh.cwd)) return true;
     }
     for (let k = 0; k < seg.cmds.length; k++) {
       const c = seg.cmds[k];
@@ -851,12 +1242,12 @@ function secretReadShell(sh) {
         }
         const prev = args[i - 1];
         if (c.name === "dd") {
-          if (a.startsWith("if=") && isSecretPath(a.slice(3), sh.home)) return true;
+          if (a.startsWith("if=") && isSecretPath(a.slice(3), sh.home, sh.cwd)) return true;
         } else if (NET_CLIENTS.has(c.name)) {
           const at = a.indexOf("@");
-          if (at >= 0 && isSecretPath(a.slice(at + 1), sh.home)) return true;
-          if ((prev === "-T" || prev === "--upload-file") && isSecretPath(a, sh.home)) return true;
-        } else if (!a.startsWith("-") && (isSecretPath(a, sh.home) || isSecretDir(a, sh.home))) {
+          if (at >= 0 && isSecretPath(a.slice(at + 1), sh.home, sh.cwd)) return true;
+          if ((prev === "-T" || prev === "--upload-file") && isSecretPath(a, sh.home, sh.cwd)) return true;
+        } else if (!a.startsWith("-") && (isSecretPath(a, sh.home, sh.cwd) || isSecretDir(a, sh.home, sh.cwd))) {
           return true;
         }
       }
@@ -1061,7 +1452,8 @@ function scanInto(text, out, depth) {
       while (j < n && text[j] !== '"') {
         const d = text[j];
         if (d === "\\" && j + 1 < n) {
-          if (text[j + 1] !== "\n") word += text[j + 1];
+          const e = text[j + 1];
+          if (e !== "\n") word += '$`"\\'.includes(e) ? e : d + e;
           j += 2;
         } else if (d === "$" && text[j + 1] === "(" || d === "`") {
           j = subst(j);
@@ -1206,6 +1598,7 @@ function segmentsOf(text, scope, depth) {
 }
 var lastParsed;
 function parseShell(cmd, home, cwd) {
+  resetBraceBudget();
   if (lastParsed && lastParsed.raw === cmd && lastParsed.home === home && lastParsed.cwd === cwd) return lastParsed;
   return lastParsed = { raw: cmd, segments: segmentsOf(cmd, /* @__PURE__ */ new Map(), 0), home, cwd };
 }
@@ -1268,7 +1661,7 @@ function writtenPaths(seg, out) {
   }
 }
 function baseName(p) {
-  const s = p.replace(/\/+$/, "");
+  const s = trimTrailingSlashes(p);
   return s.slice(s.lastIndexOf("/") + 1);
 }
 var COPY_VALUE_LETTERS = "Smog";
@@ -1403,7 +1796,7 @@ function writtenIn(sh) {
       if (seg.tokens.length > 0 && (last === ">" || last === ">>")) raw.push(seg.tokens[0]);
       writtenPaths(seg, raw);
     }
-    out = raw.map((w) => normalizePath(w, sh.home));
+    out = raw.flatMap((w) => pathForms(w, sh.home).map((f) => f.p));
     WRITTEN_CACHE.set(sh, out);
   }
   return out;
@@ -1546,7 +1939,7 @@ function sshProxyExec(c) {
 function sshConfigWritten(sh) {
   const written = writtenIn(sh);
   if (written.length === 0) return false;
-  return hasCandidate(sh, (c) => c.name === "ssh" && sshShape(c).configs.some((f) => written.includes(normalizePath(f, sh.home))));
+  return hasCandidate(sh, (c) => c.name === "ssh" && sshShape(c).configs.some((f) => pathForms(f, sh.home).some((g) => written.includes(g.p))));
 }
 var NC_NAMES = /* @__PURE__ */ new Set(["nc", "ncat", "netcat"]);
 function netcatExec(c) {
@@ -1607,6 +2000,7 @@ var NEVER_LIST_INPUT_RULES = [
   // c. Read or copy of a private key, cloud or package credential, or a real .env file.
   { id: "secret-read-shell", group: "c", label: "read a credentials file", shell: (sh) => secretReadShell(sh) || interpreterReadsSecret(sh) },
   { id: "secret-read-file", group: "c", label: "read a credentials file", file: isSecretPath },
+  { id: "keychain-password-dump", group: "c", label: "dump passwords from the macOS keychain", shell: (sh) => hasCommand(sh, keychainDump) || securityFromStdin(sh) },
   // d. Disk and system destroyers.
   { id: "mkfs", group: "d", label: "format a disk", shell: (sh) => hasCommand(sh, (c) => c.name.startsWith("mkfs")) },
   {
@@ -1626,12 +2020,12 @@ var NEVER_LIST_INPUT_RULES = [
   // e. Network download piped into a shell, or run as code through a substitution (`sh -c "$(curl ...)"`).
   { id: "pipe-network-to-shell", group: "e", label: "run a script piped in from the internet", shell: (sh) => pipeNetworkToShell(sh) || nestedNetExec(sh) },
   // f. Agent-driven persistence (added 2026-10-30). A write rule also runs on Write, Edit and apply_patch paths.
-  { id: "ssh-authorized-keys-write", group: "f", label: "add a key to your SSH authorized keys", shell: (sh) => writesTo(sh, (p) => AUTHORIZED_KEYS.test(p)), writeFile: (p, home) => AUTHORIZED_KEYS.test(normalizePath(p, home)) },
+  { id: "ssh-authorized-keys-write", group: "f", label: "add a key to your SSH authorized keys", shell: (sh) => writesTo(sh, (p) => AUTHORIZED_KEYS.test(p)), writeFile: (p, home) => pathForms(p, home).some((f) => AUTHORIZED_KEYS.test(f.p)) },
   { id: "ssh-copy-id", group: "f", label: "copy an SSH key to another machine", shell: (sh) => hasCandidate(sh, (c) => c.name === "ssh-copy-id") },
-  { id: "persistence-cron", group: "f", label: "install a cron job", shell: (sh) => hasCandidate(sh, cronWrites) || writesTo(sh, (p) => CRON_PATH.test(p)), writeFile: (p, home) => CRON_PATH.test(normalizePath(p, home)) },
+  { id: "persistence-cron", group: "f", label: "install a cron job", shell: (sh) => hasCandidate(sh, cronWrites) || writesTo(sh, (p) => CRON_PATH.test(p)), writeFile: (p, home) => pathForms(p, home).some((f) => CRON_PATH.test(f.p)) },
   { id: "persistence-at-job", group: "f", label: "schedule a job with at", shell: (sh) => hasCandidate(sh, atSchedules) },
-  { id: "persistence-launchd", group: "f", label: "install a launchd startup job", shell: (sh) => hasCandidate(sh, launchLoads) || writesTo(sh, (p) => LAUNCH_PATH.test(p)), writeFile: (p, home) => LAUNCH_PATH.test(normalizePath(p, home)) },
-  { id: "persistence-systemd-user", group: "f", label: "install a systemd startup service", shell: (sh) => hasCandidate(sh, systemdUserEnables) || writesTo(sh, (p) => SYSTEMD_USER_PATH.test(p)), writeFile: (p, home) => SYSTEMD_USER_PATH.test(normalizePath(p, home)) },
+  { id: "persistence-launchd", group: "f", label: "install a launchd startup job", shell: (sh) => hasCandidate(sh, launchLoads) || writesTo(sh, (p) => LAUNCH_PATH.test(p)), writeFile: (p, home) => pathForms(p, home).some((f) => LAUNCH_PATH.test(f.p)) },
+  { id: "persistence-systemd-user", group: "f", label: "install a systemd startup service", shell: (sh) => hasCandidate(sh, systemdUserEnables) || writesTo(sh, (p) => SYSTEMD_USER_PATH.test(p)), writeFile: (p, home) => pathForms(p, home).some((f) => SYSTEMD_USER_PATH.test(f.p)) },
   { id: "persistence-schtasks-create", group: "f", label: "create a Windows scheduled task", shell: (sh) => hasCandidate(sh, (c) => c.name === "schtasks" && c.args.some((a) => a.toLowerCase() === "/create")) },
   // A download (curl, wget) in a command that writes a shell rc file: it runs at every shell start.
   { id: "shell-rc-download-append", group: "f", label: "add a download to your shell startup file", shell: (sh) => NET_WORD.test(sh.raw) && writesTo(sh, (p) => SHELL_RC_PATH.test(p)) },
@@ -1733,6 +2127,7 @@ function safeHome() {
   }
 }
 function neverListInputMatch(toolId, toolInput, home = safeHome(), cwd) {
+  resetBraceBudget();
   try {
     const f = fieldsOf(toolInput);
     if (!f) return void 0;
@@ -1752,7 +2147,7 @@ function neverListInputMatch(toolId, toolInput, home = safeHome(), cwd) {
       }
     } else {
       for (const p of pathStrings(f, toolId)) {
-        for (const r2 of NEVER_LIST_INPUT_RULES) if (r2.file?.(p, home)) return { rule: r2.id };
+        for (const r2 of NEVER_LIST_INPUT_RULES) if (r2.file?.(p, home, cwd)) return { rule: r2.id };
       }
     }
   } catch {
@@ -2855,13 +3250,41 @@ function computeArgsHash(args) {
   return createHash2("sha256").update(payload, "utf8").digest("hex");
 }
 
+// src/pem.ts
+var PEM_ANY_CASE = {
+  head: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/gi,
+  tail: /-----END [A-Z0-9 ]*PRIVATE KEY-----/gi
+};
+var PEM_UPPER = {
+  head: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g,
+  tail: /-----END [A-Z ]*PRIVATE KEY-----/g
+};
+function nextBlock(s, from, p) {
+  p.head.lastIndex = from;
+  const h = p.head.exec(s);
+  if (!h) return void 0;
+  p.tail.lastIndex = h.index + h[0].length;
+  const t = p.tail.exec(s);
+  if (!t) return void 0;
+  return [h.index, t.index + t[0].length];
+}
+function hasPemBlock(s, p = PEM_ANY_CASE) {
+  return nextBlock(s, 0, p) !== void 0;
+}
+function replacePemBlocks(s, replacement, p = PEM_ANY_CASE) {
+  let out = "";
+  let pos = 0;
+  for (let b = nextBlock(s, 0, p); b; b = nextBlock(s, pos, p)) {
+    out += s.slice(pos, b[0]) + replacement;
+    pos = b[1];
+  }
+  return pos === 0 ? s : out + s.slice(pos);
+}
+
 // src/orr/agentshield.ts
 function redactEvidence(s) {
   let out = s;
-  out = out.replace(
-    /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
-    "[redacted-pem]"
-  );
+  out = replacePemBlocks(out, "[redacted-pem]", PEM_UPPER);
   out = out.replace(
     /\b(sk_live_|sk_test_|rk_live_|rk_test_|whsec_|ghp_|github_pat_|sk-ant-|sk-proj-|npm_|AIza|xai-|hf_|AKIA)[A-Za-z0-9+/=_-]*\.{3}[A-Za-z0-9+/=_-]+/g,
     "$1[redacted]"
@@ -2998,7 +3421,7 @@ function scrubUrl(value) {
     }
   } catch {
   }
-  return value.replace(/([?&#][^=\s]*=)[^&\s#]+/g, "$1[redacted]");
+  return value.replace(/([?&#][^=\s?&#]*=)[^&\s#]+/g, "$1[redacted]");
 }
 var SHELL_SUMMARY_INPUT_MAX = 8192;
 function hasQueryAssign(s) {
@@ -3024,10 +3447,7 @@ function summarizeShellCommand(cmd) {
 }
 function redactTrailText(s) {
   let out = redactEvidence(s);
-  out = out.replace(
-    /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/gi,
-    "[redacted-pem]"
-  );
+  out = replacePemBlocks(out, "[redacted-pem]");
   out = out.replace(/\bBasic\s+[A-Za-z0-9+/=_-]{4,}/gi, "Basic [redacted]");
   out = out.replace(/\bCookie:\s*[^\s;]+(?:;\s*[^\s;]+)*/gi, "[redacted-cookie]");
   out = out.replace(/\bsession=[^\s;&]+/gi, "session=[redacted]");
@@ -3070,7 +3490,7 @@ function finalize(parts) {
   return `${redacted.slice(0, MAX_LEN - 1)}\u2026`;
 }
 function pathLike(value) {
-  if (/^[a-z][a-z0-9+.-]*:/i.test(value) || /[?&#].*=/.test(value)) {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value) || value.split(/[\n\r\u2028\u2029]/).some(hasQueryAssign)) {
     return scrubUrl(value);
   }
   return value;
@@ -3135,9 +3555,32 @@ var ENTERPRISE_PANES = ["dashboard", "cases", "metrics", "edge", "settings"];
 var FREE = { plan: "free", source: "default", locked: [...ENTERPRISE_PANES] };
 
 // src/dash/render.ts
+var SCHEME_CHAR = /[a-zA-Z0-9+.-]/;
+var USER_STOP = /[/\s:@]/;
+var PASS_STOP = /[/\s@]/;
+function hasUserinfo(s, from) {
+  let k = from;
+  while (k < s.length && !USER_STOP.test(s.charAt(k))) k++;
+  if (k === from || s.charAt(k) !== ":") return false;
+  const pass = ++k;
+  while (k < s.length && !PASS_STOP.test(s.charAt(k))) k++;
+  return k > pass && s.charAt(k) === "@";
+}
+function hasUrlCredentials(s) {
+  for (let i = s.indexOf("://"); i >= 0; i = s.indexOf("://", i + 3)) {
+    let letter = false;
+    for (let j = i - 1; j >= 0 && SCHEME_CHAR.test(s.charAt(j)); j--) {
+      if (/[a-zA-Z]/.test(s.charAt(j))) letter = true;
+    }
+    if (!letter) continue;
+    if (hasUserinfo(s, i + 3)) return true;
+  }
+  return false;
+}
 function assertNoSecrets(text, extra) {
   const hay = extra ? `${text}
 ${extra}` : text;
+  if (hasUrlCredentials(hay)) throw new Error("dashboard frame leaked a secret");
   const pats = [
     /npm_[A-Za-z0-9]{8,}/,
     /Bearer\s+\S{8,}/i,
@@ -3152,7 +3595,6 @@ ${extra}` : text;
     /AKIA[A-Z0-9]{12,}/,
     /eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}/,
     /[?&#](?:access_token|api[_-]?key|token|secret|password|auth)=[^&\s#"']+/i,
-    /[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^/\s:@]+:[^/\s@]+@/,
     /sk-proj-[A-Za-z0-9_\-]{20,}/,
     /Cookie:\s*\S+/i,
     /\bsession=[^\s;&"']{8,}/i,
@@ -3221,9 +3663,7 @@ function takeInput(s) {
   return s.slice(0, DIFF_MAX_INPUT_CHARS);
 }
 function containsPem(blob) {
-  return /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/i.test(
-    blob
-  );
+  return hasPemBlock(blob);
 }
 function prepareLines(rawLines) {
   const out = [];

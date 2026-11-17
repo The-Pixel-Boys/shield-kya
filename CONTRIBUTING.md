@@ -113,8 +113,11 @@ replay file. You can write one in about an hour.
 3. **The tests.** In `test/guard-rule-<id>.test.ts`, list at least 2 commands the rule must stop and at least 3
    everyday commands that must pass (the false-positive bar, below).
 4. **The replay file.** In `replays/class-<id>.yaml`, write the dangerous command and a title. Use placeholder tokens
-   and hosts only. Put your GitHub handle in `credit`.
-5. Run `pnpm test -- guard-rule-<id> replays`, then `pnpm sync:replays` and `pnpm build:guard`. Commit the files they
+   and hosts only. Set `vendor` (the product involved, for example `aws`) and `fix`: one or two sentences on how to
+   prevent the incident with no third-party tool (a native deny rule, a scoped token, a read-only role, soft delete,
+   backups). Name no product of ours in `fix`, and write only what you know to be correct. If the rule's label (the "tried to ..." phrase in `src/guard-pack.ts`) does not say what your call does, add `label: <what the call tries to do>`. Put your GitHub handle in
+   `credit`.
+5. Run `pnpm test -- guard-rule-<id> replays`, then `pnpm sync:replays`, `pnpm sync:replay-pages`, `pnpm sync:features` and `pnpm build:guard`. Commit the files they
    change. Any `TODO` left in a file fails the run on purpose.
 
 **The false-positive bar: three must-pass controls.** A rule that blocks normal work gets uninstalled. We merge a rule

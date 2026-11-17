@@ -1,6 +1,6 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.35.6",
+  "version": "0.35.7",
   "description": "Stops your coding agent from deleting, leaking or dropping things. Records everything else.",
   "license": "MIT",
   "type": "module",
@@ -77,6 +77,9 @@
     "check:channel-copy": "node scripts/check-channel-copy.mjs",
     "sync:replays": "node scripts/replays-scoreboard.mjs",
     "check:replays": "node scripts/replays-scoreboard.mjs --check",
+    "sync:replay-pages": "node scripts/replay-pages.mjs",
+    "check:replay-pages": "node scripts/replay-pages.mjs --check",
+    "check:replay-links": "node scripts/check-replay-links.mjs",
     "new-rule": "node scripts/new-rule.mjs",
     "sync:features": "node scripts/sync-features.mjs",
     "check:features": "node scripts/sync-features.mjs --check",

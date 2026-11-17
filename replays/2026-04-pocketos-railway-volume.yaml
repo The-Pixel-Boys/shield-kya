@@ -13,4 +13,9 @@ input:
 expect: deny
 rule: railway-volume-delete
 since: 0.33.0
+vendor: railway
+fix: >-
+  Keep backups outside the Railway project, so one API call cannot delete a volume and its only
+  backup. A project token (sent in the Project-Access-Token header) reaches one environment of one
+  project, so it limits the damage of a misused token but does not stop a volume delete.
 credit: ""

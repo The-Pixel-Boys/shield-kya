@@ -91,12 +91,15 @@ export function renderHostedFragment(rows) {
   return lines.join("\n");
 }
 
-/** G4: docs/llms.txt, the OSS features (plan oss or both, status stable or beta) as a plain list. */
-export function renderLlms(rows) {
+/**
+ * G4: docs/llms.txt, the OSS features (plan oss or both, status stable or beta) as a plain list. `replayPages` are the
+ * indexable replay pages from replays/pages/pages.json (acquisition build B1b); the section is left out when there are none.
+ */
+export function renderLlms(rows, replayPages = []) {
   const lines = [
     "# Shield KYA features",
     "",
-    "> Generated from sdks/kya/features.json by `pnpm sync:features`. Do not edit by hand. Lists the live open source",
+    "> Generated from sdks/kya/features.json and replays/pages/pages.json by `pnpm sync:features`. Do not edit by hand. Lists the live open source",
     "> CLI features. Hosted features: https://shield-agent.com/docs/kya/hosted-commands. Full table with docs links:",
     "> https://docs.shield-agent.com/features.html",
     "",
@@ -107,6 +110,16 @@ export function renderLlms(rows) {
     ),
     "",
   ];
+  if (replayPages.length > 0) {
+    lines.push(
+      "## Replay pages",
+      "",
+      "Each page rebuilds one dangerous agent call as a test, shows how to prevent it without any extra tool, and states whether KYA stops it. Hubs group the pages by vendor and by agent. Index: https://shield-agent.com/replays",
+      "",
+      ...replayPages.map((p) => `- [${p.title.replace(/[\r\n]+/g, " ").replace(/\[/g, "(").replace(/\]/g, ")")}](https://shield-agent.com${p.path}): ${p.description.replace(/[\r\n]+/g, " ")}`),
+      "",
+    );
+  }
   return lines.join("\n");
 }
 
@@ -148,7 +161,9 @@ export function computeSync(pkg) {
     current: existsSync(pagePath) ? readFileSync(pagePath, "utf8") : null,
   });
   const llmsPath = join(pkg, LLMS);
-  files.push({ path: LLMS, expected: renderLlms(rows), current: existsSync(llmsPath) ? readFileSync(llmsPath, "utf8") : null });
+  const pagesPath = join(pkg, "replays", "pages", "pages.json");
+  const replayPages = existsSync(pagesPath) ? JSON.parse(readFileSync(pagesPath, "utf8")).pages.filter((p) => p.index) : [];
+  files.push({ path: LLMS, expected: renderLlms(rows, replayPages), current: existsSync(llmsPath) ? readFileSync(llmsPath, "utf8") : null });
   if (existsSync(join(pkg, "..", "..", "web"))) {
     const fragPath = join(pkg, HOSTED_FRAGMENT);
     files.push({

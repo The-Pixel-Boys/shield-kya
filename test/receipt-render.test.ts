@@ -454,7 +454,8 @@ describe("renderReceiptHtml sections", () => {
         3,
       ),
     );
-    expect(md).toContain("Allow 0 | Deny 0 | Review 1 | Never 0");
+    expect(md).toContain("Ran 0, Blocked 0, Held 0 | Never 0");
+    expect(md).toContain("Earlier calls (no outcome recorded): Allow 0 | Deny 0 | Review 1");
     expect(md).toContain("**REVIEW**");
     expect(md).not.toContain("| Hold ");
     expect(md).not.toContain("**HOLD**");
@@ -719,15 +720,16 @@ describe("chip filters", () => {
         {},
       ),
     );
-    // Verdict chips keep labels, gain button semantics.
+    // Outcome chips use the current labels; rows with no outcome keep their verdict as "Earlier" chips.
     expect(html).toContain(
-      '<button type="button" class="stat ok" data-fgroup="verdict" data-fvalue="ALLOW" aria-pressed="false" title="Filter: Allow">Allow<b>',
+      '<button type="button" class="stat ok" data-fgroup="outcome" data-fvalue="ran" aria-pressed="false" title="Filter: Ran">Ran<b>',
     );
-    expect(html).toContain('data-fgroup="verdict" data-fvalue="DENY"');
-    expect(html).toContain('data-fgroup="verdict" data-fvalue="REQUIRE_APPROVE"');
+    expect(html).toContain(
+      '<button type="button" class="stat ok" data-fgroup="verdict" data-fvalue="ALLOW" aria-pressed="false" title="Filter: Allow (rows with no outcome recorded)">Earlier: Allow<b>',
+    );
+    expect(html).toContain('data-fgroup="outcome" data-fvalue="blocked"');
+    expect(html).toContain('data-fgroup="outcome" data-fvalue="held"');
     expect(html).toContain('data-fgroup="never" data-fvalue="1"');
-    expect(html).toContain("Deny<b>");
-    expect(html).toContain("Review<b>");
     expect(html).toContain("Never<b>");
     // Mode and plane chips.
     expect(html).toContain('data-fgroup="mode" data-fvalue="observe"');
