@@ -180,7 +180,7 @@ describe("honest verdicts: built CLI, temp KYA_HOME", { timeout: 90_000 }, () =>
     expect(trailRows(sb)[0]).toMatchObject({ outcome: "blocked", reasonCode: "FAIL_CLOSED" });
   });
 
-  it("old trail lines without outcome still open and render as before", () => {
+  it("old trail lines without outcome still open and keep their verdict under the current labels", () => {
     const sb = sandbox();
     const now = Date.now();
     const old = (i: number, verdict: string, reasonCode: string) =>
@@ -188,9 +188,9 @@ describe("honest verdicts: built CLI, temp KYA_HOME", { timeout: 90_000 }, () =>
     mkdirSync(join(sb.home, ".kya"), { recursive: true });
     appendFileSync(join(sb.home, ".kya", "trail.jsonl"), `${old(3, "ALLOW", "ALLOW")}\n${old(2, "DENY", "NEVER_EVENT")}\n${old(1, "REQUIRE_APPROVE", "SHELL_EXEC")}\n`);
     const md = report(sb);
-    expect(md).toContain("Allow 1 | Deny 1 | Review 1 | Never 1");
+    expect(md).toContain("Ran 0, Blocked 0, Held 0 | Never 1");
+    expect(md).toContain("Earlier calls (no outcome recorded): Allow 1 | Deny 1 | Review 1");
     expect(md).toContain("**REVIEW**");
-    expect(md).not.toContain("Ran ");
     // New rows join old ones: outcome counts for the new row, old rows keep their verdict counts on a second line.
     expect(hook(sb, "Bash", "n1", { command: "ls" }).code).toBe(0);
     const mixed = report(sb);

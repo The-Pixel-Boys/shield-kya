@@ -10,4 +10,9 @@ input:
 expect: deny
 rule: git-force-push-protected-branch
 since: 0.32.8
+vendor: git
+fix: >-
+  Protect main on the server (a GitHub branch protection rule or ruleset), leave force pushes off,
+  and require a pull request. Administrators and bypass actors can skip these rules unless you
+  enforce them for administrators, so the agent's token must not belong to either.
 credit: ""

@@ -10,4 +10,9 @@ input:
 expect: deny
 rule: git-force-push
 since: 0.33.0
+vendor: git
+fix: >-
+  Add a branch ruleset on the server that blocks force pushes, or set receive.denyNonFastForwards
+  on a server you run yourself. A ruleset can be skipped by its bypass actors and by
+  administrators unless you enforce it for them, so the agent's token must not belong to either.
 credit: ""

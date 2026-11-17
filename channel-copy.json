@@ -35,7 +35,7 @@
     },
     {
       "file": "assets/report-blocked.png",
-      "sha256": "f129dd8d88be86c53c294533e41303bffde08127254ce4917dfa60c47d3eaa36",
+      "sha256": "2685b58c422589582563b1c1f2c0e237e1caf477b360a3ae345435fbeded20e4",
       "alt": "Blocked panel - the first thing the KYA report shows: calls the guard stopped, or a labelled demo before the first one"
     },
     {

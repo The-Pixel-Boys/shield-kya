@@ -99,11 +99,10 @@ afterAll(() => {
 describe("hosted hook transport (real sockets, dist/cli.js)", () => {
   it("(a) self-signed plane cert: fails closed, the server never sees a request or the key", async () => {
     const before = tlsSeen.requests.length;
-    // The budget includes the cold start of the child process, and one attempt may use half of it. 800 ms was
-    // used up on a busy CI host (main pipeline 3757), and 8000 ms (a 4 s attempt) on a host that ran three
-    // pipelines at once (PR pipeline 4201): PLANE_TIMEOUT instead of PLANE_UNREACHABLE. The certificate failure
-    // comes back at once, so a long budget does not slow this test. 20000 ms gives one attempt 10 s.
-    const r = await hook(`https://127.0.0.1:${tlsPort}`, ["--plane-budget-ms", "20000"]);
+    // Root cause of the flake (main 6040, PR 5956): the client retried the certificate error until the budget ran
+    // out, and the last attempt, cut by the deadline, turned the answer into PLANE_TIMEOUT. A certificate failure
+    // is now final and not retried. The budget flag is clamped to 4000 ms: 8000 and 20000 here changed nothing.
+    const r = await hook(`https://127.0.0.1:${tlsPort}`, ["--plane-budget-ms", "4000"]);
     expect(r.status).toBe(2);
     expect(reason(r.stdout)).toContain("PLANE_UNREACHABLE");
     expect(tlsSeen.requests.length).toBe(before);

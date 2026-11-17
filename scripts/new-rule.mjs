@@ -93,7 +93,7 @@ export function plan(root, id, { credit = "", today = new Date().toISOString().s
   const replay = [
     `id: class-${id}`, `kind: class`, `title: TODO describe the dangerous command in one line`, `date: ${today}`, `host: claude`, `tool: Bash`,
     `input:`, `  command: >-`, `    TODO the dangerous command, with placeholder tokens and hosts only`,
-    `expect: deny`, `rule: ${id}`, `since: ${nextMinor(version)}`, `credit: ${JSON.stringify(credit)}`, ``,
+    `expect: deny`, `rule: ${id}`, `since: ${nextMinor(version)}`, `vendor: TODO-vendor`, `fix: >-`, `  TODO say in one or two sentences how to prevent this without a third-party tool: a native deny rule, a scoped token, a read-only role, soft delete or backups.`, `credit: ${JSON.stringify(credit)}`, ``,
   ].join("\n");
   return {
     writes: { "src/guard-pack.ts": g, "docs/guard-pack.md": lines.join("\n"), [testRel]: test, [replayRel]: replay },
@@ -210,7 +210,7 @@ async function main(argv) {
     }
     console.log(`new rule "${summary.id}":`);
     for (const rel of Object.keys(writes)) console.log(`  wrote ${rel}`);
-    console.log(`\nNext:\n  1. In src/guard-pack.ts, fill in the matcher ${summary.matcher}, the hint and the label (the card says "My coding agent tried to <label>."). Search for TODO.\n  2. In ${summary.testRel}, list 2+ commands to stop and 3+ everyday commands that must pass.\n  3. In ${summary.replayRel}, write the dangerous command (placeholders only) and a title.\n  4. In docs/guard-pack.md, describe the rule in its table row.\n  5. pnpm test -- guard-rule-${summary.id} replays && pnpm sync:replays && pnpm build:guard`);
+    console.log(`\nNext:\n  1. In src/guard-pack.ts, fill in the matcher ${summary.matcher}, the hint and the label (the card says "My coding agent tried to <label>."). Search for TODO.\n  2. In ${summary.testRel}, list 2+ commands to stop and 3+ everyday commands that must pass.\n  3. In ${summary.replayRel}, write the dangerous command (placeholders only), a title, the vendor (for example aws, git, postgres) and the fix: how to prevent it with no third-party tool.\n  4. In docs/guard-pack.md, describe the rule in its table row.\n  5. pnpm test -- guard-rule-${summary.id} replays && pnpm sync:replays && pnpm build:guard`);
     return 0;
   } catch (e) {
     console.error(`new-rule: ${e.message}`);

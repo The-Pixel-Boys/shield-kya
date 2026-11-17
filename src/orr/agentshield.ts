@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import type { OrrCoverageGap, OrrFinding, OrrSeverity } from "../commands/orr.js";
+import { PEM_UPPER, replacePemBlocks } from "../pem.js";
 import { sanitizedScorecardEnv } from "./scorecard.js";
 
 export const AGENTSHIELD_PRODUCER_ID = "harness.agentshield";
@@ -64,10 +65,7 @@ export function buildAgentShieldArgv(absPath: string): {
 
 export function redactEvidence(s: string): string {
   let out = s;
-  out = out.replace(
-    /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
-    "[redacted-pem]",
-  );
+  out = replacePemBlocks(out, "[redacted-pem]", PEM_UPPER);
   // AgentShield maskSecretValue form: first8...last4
   out = out.replace(
     /\b(sk_live_|sk_test_|rk_live_|rk_test_|whsec_|ghp_|github_pat_|sk-ant-|sk-proj-|npm_|AIza|xai-|hf_|AKIA)[A-Za-z0-9+/=_-]*\.{3}[A-Za-z0-9+/=_-]+/g,

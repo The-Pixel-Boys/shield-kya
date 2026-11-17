@@ -85,12 +85,17 @@ There is no open gap.
 
 63 everyday commands (for example `npm test`, `git status`, `prisma migrate dev`) are in the [`replays/`](../replays) folder as files named `control-*.yaml`. Their results are in [`replays/scoreboard.json`](../replays/scoreboard.json).
 
+## Replay pages
+
+Each incident and class has a public page at `shield-agent.com/replays/<id>`, built from its replay file by `pnpm sync:replay-pages` into [`replays/pages/`](../replays/pages). A page shows what happens, the call, the fix that needs no extra tool, then what KYA does, the install lines and related replays. There is also a hub for each vendor (`/replays/vendor/<vendor>`) and for each host recipe (`/replays/agent/<host>`). Every replay ran on Claude Code only, and the agent pages say so. Do not edit the generated files: `pnpm check:replay-pages` fails when a page is stale or has no replay.
+
 ## Add a replay
 
 1. Copy a file in `replays/` and change the fields. The file name must be the `id` plus `.yaml`.
 2. Use placeholder tokens and hosts. The test rejects a file that holds a real secret shape.
 3. An incident needs at least one source link that opens. Set `reconstructed: true` when the exact call was not published.
-4. Put your GitHub handle (no @) in `credit`. The scoreboard shows it in the Credit column and links it to your profile. Leave it empty for no credit.
-5. Run `pnpm test -- replays` and `pnpm sync:replays`. Commit the files that change.
+4. An incident or a class needs two more fields. `vendor` is the product or service involved, in lower case (for example `aws`, `git`, `postgres`). `fix` is one or two sentences on how to prevent the incident with no third-party tool: a native deny rule, a scoped token, a read-only role, soft delete or backups. Name no product of ours in `fix`. A control has neither field. Where the label of the rule does not say what this call does, add `label`: what the call tries to do, in plain lower-case words (for example `wipe the root folder`).
+5. Put your GitHub handle (no @) in `credit`. The scoreboard shows it in the Credit column and links it to your profile. Leave it empty for no credit.
+6. Run `pnpm test -- replays`, `pnpm sync:replays`, `pnpm sync:replay-pages` and `pnpm sync:features`. Commit the files that change.
 
 To add a whole guard rule (rule, tests and replay file together), run `pnpm new-rule <id>`. See [CONTRIBUTING.md](../CONTRIBUTING.md#add-a-rule).

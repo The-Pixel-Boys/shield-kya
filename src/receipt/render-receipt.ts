@@ -136,9 +136,11 @@ function esc(s: string): string {
  * Sanitize untrusted text for the Markdown artifact: strip ANSI/control and
  * bidi/zero-width chars (stripEscapes), then escape the MD/HTML-significant
  * characters so values cannot break formatting or inject raw HTML/links.
+ * Backslash is escaped first, so a literal backslash cannot cancel an escape after it.
  */
 function mdText(s: string): string {
   return stripEscapes(s)
+    .replace(/\\/g, "\\\\")
     .replace(/`/g, "\\`")
     .replace(/([[\]<>])/g, "\\$1");
 }
@@ -1019,8 +1021,8 @@ function dashboardPanel(db: Dashboard): string {
   ): string =>
     count > 0 ? barRow(label, group, value, pct(count), `${pct(count)}%`, fill) : "";
   const om = db.outcomeMix;
-  const mixCard = om.recorded > 0
-    ? `<div class="db-card">
+  // Always the current labels. Rows from before outcomes existed keep their stored verdict, labelled "Earlier".
+  const mixCard = `<div class="db-card">
     <h3>Outcome mix</h3>
     ${mixRow("Ran", "outcome", "ran", om.ran, "ok")}
     ${mixRow("Blocked", "outcome", "blocked", om.blocked, "bad")}
@@ -1029,13 +1031,6 @@ function dashboardPanel(db: Dashboard): string {
     ${mixRow("Earlier: Allow", "verdict", "ALLOW", om.legacyMix.allow, "ok")}
     ${mixRow("Earlier: Review", "verdict", "REQUIRE_APPROVE", om.legacyMix.review, "warn")}
     ${mixRow("Earlier: Deny", "verdict", "DENY", om.legacyMix.deny, "bad")}
-    ${mixRow("Never", "never", "1", db.verdictMix.never, "bad")}
-  </div>`
-    : `<div class="db-card">
-    <h3>Verdict mix</h3>
-    ${mixRow("Allow", "verdict", "ALLOW", db.verdictMix.allow, "ok")}
-    ${mixRow("Review", "verdict", "REQUIRE_APPROVE", db.verdictMix.review, "warn")}
-    ${mixRow("Deny", "verdict", "DENY", db.verdictMix.deny, "bad")}
     ${mixRow("Never", "never", "1", db.verdictMix.never, "bad")}
   </div>`;
 
@@ -2069,9 +2064,9 @@ function verdictsHeroCard(c: VerdictCounts, total: number): string {
   const mixRow = (label: string, n: number, fill: "ok" | "warn" | "bad"): string =>
     `<div class="mix-row"><span class="mix-lab">${label}</span><span class="mix-bar"><span class="mix-fill ${fill}" style="width:${pct(n)}%"></span></span><span class="mix-num">${n}</span></div>`;
   const o = c.outcomes;
-  if (o.recorded > 0) {
-    const row = (label: string, n: number, fill: "ok" | "warn" | "bad"): string => (n > 0 ? mixRow(label, n, fill) : "");
-    return `<section class="panel" aria-label="Verdicts">
+  // Always the current labels, zeros included. Rows from before outcomes existed keep their stored verdict, labelled "Earlier".
+  const row = (label: string, n: number, fill: "ok" | "warn" | "bad"): string => (n > 0 ? mixRow(label, n, fill) : "");
+  return `<section class="panel" aria-label="Verdicts">
   <h2>Decisions</h2>
   <div class="mix">
     ${mixRow("Ran", o.ran, "ok")}
@@ -2081,16 +2076,6 @@ function verdictsHeroCard(c: VerdictCounts, total: number): string {
     ${row("Earlier: Allow", c.allow, "ok")}
     ${row("Earlier: Deny", c.deny, "bad")}
     ${row("Earlier: Review", c.require, "warn")}
-    ${mixRow("Never", c.never, "bad")}
-  </div>
-</section>`;
-  }
-  return `<section class="panel" aria-label="Verdicts">
-  <h2>Decisions</h2>
-  <div class="mix">
-    ${mixRow("Allow", c.allow, "ok")}
-    ${mixRow("Deny", c.deny, "bad")}
-    ${mixRow("Review", c.require, "warn")}
     ${mixRow("Never", c.never, "bad")}
   </div>
 </section>`;
@@ -2557,27 +2542,19 @@ const zoneBody = (parts: readonly string[], empty: string): string =>
 /** Inner markup of the Activity counts bar (verdict buttons + mode/plane chips). */
 function statCountsInner(c: VerdictCounts, chips: ReturnType<typeof statChips>): string {
   const o = c.outcomes;
-  if (o.recorded > 0) {
-    const btn = (label: string, n: number, group: string, value: string, cls: string, title: string): string =>
-      `<button type="button" class="stat${cls ? ` ${cls}` : ""}" data-fgroup="${group}" data-fvalue="${value}" aria-pressed="false" title="Filter: ${title}">${label}<b>${n}</b></button>`;
-    // Rows from before outcomes existed keep their verdict counts, labelled as earlier rows.
-    const earlier = (label: string, n: number, value: string, cls: string): string =>
-      n > 0 ? btn(`Earlier: ${label}`, n, "verdict", value, cls, `${label} (rows with no outcome recorded)`) : "";
-    const howTo = o.wouldHold > 0 ? `\n        <span class="strict-howto">${strictHowTo(o.wouldHold, (t) => `<code>${t}</code>`)}</span>` : "";
-    return `${btn("Ran", o.ran, "outcome", "ran", "ok", "Ran")}
+  const btn = (label: string, n: number, group: string, value: string, cls: string, title: string): string =>
+    `<button type="button" class="stat${cls ? ` ${cls}` : ""}" data-fgroup="${group}" data-fvalue="${value}" aria-pressed="false" title="Filter: ${title}">${label}<b>${n}</b></button>`;
+  // Rows from before outcomes existed keep their verdict counts, labelled as earlier rows.
+  const earlier = (label: string, n: number, value: string, cls: string): string =>
+    n > 0 ? btn(`Earlier: ${label}`, n, "verdict", value, cls, `${label} (rows with no outcome recorded)`) : "";
+  const howTo = o.wouldHold > 0 ? `\n        <span class="strict-howto">${strictHowTo(o.wouldHold, (t) => `<code>${t}</code>`)}</span>` : "";
+  return `${btn("Ran", o.ran, "outcome", "ran", "ok", "Ran")}
         ${btn("Blocked", o.blocked, "outcome", "blocked", "bad", "Blocked")}
         ${btn("Held", o.held, "outcome", "held", "warn", "Held")}
         ${o.error > 0 ? btn("Error", o.error, "outcome", "error", "", "Error") : ""}
         ${earlier("Allow", c.allow, "ALLOW", "ok")}${earlier("Deny", c.deny, "DENY", "bad")}${earlier("Review", c.require, "REQUIRE_APPROVE", "warn")}
         <button type="button" class="stat" data-fgroup="never" data-fvalue="1" aria-pressed="false" title="Filter: Never">Never<b>${c.never}</b></button>
         ${chips.modes}${chips.planes}${howTo}
-        <button type="button" class="stat clear-filters" id="clear-filters" hidden>Clear filters ×</button>`;
-  }
-  return `<button type="button" class="stat ok" data-fgroup="verdict" data-fvalue="ALLOW" aria-pressed="false" title="Filter: Allow">Allow<b>${c.allow}</b></button>
-        <button type="button" class="stat bad" data-fgroup="verdict" data-fvalue="DENY" aria-pressed="false" title="Filter: Deny">Deny<b>${c.deny}</b></button>
-        <button type="button" class="stat warn" data-fgroup="verdict" data-fvalue="REQUIRE_APPROVE" aria-pressed="false" title="Filter: Review">Review<b>${c.require}</b></button>
-        <button type="button" class="stat" data-fgroup="never" data-fvalue="1" aria-pressed="false" title="Filter: Never">Never<b>${c.never}</b></button>
-        ${chips.modes}${chips.planes}
         <button type="button" class="stat clear-filters" id="clear-filters" hidden>Clear filters ×</button>`;
 }
 
@@ -3753,15 +3730,11 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     "",
     ...blockedMarkdown(model.events, nowMs),
   ];
-  if (o.recorded > 0) {
-    // Counted by what happened to each call. Rows from before outcomes existed keep their verdict counts, on a second line.
-    lines.push(`${outcomeHeadline(o)} | Never ${c.never}`, "");
-    if (o.wouldHold > 0) lines.push(strictHowTo(o.wouldHold, (t) => `\`${t}\``), "");
-    if (o.legacy > 0) {
-      lines.push(`Earlier calls (no outcome recorded): Allow ${c.allow} | Deny ${c.deny} | Review ${c.require}`, "");
-    }
-  } else {
-    lines.push(`Allow ${c.allow} | Deny ${c.deny} | Review ${c.require} | Never ${c.never}`, "");
+  // Counted by what happened to each call. Rows from before outcomes existed keep their verdict counts, on a second line.
+  lines.push(`${outcomeHeadline(o)} | Never ${c.never}`, "");
+  if (o.wouldHold > 0) lines.push(strictHowTo(o.wouldHold, (t) => `\`${t}\``), "");
+  if (o.legacy > 0) {
+    lines.push(`Earlier calls (no outcome recorded): Allow ${c.allow} | Deny ${c.deny} | Review ${c.require}`, "");
   }
   // Feed rows. With outcomes recorded the feed leads (blocked rows first); without, it stays where it was.
   const feedLines: string[] = [
@@ -3833,10 +3806,7 @@ export function renderReceiptMarkdown(model: ReceiptModel): string {
     // never is a reason overlay: the Never share is computed from neverEvent
     // rows on top of the same 100% = total events base as the verdict buckets.
     const om = db.outcomeMix;
-    const mixLine =
-      om.recorded > 0
-        ? `Outcome mix: Ran ${pct(om.ran)}% · Blocked ${pct(om.blocked)}% · Held ${pct(om.held)}%${om.error > 0 ? ` · Error ${pct(om.error)}%` : ""}${om.legacy > 0 ? ` · Earlier (no outcome): Allow ${pct(om.legacyMix.allow)}% · Review ${pct(om.legacyMix.review)}% · Deny ${pct(om.legacyMix.deny)}%` : ""} · Never ${pct(db.verdictMix.never)}%`
-        : `Verdict mix: Allow ${pct(db.verdictMix.allow)}% · Review ${pct(db.verdictMix.review)}% · Deny ${pct(db.verdictMix.deny)}% · Never ${pct(db.verdictMix.never)}%`;
+    const mixLine = `Outcome mix: Ran ${pct(om.ran)}% · Blocked ${pct(om.blocked)}% · Held ${pct(om.held)}%${om.error > 0 ? ` · Error ${pct(om.error)}%` : ""}${om.legacy > 0 ? ` · Earlier (no outcome): Allow ${pct(om.legacyMix.allow)}% · Review ${pct(om.legacyMix.review)}% · Deny ${pct(om.legacyMix.deny)}%` : ""} · Never ${pct(db.verdictMix.never)}%`;
     lines.push("## Analytics", "", mixLine, "");
     if (db.activity.buckets.length > 0) {
       const max = Math.max(1, ...db.activity.buckets.map((b) => b.count));

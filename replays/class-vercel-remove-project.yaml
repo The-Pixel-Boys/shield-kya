@@ -10,4 +10,9 @@ input:
 expect: deny
 rule: vercel-remove
 since: 0.35.0
+vendor: vercel
+fix: >-
+  Use a Vercel access token for the one team the agent works in, and not a token for your whole
+  account. Keep the code in Git and a copy of the project settings and environment variables
+  outside Vercel, so a removed project can be set up again.
 credit: ""

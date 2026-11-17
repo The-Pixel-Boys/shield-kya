@@ -10,4 +10,8 @@ input:
 expect: deny
 rule: rm-git-dir
 since: 0.35.0
+vendor: git
+fix: >-
+  Push the repository to a remote often, so the history also exists outside the project folder. A
+  mirror clone (git clone --mirror) or a backup of the folder works too.
 credit: ""

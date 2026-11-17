@@ -10,4 +10,9 @@ input:
 expect: deny
 rule: docker-volumes
 since: 0.33.0
+vendor: docker
+fix: >-
+  Back up the data in named volumes to a place outside Docker. Do not let the agent use a Docker
+  daemon that holds volumes you cannot rebuild, because access to the Docker socket is access to
+  every volume.
 credit: ""

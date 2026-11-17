@@ -10,4 +10,9 @@ input:
 expect: deny
 rule: sql-drop
 since: 0.33.0
+vendor: postgres
+fix: >-
+  Do not grant the TRUNCATE privilege to the agent's role, and do not make that role the owner of
+  the tables, because owners can truncate, and CASCADE reaches every table that has a foreign key
+  to the target. Keep point-in-time recovery on and test a restore.
 credit: ""

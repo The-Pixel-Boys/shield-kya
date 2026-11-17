@@ -248,19 +248,35 @@ describe("report counts by outcome", () => {
     expect(html).toContain(`class="strict-howto"`);
   });
 
-  it("old trail lines render as before (no outcome anywhere)", () => {
+  it("old trail lines (no outcome anywhere) keep their verdict, labelled Earlier, under the current labels", () => {
     const old = [ev({ ts: iso(1), verdict: "ALLOW", reasonCode: "ALLOW" }), ev({ ts: iso(2) }), ev({ ts: iso(3), verdict: "DENY", reasonCode: "NEVER_EVENT" })];
     const md = renderReceiptMarkdown(buildWindowReceiptModel(old, 3));
-    expect(md).toContain("Allow 1 | Deny 1 | Review 1 | Never 1");
+    expect(md).toContain("Ran 0, Blocked 0, Held 0 | Never 1");
+    expect(md).toContain("Earlier calls (no outcome recorded): Allow 1 | Deny 1 | Review 1");
     expect(md).toContain("**REVIEW**");
     const html = renderReceiptHtml(buildWindowReceiptModel(old, 3));
-    expect(html).toContain("Review<b>1</b>");
-    expect(html).not.toContain("Ran<b>");
+    expect(html).toContain("Earlier: Review<b>1</b>");
+    expect(html).toContain("Ran<b>0</b>");
+    expect(html).not.toMatch(/>Review<b>/);
     expect(html).not.toContain(`class="strict-howto"`);
-    expect(html).toContain("<h3>Verdict mix</h3>");
+    expect(html).toContain("<h3>Outcome mix</h3>");
+    expect(html).not.toContain("<h3>Verdict mix</h3>");
     // Old rows are never collapsed.
     const same = [ev({ ts: iso(1), summary: "shell echo", argsHash: "h" }), ev({ ts: iso(2), summary: "shell echo", argsHash: "h" })];
     expect(renderReceiptMarkdown(buildWindowReceiptModel(same, 3))).not.toContain("times");
+  });
+
+  it("an empty trail shows the current labels with zeros, never Allow, Deny or Review", () => {
+    const model = buildWindowReceiptModel([], 3);
+    const md = renderReceiptMarkdown(model);
+    expect(md).toContain("Ran 0, Blocked 0, Held 0 | Never 0");
+    expect(md).not.toMatch(/Allow \d+ \| Deny \d+ \| Review \d+/);
+    const html = renderReceiptHtml(model);
+    const card = html.match(/<section class="panel" aria-label="Verdicts">[\s\S]*?<\/section>/)?.[0] ?? "";
+    for (const l of ["Ran", "Blocked", "Held", "Never"]) expect(card).toContain(`<span class="mix-lab">${l}</span>`);
+    for (const l of ["Allow", "Deny", "Review"]) expect(card).not.toContain(`<span class="mix-lab">${l}</span>`);
+    expect(html).toContain("Ran<b>0</b>");
+    expect(html).not.toMatch(/>(Allow|Deny|Review)<b>/);
   });
 
   it("mixed trail: new rows by outcome, old rows by verdict on a second line", () => {
@@ -291,10 +307,10 @@ describe("share and certify read outcome", () => {
     const { stats } = buildSharePayload(buildWindowReceiptModel(events, 3));
     expect(stats).toMatchObject({ total: 5, allow: 3, deny: 1, review: 1, ran: 3, blocked: 1, held: 1, error: 0 });
   });
-  it("share summary for old rows is unchanged and has no outcome fields", () => {
+  it("share summary for old rows keeps the verdict counts and sends zero outcome counts (an old allow never ran)", () => {
     const { stats } = buildSharePayload(buildWindowReceiptModel([ev({ ts: iso(1) }), ev({ ts: iso(2), verdict: "ALLOW" })], 3));
     expect(stats).toMatchObject({ allow: 1, review: 1, deny: 0 });
-    expect(stats).not.toHaveProperty("ran");
+    expect(stats).toMatchObject({ ran: 0, blocked: 0, held: 0, error: 0 });
   });
   it("certify trail stats keep the verdict mix (signed bundle) and add outcomes only when recorded", () => {
     const withOutcome = trailStats([ran(1), blocked(2)]);

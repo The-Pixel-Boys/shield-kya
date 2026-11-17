@@ -172,6 +172,9 @@ input:
   command: >-
     ls -la
 expect: allow
+vendor: shell
+fix: >-
+  Run the agent in a container that holds no data you need.
 `;
   const problems = (text: string, file = "x-1.yaml"): string[] => validateReplay(parseReplay(text), file);
 
@@ -199,6 +202,51 @@ expect: allow
     expect(problems(base + "rule: r-1\n")).toContain("an allow replay has no rule");
     expect(problems(base.replace("kind: class", "kind: control") + "status: gap\n")).toContain("a control must expect allow and cannot be a gap");
     expect(problems(base + "reconstructed: true\n")).toContain("only an incident can be reconstructed");
+  });
+
+  it("requires vendor and fix on every incident and class, and refuses them on a control", () => {
+    const noFields = base.replace(/vendor: shell\nfix: >-\n {2}[^\n]*\n/, "");
+    expect(noFields).not.toContain("vendor:");
+    for (const kind of ["class", "incident"]) {
+      const text = noFields.replace("kind: class", `kind: ${kind}`).replace("host:", kind === "incident" ? "sources:\n  - https://example.test/a\nhost:" : "host:");
+      expect(problems(text)).toEqual(expect.arrayContaining(["missing vendor", "missing fix"]));
+    }
+    expect(problems(base.replace("kind: class", "kind: control"))).toContain("vendor, fix and label are for incidents and classes, not controls");
+    expect(problems(noFields.replace("kind: class", "kind: control"))).toEqual([]);
+    expect(problems(base.replace("vendor: shell", "vendor: Shell Co"))).toContain("vendor must be lower-case words joined by dashes");
+    expect(problems(base.replace("vendor: shell", "vendor:\n  name: shell"))).toContain("vendor must be lower-case words joined by dashes");
+    expect(problems(base.replace(/fix: >-\n {2}[^\n]*\n/, "fix:\n  - one\n"))).toContain("fix must be text");
+    expect(problems(base.replace("Run the agent in a container that holds no data you need.", "Short."))).toContain("fix must be 40 to 420 characters");
+    expect(problems(base.replace("Run the agent in a container", "Run it. Then run it again. Run it a third time in a container"))).toContain("fix must be one or two sentences");
+    expect(problems(base.replace("Run the agent", "Use KYA to run the agent"))).toContain("fix must not name KYA or Shield: it is the way to prevent the incident without us");
+  });
+
+  it("refuses a fix that a fold broke at a hyphen, and checks a label", () => {
+    expect(problems(base.replace("Run the agent in a container", "Run aws rds modify-db-instance --deletion- protection in a container"))).toContain("fix has a hyphen followed by a space: a folded line broke a word or a command flag (reflow the lines)");
+    expect(problems(base.replace("vendor: shell\n", "vendor: shell\nlabel: wipe the root folder\n"))).toEqual([]);
+    for (const bad of ["Wipe it", "wipe it.", "no", "x".repeat(90)]) expect(problems(base.replace("vendor: shell\n", `vendor: shell\nlabel: ${bad}\n`)), bad).toContain("label must be 3 to 80 characters of plain lower-case words with no full stop (what the call tries to do)");
+    expect(problems(base.replace("kind: class", "kind: control").replace(/vendor: shell\nfix: >-\n {2}[^\n]*\n/, "") + "label: wipe it\n")).toContain("vendor, fix and label are for incidents and classes, not controls");
+  });
+
+  it("no fix in a replay file is split at a hyphen: no folded line ends with one, and no flag has a stray space", () => {
+    for (const f of readdirSync(REPLAYS).filter((x) => x.endsWith(".yaml"))) {
+      const block = /^fix: >-\n((?: {2}[^\n]*\n)+)/m.exec(readFileSync(join(REPLAYS, f), "utf8"))?.[1];
+      if (!block) continue;
+      for (const line of block.split("\n").filter(Boolean)) expect(line.trimEnd().endsWith("-"), `${f}: ${line}`).toBe(false);
+    }
+    for (const r of replays as (Replay & { fix?: string })[]) {
+      if (!r.fix) continue;
+      expect(r.fix, r.id).not.toMatch(/--[a-z0-9][a-z0-9-]*-\s/);
+      expect(r.fix, r.id).not.toMatch(/[A-Za-z0-9]- /);
+    }
+    expect((replays.find((r) => r.id === "class-aws-rds-delete-instance") as { fix: string }).fix).toContain("aws rds modify-db-instance --db-instance-identifier NAME --deletion-protection");
+  });
+
+  it("every incident and class replay in the folder has a vendor and a fix, and no control has one", () => {
+    for (const r of replays as (Replay & { vendor?: string; fix?: string })[]) {
+      if (r.kind === "control") expect({ id: r.id, vendor: r.vendor, fix: r.fix }).toEqual({ id: r.id, vendor: undefined, fix: undefined });
+      else expect({ id: r.id, vendor: typeof r.vendor, fix: typeof r.fix }).toEqual({ id: r.id, vendor: "string", fix: "string" });
+    }
   });
 
   it("requires a gap to carry a planned rule, a target and an issue link", () => {
@@ -276,6 +324,9 @@ input:
 expect: deny
 rule: r-1
 since: 0.35.0
+vendor: shell
+fix: >-
+  Keep a backup of the folder, and push the work to a remote.
 `;
     const problems = (extra: string, text = f): string[] => validateReplay(parseReplay(text + extra), "class-z.yaml");
     expect(problems('credit: ""\n')).toEqual([]);
@@ -292,7 +343,7 @@ since: 0.35.0
     const root = tmp("kya-replay-root-");
     mkdirSync(join(root, "replays"));
     mkdirSync(join(root, "docs"));
-    for (const f of readdirSync(REPLAYS)) writeFileSync(join(root, "replays", f), readFileSync(join(REPLAYS, f)));
+    for (const f of readdirSync(REPLAYS, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name)) writeFileSync(join(root, "replays", f), readFileSync(join(REPLAYS, f)));
     for (const [p, text] of Object.entries(generate(root) as Record<string, string>)) writeFileSync(join(root, p), text);
     const check = () => spawnSync(process.execPath, [join(PKG, "scripts", "replays-scoreboard.mjs"), "--check", "--root", root], { encoding: "utf8" });
     expect(check().status).toBe(0);

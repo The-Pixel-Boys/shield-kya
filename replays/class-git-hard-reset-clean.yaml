@@ -10,4 +10,9 @@ input:
 expect: deny
 rule: git-hard-reset-clean
 since: 0.33.0
+vendor: git
+fix: >-
+  Commit or stash before the agent starts, and push the branch to a remote. Git can bring back
+  committed work, but not untracked or ignored files, so keep a copy of files such as .env that
+  git does not track.
 credit: ""

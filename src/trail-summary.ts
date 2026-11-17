@@ -4,6 +4,7 @@
  * Never serializes full args or body/content values.
  */
 import { redactEvidence } from "./orr/agentshield.js";
+import { replacePemBlocks } from "./pem.js";
 
 const MAX_LEN = 80;
 
@@ -123,7 +124,9 @@ export function scrubUrl(value: string): string {
   } catch {
     /* not a URL */
   }
-  return value.replace(/([?&#][^=\s]*=)[^&\s#]+/g, "$1[redacted]");
+  // The key part excludes ?&# so a long run of them cannot rescan the tail (quadratic); the output is the same
+  // because the kept prefix and key are both written back.
+  return value.replace(/([?&#][^=\s?&#]*=)[^&\s#]+/g, "$1[redacted]");
 }
 
 /** Longest command text read for a summary. */
@@ -164,10 +167,7 @@ export function summarizeShellCommand(cmd: string): string {
 export function redactTrailText(s: string): string {
   let out = redactEvidence(s);
   // Collapse full PEM blocks before any line-oriented use.
-  out = out.replace(
-    /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/gi,
-    "[redacted-pem]",
-  );
+  out = replacePemBlocks(out, "[redacted-pem]");
   out = out.replace(/\bBasic\s+[A-Za-z0-9+/=_-]{4,}/gi, "Basic [redacted]");
   out = out.replace(/\bCookie:\s*[^\s;]+(?:;\s*[^\s;]+)*/gi, "[redacted-cookie]");
   out = out.replace(/\bsession=[^\s;&]+/gi, "session=[redacted]");
@@ -215,7 +215,7 @@ function finalize(parts: string[]): string | undefined {
 }
 
 function pathLike(value: string): string {
-  if (/^[a-z][a-z0-9+.-]*:/i.test(value) || /[?&#].*=/.test(value)) {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value) || value.split(/[\n\r\u2028\u2029]/).some(hasQueryAssign)) {
     return scrubUrl(value);
   }
   return value;

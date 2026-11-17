@@ -82,7 +82,8 @@ describe("pnpm new-rule: scaffold", () => {
     expect(test).toMatch(/STOPPED: string\[\] = \[\n  "TODO[^\n]*\n  "TODO/);
     const replayText = readFileSync(join(d, "replays/class-sample-widget-rule.yaml"), "utf8");
     const replay = parseReplay(replayText);
-    expect(replay).toMatchObject({ id: "class-sample-widget-rule", kind: "class", expect: "deny", rule: "sample-widget-rule", credit: "outside-dev", host: "claude", tool: "Bash" });
+    expect(replay).toMatchObject({ id: "class-sample-widget-rule", kind: "class", expect: "deny", rule: "sample-widget-rule", credit: "outside-dev", host: "claude", tool: "Bash", vendor: "TODO-vendor" });
+    expect(replay.fix).toMatch(/^TODO say in one or two sentences/);
     expect(replay.since).toMatch(/^\d+\.\d+\.0$/);
     // valid in shape; the only problem is the TODO placeholders, so a forgotten stub cannot be merged
     expect(validateReplay(replay, "class-sample-widget-rule.yaml")).toEqual(["a TODO placeholder is left in the file (pnpm new-rule writes them: replace each one)"]);

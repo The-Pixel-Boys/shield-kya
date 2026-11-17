@@ -10,4 +10,9 @@ input:
 expect: deny
 rule: rm-root-home
 since: 0.33.0
+vendor: filesystem
+label: wipe the root folder
+fix: >-
+  In shell scripts, write ${VAR:?} before a deletion, as in rm -rf "${BUILD_DIR:?}/", so the
+  script stops when the variable is empty or unset. Also start scripts with set -u.
 credit: ""

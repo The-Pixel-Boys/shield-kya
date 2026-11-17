@@ -10,4 +10,9 @@ input:
 expect: deny
 rule: redis-flush
 since: 0.35.0
+vendor: redis
+fix: >-
+  Give the agent a Redis ACL user (Redis 6 or later) with only +@read, or with +@all -@dangerous
+  -flushall -flushdb, so it cannot run FLUSHALL or FLUSHDB: key patterns do not limit those
+  commands. Keep the production REDIS_URL out of the agent environment.
 credit: ""

@@ -61,7 +61,8 @@ describe("buildSharePayload", () => {
     expect(payload.title).toBe("Agent activity");
     expect(payload.rangeLabel).toBe("last 3 days");
     expect(payload.cliVersion).toBeTruthy();
-    expect(payload.stats).toEqual({ total: 3, allow: 1, review: 1, deny: 1, never: 1, sessions: 2 });
+    // No row records an outcome: the outcome keys are still there (zeros) and the verdict counts are the earlier rows.
+    expect(payload.stats).toEqual({ total: 3, allow: 1, review: 1, deny: 1, never: 1, ran: 0, blocked: 0, held: 0, error: 0, sessions: 2 });
     expect(payload.products).toEqual([
       { label: "Cursor", count: 2 },
       { label: "Claude Code", count: 1 },
@@ -81,6 +82,28 @@ describe("buildSharePayload", () => {
     expect(serialized).not.toContain("10.0.0.1");
     expect(serialized).not.toContain("read agents file");
     expect(serialized).not.toContain("agt-1");
+  });
+
+  it("an empty trail still carries Ran, Blocked, Held and Error as zeros", () => {
+    const payload = buildSharePayload(buildWindowReceiptModel([], 3));
+    expect(payload.stats).toEqual({ total: 0, allow: 0, review: 0, deny: 0, never: 0, ran: 0, blocked: 0, held: 0, error: 0, sessions: 0 });
+  });
+
+  it("rows with an outcome count as ran, blocked and held; rows without keep their verdict in allow, review and deny", () => {
+    const payload = buildSharePayload(
+      buildWindowReceiptModel(
+        [
+          ev({ ts: "2026-10-01T10:00:00.000Z", sessionId: "a", outcome: "ran" }),
+          ev({ ts: "2026-10-01T09:00:00.000Z", sessionId: "a", outcome: "ran", verdict: "REQUIRE_APPROVE", reasonCode: "SHELL_EXEC" }),
+          ev({ ts: "2026-10-01T08:00:00.000Z", sessionId: "a", outcome: "blocked", verdict: "DENY", reasonCode: "NEVER_EVENT", neverEvent: true }),
+          ev({ ts: "2026-10-01T07:00:00.000Z", sessionId: "a", outcome: "held", verdict: "REQUIRE_APPROVE", reasonCode: "HOLD_REVIEW" }),
+          ev({ ts: "2026-10-01T06:00:00.000Z", sessionId: "a" }),
+        ],
+        3,
+      ),
+    );
+    // allow = ran (2) + one old ALLOW row; the hosted page shows allow minus ran as the "Earlier" part.
+    expect(payload.stats).toMatchObject({ total: 5, ran: 2, blocked: 1, held: 1, error: 0, allow: 3, deny: 1, review: 1, never: 1 });
   });
 
   it("caps products at 6 and reason codes at 8", () => {

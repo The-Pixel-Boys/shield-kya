@@ -1,9 +1,9 @@
 > /kya-guard:status
 KYA Guard status
-Rules loaded: 51 (30 never-list, 21 guard shell), plus the secret-write and exfil checks.
+Rules loaded: 52 (31 never-list, 21 guard shell), plus the secret-write and exfil checks.
 Calls seen in 7 days: 4
 Calls blocked in 7 days: 2 (0 more held for you to answer)
-Last 2 stopped: force push over a protected branch [git-force-push-protected-branch] (2026-11-14 15:32 UTC), destroy your infrastructure [terraform-destroy] (2026-11-14 15:32 UTC)
+Last 2 stopped: force push over a protected branch [git-force-push-protected-branch] (2026-11-16 19:06 UTC), destroy your infrastructure [terraform-destroy] (2026-11-16 19:06 UTC)
 Make a card to post about the last stop (an image with the rule, the host and the date, nothing private): /kya-guard:share
 To allow one rule: edit ~/.kya/config.json yourself and add a guardAllow entry (rule id plus an exact path or command). The agent cannot edit that file.
 Full report: npx @shield-agent/kya receipt --open

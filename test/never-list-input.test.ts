@@ -74,6 +74,7 @@ const POSITIVE: Record<string, string[]> = {
   "ssh-tunnel-device": ["ssh -w 0:0 host", "ssh -w 0:0 user@203.0.113.7"],
   "ssh-proxy-command-exec": ["ssh -o 'ProxyCommand=nc -X connect proxy 3128' host", "ssh -oProxyCommand=\"sh -c 'x'\" host"],
   "ssh-code-loading-option": ["ssh -I /tmp/evil.so host", "ssh -o PKCS11Provider=/tmp/evil.so host"],
+  "keychain-password-dump": ["security find-generic-password -w -s svc", "security find-internet-password -gs example.com", "security dump-keychain -d login.keychain"],
   "ssh-config-written": ["printf 'Host *\\nProxyCommand=x\\n' > /tmp/c; ssh -F /tmp/c host"],
   "long-input-persistence-words": ["echo " + "x ".repeat(40000) + " | crontab -", "echo " + "x ".repeat(40000) + " >> ~/.ssh/authorized_keys"],
 };
@@ -246,6 +247,29 @@ describe("never-list input rules: linear time on adversarial input", () => {
     "cat " + fill(".e[n]v "),
     "git show " + fill("a:.env "),
     "echo " + fill("$(curl x)") + " | sh",
+    // Store names: long globs and brace groups against the profile folders (checked only after the cheap folder test).
+    "cat ~/Library/Application\\ Support/Google/Chrome/Default/" + fill("*a"),
+    "cat ~/" + fill("{a,b}"),
+    "cat ~/L" + fill("*a") + "/x",
+    "cat ~/Library/K" + fill("*a") + "/x",
+    "cat ~/Library/" + fill("{Keychains,x}/"),
+    "cat ~/.mozilla/firefox/abc/" + fill("key4.d?"),
+    // Thousands of small brace words, and a 2 KB brace word repeated: the work is bounded for the whole command (fail open here is a bypass: the hook times out).
+    "cat " + fill("f{1..64}{a..z} "),
+    "cat ~/" + fill("{1..64}"),
+    "cat " + fill("{a,b}".repeat(400) + " "),
+    "cat " + fill("{x,.ssh,y}/id_rsa{,1}{,a} "),
+    "cat " + fill("a{1..9}b{c..z..2}d{01..10} "),
+    // Loose braces (no closed group): nothing to expand, so no cost.
+    "cat ~/" + fill("{a,"),
+    "cat ~/" + fill("{1.."),
+    "cat ~/" + fill("{,"),
+    "cat " + fill("~/{a, "),
+    // Dot names and globs are joined to a home working folder (cwd /Users/me): 64 KB of them stays fast.
+    "cat " + fill(".npmrc "),
+    "cat " + fill(".n*rc "),
+    "cat " + fill(".a{b,c} "),
+    "cat " + fill(".n" + "*".repeat(100) + "rc "), // a long glob word in a home working folder is a secret read, not worked out
   ];
 
   it("every 64 KB adversarial input finishes in under 150 ms of CPU (best of 3, after one warm-up call)", () => {
@@ -253,15 +277,22 @@ describe("never-list input rules: linear time on adversarial input", () => {
     sh("ls"); // warm the regexes so the first call does not count
     for (const s of ADVERSARIAL) {
       expect(s.length).toBeLessThanOrEqual(MAX_SCAN_CHARS);
-      let best = Infinity;
-      for (let i = 0; i < 3; i++) {
-        const t0 = process.cpuUsage();
-        neverListInputMatch("Bash", { command: s }, H);
-        neverListInputMatch("Read", { file_path: s }, H);
-        const d = process.cpuUsage(t0);
-        best = Math.min(best, (d.user + d.system) / 1000);
+      // Each call is timed on its own: the shell form, the shell form with a known working folder (relative words are joined to it), the file-tool form.
+      const calls: [string, () => unknown][] = [
+        ["Bash", () => neverListInputMatch("Bash", { command: s }, H)],
+        ["Bash with cwd", () => neverListInputMatch("Bash", { command: s }, H, "/Users/me")],
+        ["Read", () => neverListInputMatch("Read", { file_path: s }, H)],
+      ];
+      for (const [name, call] of calls) {
+        let best = Infinity;
+        for (let i = 0; i < 3; i++) {
+          const t0 = process.cpuUsage();
+          call();
+          const d = process.cpuUsage(t0);
+          best = Math.min(best, (d.user + d.system) / 1000);
+        }
+        expect(best, `${name}: adversarial input starting "${s.slice(0, 24)}"`).toBeLessThan(150);
       }
-      expect(best, `adversarial input starting "${s.slice(0, 24)}"`).toBeLessThan(150);
     }
     // Wall-clock limit only: the CPU budget above is the real check. Under host load the
     // default 5000 ms tripped before any input was slow (main pipeline 5320).
