@@ -1,0 +1,136 @@
+{
+  "schema": 1,
+  "asOf": "2026-11-20T13:06:48.053Z",
+  "total": {
+    "value": 24038,
+    "label": "downloads (npm, PyPI, VS Code Marketplace)",
+    "since": "2026-08-12",
+    "definition": "Package downloads counted by each registry. Homebrew, Scoop, plugins and CI installs use npm and are inside the npm count."
+  },
+  "channels": {
+    "npm": {
+      "value": 22454,
+      "fetchedAt": "2026-11-20T13:06:48.053Z",
+      "stale": false,
+      "since": "2026-08-12",
+      "window": "2026-08-12..2026-11-19",
+      "url": "https://api.npmjs.org/downloads/range/2026-08-12:<yesterday>/@shield-agent/kya"
+    },
+    "pypi": {
+      "value": 1453,
+      "fetchedAt": "2026-11-20T13:06:48.053Z",
+      "stale": false,
+      "field": "without_mirrors",
+      "url": "https://pypistats.org/api/packages/shield-kya/overall"
+    },
+    "vscode": {
+      "value": 131,
+      "fetchedAt": "2026-11-20T13:06:48.053Z",
+      "stale": false,
+      "field": "downloadCount",
+      "url": "https://marketplace.visualstudio.com/items?itemName=shield-agent.shield-kya"
+    }
+  },
+  "unmeasured": [
+    {
+      "id": "open-vsx",
+      "reason": "not published yet (404)"
+    },
+    {
+      "id": "homebrew",
+      "reason": "installs fetch the npm tarball; tap installs are not public"
+    },
+    {
+      "id": "scoop",
+      "reason": "installs fetch the npm tarball; no public counter"
+    },
+    {
+      "id": "mcp-registry",
+      "reason": "entry points to npm; no counts"
+    },
+    {
+      "id": "plugins",
+      "reason": "plugin bootstrap runs npm install; no public counts"
+    }
+  ],
+  "adoption": {
+    "floor": 50,
+    "asOf": "2026-11-20T13:06:48.053Z",
+    "metrics": {
+      "kyaActionRepos": {
+        "value": null,
+        "measuredAt": "2026-11-20T13:06:48.053Z",
+        "source": "GitHub API, public counts, code search (approximate)",
+        "stale": false,
+        "hidden": "below-floor",
+        "name": "kyaActionRepos"
+      },
+      "kyaActionStars": {
+        "value": null,
+        "measuredAt": "2026-11-20T13:06:48.053Z",
+        "source": "GitHub API, public counts",
+        "stale": false,
+        "hidden": "below-floor",
+        "name": "kyaActionStars"
+      },
+      "kyaActionForks": {
+        "value": null,
+        "measuredAt": "2026-11-20T13:06:48.053Z",
+        "source": "GitHub API, public counts",
+        "stale": false,
+        "hidden": "below-floor",
+        "name": "kyaActionForks"
+      },
+      "kyaDevcontainerStars": {
+        "value": null,
+        "measuredAt": "2026-11-20T13:06:48.053Z",
+        "source": "GitHub API, public counts",
+        "stale": false,
+        "hidden": "below-floor",
+        "name": "kyaDevcontainerStars"
+      },
+      "kyaDevcontainerForks": {
+        "value": null,
+        "measuredAt": "2026-11-20T13:06:48.053Z",
+        "source": "GitHub API, public counts",
+        "stale": false,
+        "hidden": "below-floor",
+        "name": "kyaDevcontainerForks"
+      },
+      "hosted": {
+        "slack": {
+          "value": null,
+          "measuredAt": null,
+          "source": "shield-agent.com aggregate (counts only, floor applied)",
+          "stale": true,
+          "hidden": "stale",
+          "name": "hosted.slack"
+        },
+        "teams": {
+          "value": null,
+          "measuredAt": null,
+          "source": "shield-agent.com aggregate (counts only, floor applied)",
+          "stale": true,
+          "hidden": "stale",
+          "name": "hosted.teams"
+        },
+        "webhook": {
+          "value": null,
+          "measuredAt": null,
+          "source": "shield-agent.com aggregate (counts only, floor applied)",
+          "stale": true,
+          "hidden": "stale",
+          "name": "hosted.webhook"
+        },
+        "helpdesk": {
+          "value": null,
+          "measuredAt": null,
+          "source": "shield-agent.com aggregate (counts only, floor applied)",
+          "stale": true,
+          "hidden": "stale",
+          "name": "hosted.helpdesk"
+        }
+      }
+    }
+  }
+}
