@@ -1,31 +1,31 @@
 {
   "schema": 1,
-  "asOf": "2026-11-23T06:17:30.118Z",
+  "asOf": "2026-11-24T06:17:30.759Z",
   "total": {
-    "value": 24203,
+    "value": 24780,
     "label": "downloads (npm, PyPI, VS Code Marketplace)",
     "since": "2026-08-12",
     "definition": "Package downloads counted by each registry. Homebrew, Scoop, plugins and CI installs use npm and are inside the npm count."
   },
   "channels": {
     "npm": {
-      "value": 22585,
-      "fetchedAt": "2026-11-23T06:17:30.118Z",
+      "value": 23151,
+      "fetchedAt": "2026-11-24T06:17:30.759Z",
       "stale": false,
       "since": "2026-08-12",
-      "window": "2026-08-12..2026-11-22",
+      "window": "2026-08-12..2026-11-23",
       "url": "https://api.npmjs.org/downloads/range/2026-08-12:<yesterday>/@shield-agent/kya"
     },
     "pypi": {
-      "value": 1480,
-      "fetchedAt": "2026-11-23T06:17:30.118Z",
+      "value": 1491,
+      "fetchedAt": "2026-11-24T06:17:30.759Z",
       "stale": false,
       "field": "without_mirrors",
       "url": "https://pypistats.org/api/packages/shield-kya/overall"
     },
     "vscode": {
       "value": 138,
-      "fetchedAt": "2026-11-23T06:17:30.118Z",
+      "fetchedAt": "2026-11-24T06:17:30.759Z",
       "stale": false,
       "field": "downloadCount",
       "url": "https://marketplace.visualstudio.com/items?itemName=shield-agent.shield-kya"
@@ -55,11 +55,11 @@
   ],
   "adoption": {
     "floor": 50,
-    "asOf": "2026-11-23T06:17:30.118Z",
+    "asOf": "2026-11-24T06:17:30.759Z",
     "metrics": {
       "kyaActionRepos": {
         "value": null,
-        "measuredAt": "2026-11-23T06:17:30.118Z",
+        "measuredAt": "2026-11-24T06:17:30.759Z",
         "source": "GitHub API, public counts, code search (approximate)",
         "stale": false,
         "hidden": "below-floor",
@@ -67,7 +67,7 @@
       },
       "kyaActionStars": {
         "value": null,
-        "measuredAt": "2026-11-23T06:17:30.118Z",
+        "measuredAt": "2026-11-24T06:17:30.759Z",
         "source": "GitHub API, public counts",
         "stale": false,
         "hidden": "below-floor",
@@ -75,7 +75,7 @@
       },
       "kyaActionForks": {
         "value": null,
-        "measuredAt": "2026-11-23T06:17:30.118Z",
+        "measuredAt": "2026-11-24T06:17:30.759Z",
         "source": "GitHub API, public counts",
         "stale": false,
         "hidden": "below-floor",
@@ -83,7 +83,7 @@
       },
       "kyaDevcontainerStars": {
         "value": null,
-        "measuredAt": "2026-11-23T06:17:30.118Z",
+        "measuredAt": "2026-11-24T06:17:30.759Z",
         "source": "GitHub API, public counts",
         "stale": false,
         "hidden": "below-floor",
@@ -91,7 +91,7 @@
       },
       "kyaDevcontainerForks": {
         "value": null,
-        "measuredAt": "2026-11-23T06:17:30.118Z",
+        "measuredAt": "2026-11-24T06:17:30.759Z",
         "source": "GitHub API, public counts",
         "stale": false,
         "hidden": "below-floor",
