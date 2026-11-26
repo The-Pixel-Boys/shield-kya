@@ -1709,6 +1709,21 @@
       "plan": "hosted"
     },
     {
+      "id": "kya-hosted-client-report",
+      "name": "Hosted client trail report",
+      "summary": "Report for one workspace and date range: tools the agent could reach, tool calls per verdict, and approvals with who decided. Page, JSON and CSV. Pro plan. Not live: gated by a feature flag.",
+      "cli": [],
+      "docs": [
+        "../../docs/operations/kya-client-report.md"
+      ],
+      "tests": [
+        "../../app/src/test/java/com/shieldagent/app/KyaClientReportE2eIT.java",
+        "../../app/src/test/java/com/shieldagent/app/KyaClientReportFlagOffE2eIT.java"
+      ],
+      "status": "flagged",
+      "plan": "hosted"
+    },
+    {
       "id": "kya-drata",
       "name": "Drata link",
       "summary": "Drata link. Not live: gated by a feature flag.",

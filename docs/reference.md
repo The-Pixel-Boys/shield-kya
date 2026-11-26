@@ -92,7 +92,7 @@ MCP Registry entry: `server.json` plus package `mcpName` `io.github.The-Pixel-Bo
   "mcpServers": {
     "shield-kya": {
       "command": "npx",
-      "args": ["--no-install", "@shield-agent/kya@0.35.7", "serve-mcp", "--stdio"],
+      "args": ["--no-install", "@shield-agent/kya@0.35.8", "serve-mcp", "--stdio"],
       "env": {
         "KYA_BASE_URL": "http://127.0.0.1:8090",
         "KYA_API_KEY": "${KYA_API_KEY}",
