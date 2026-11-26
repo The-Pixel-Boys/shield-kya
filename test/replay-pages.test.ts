@@ -251,6 +251,19 @@ describe("replay pages: hubs", () => {
     }
   });
 
+  it("agent hubs list only replays that exist", () => {
+    const hubs = manifest.pages.filter((x) => x.type === "agent");
+    expect(hubs.length).toBeGreaterThan(0);
+    for (const p of hubs) {
+      const inHub = linked(body(p)).filter((id) => id !== "vendor" && id !== "agent");
+      expect(inHub.every((id) => ids.has(id)), p.path).toBe(true);
+      // Not vacuous: a hub lists exactly the replays that ran on its host, so a hub with no replay lists none.
+      expect([...inHub].sort(), p.path).toEqual(subjects.filter((r) => r.host === p.key).map((r) => r.id).sort());
+      expect(p.count, p.path).toBe(inHub.length);
+    }
+    expect(hubs.some((p) => linked(body(p)).length > 0)).toBe(true);
+  });
+
   it("say plainly that every replay ran on claude only, and make no claim for another host", () => {
     const claude = manifest.pages.find((p) => p.path === "/replays/agent/claude")!;
     expect(subjects.every((r) => r.host === "claude")).toBe(true);
@@ -337,10 +350,25 @@ describe("replay pages: links", () => {
     expect(rows.map((r) => r.verdict)).toEqual(["ok", "dead", "unverified", "dead"]);
   });
 
+  it("checks a dead link a second time: a flake passes, a link dead twice stays dead", async () => {
+    const { checkLinksWithRetry } = await import("../scripts/check-replay-links.mjs" as string);
+    const calls = new Map<string, number>();
+    const fake = async (url: string) => {
+      const n = (calls.get(url) ?? 0) + 1;
+      calls.set(url, n);
+      if (url.endsWith("/flake") && n === 1) throw new Error("fetch failed");
+      return { status: url.endsWith("/gone") ? 404 : 200, body: null };
+    };
+    const rows = (await checkLinksWithRetry(["https://x.test/ok", "https://x.test/flake", "https://x.test/gone"], fake, 1000, 1)) as { url: string; verdict: string }[];
+    expect(rows.map((r) => r.verdict)).toEqual(["ok", "ok", "dead"]);
+    expect(calls.get("https://x.test/ok")).toBe(1);
+    expect(calls.get("https://x.test/gone")).toBe(2);
+  });
+
   // Network-gated: KYA_LINKCHECK=1 pnpm test -- replay-pages. Fails on a dead link, so run it before a release.
   it.runIf(process.env.KYA_LINKCHECK === "1")("every link on every page resolves (network)", async () => {
-    const { pageLinks, checkLinks } = await import("../scripts/check-replay-links.mjs" as string);
-    const rows = (await checkLinks(pageLinks(PKG))) as { url: string; verdict: string; status: number }[];
+    const { pageLinks, checkLinksWithRetry } = await import("../scripts/check-replay-links.mjs" as string);
+    const rows = (await checkLinksWithRetry(pageLinks(PKG))) as { url: string; verdict: string; status: number }[];
     expect(rows.filter((r) => r.verdict === "dead").map((r) => `${r.status} ${r.url}`)).toEqual([]);
   }, 600_000);
 });

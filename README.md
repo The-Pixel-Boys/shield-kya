@@ -26,6 +26,7 @@ Requires **Node.js 22+** (24 recommended). Restart Cursor / Claude Code / Codex 
 [![Install](https://img.shields.io/badge/install-shield--agent.com%2Finstall-0A0A0A)](https://shield-agent.com/install)
 [![Incident Replay: incidents stopped](https://img.shields.io/endpoint?url=https://shield-agent.com/replays/badge.json)](https://shield-agent.com/replays)
 [![X](https://img.shields.io/badge/X-%40coscosmico-000000?logo=x&logoColor=white)](https://x.com/coscosmico)
+[![The-Pixel-Boys/shield-kya MCP server](https://glama.ai/mcp/servers/The-Pixel-Boys/shield-kya/badges/score.svg)](https://glama.ai/mcp/servers/The-Pixel-Boys/shield-kya)
 
 ## What it blocks by default
 

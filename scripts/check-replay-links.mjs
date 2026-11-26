@@ -3,6 +3,8 @@
 // That is every source link of an incident, the guard-pack doc and the host recipes. It needs the network, so CI does
 // not run it as a gate; run it before a release:  pnpm check:replay-links   (exit 1 when a link is dead).
 //   401, 403 and 429 are reported as "unverified" (the site refuses bots), not as dead.
+//   A third-party site can flake, so each dead link is checked once more after a short wait. Dead twice means dead.
+//   The weekly Woodpecker cron kya-replay-links (.woodpecker/kya-replay-links.yml) runs this script.
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,8 +42,18 @@ export async function checkLinks(urls, fetchFn = fetch, timeoutMs = 20000) {
   return rows;
 }
 
+/** First pass, then one more pass over the dead links after `delayMs`. A link that is dead twice stays dead. */
+export async function checkLinksWithRetry(urls, fetchFn = fetch, timeoutMs = 20000, delayMs = 10000) {
+  const first = await checkLinks(urls, fetchFn, timeoutMs);
+  const dead = first.filter((r) => r.verdict === "dead").map((r) => r.url);
+  if (!dead.length) return first;
+  await new Promise((r) => setTimeout(r, delayMs));
+  const second = new Map((await checkLinks(dead, fetchFn, timeoutMs)).map((r) => [r.url, r]));
+  return first.map((r) => second.get(r.url) ?? r);
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const rows = await checkLinks(pageLinks());
+  const rows = await checkLinksWithRetry(pageLinks());
   for (const r of rows) console.log(`${r.verdict.padEnd(10)} ${String(r.status).padEnd(4)} ${r.url}${r.note ? ` (${r.note})` : ""}`);
   const dead = rows.filter((r) => r.verdict === "dead");
   console.log(`replay links: ${rows.length} checked, ${dead.length} dead, ${rows.filter((r) => r.verdict === "unverified").length} unverified`);

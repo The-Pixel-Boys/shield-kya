@@ -1,6 +1,6 @@
 {
   "name": "@shield-agent/kya",
-  "version": "0.35.7",
+  "version": "0.35.8",
   "description": "Stops your coding agent from deleting, leaking or dropping things. Records everything else.",
   "license": "MIT",
   "type": "module",
